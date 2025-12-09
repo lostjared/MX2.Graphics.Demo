@@ -63,6 +63,12 @@ emcripten++ about.cpp -o MX2_app.js \
 
 **Web:**
 Open `index.html` in a modern web browser (Chrome, Firefox, Edge)
+inside of a running webserver. If you have Python you can start one with
+<br>
+$ python3 -m http.server 3000
+<br>
+THen navigate to localhost:3000
+<br>
 
 ### Navigation
 
