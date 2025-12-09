@@ -50,16 +50,7 @@ Write and compile your own GLSL ES 3.0 fragment shaders with:
 
 ```bash
 # Build with Emscripten
-emcripten++ about.cpp -o MX2_app.js \
-  -s WASM=1 \
-  -s USE_SDL=2 \
-  -s USE_SDL_IMAGE=2 \
-  -s SDL2_IMAGE_FORMATS='["png","jpg"]' \
-  -s USE_LIBJPEG=1 \
-  -s GL_PREINITIALIZED_CONTEXT=1 \
-  -s GL_ENABLE_GET_PROC_ADDRESS=1 \
-  --bind \
-  -O3
+make -f Makefile.em
 ```
 ## Usage
 
