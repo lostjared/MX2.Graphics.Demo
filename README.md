@@ -30,7 +30,7 @@ Write and compile your own GLSL ES 3.0 fragment shaders with:
 ### 🖼️ Image Loading
 - Load PNG and JPG images directly into the application
 - Apply any shader effect to your own images
-- Supports drag-and-drop or file selection
+- Supports file selection
 - Dynamic texture replacement at runtime
 
 ### 💾 Screenshot Capture
