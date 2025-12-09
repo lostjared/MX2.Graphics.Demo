@@ -176,15 +176,15 @@ void main(void) {
 
 ## Controls Quick Reference
 
-| Action | Web | Desktop |
-|--------|-----|---------|
-| Next Shader | `Next ▶` button or `↓` | `↓` or `Space` |
-| Prev Shader | `◀ Prev` button or `↑` | `↑` or `Backspace` |
-| Load Image | `🖼️ Load Image` button | - |
-| Save Screenshot | `💾 Save Image` or `S` | - |
-| Open Shader Editor | `✏️ Custom Shader` button | - |
-| Close Editor | `✕ Close` or `Esc` | - |
-| Interact with Effect | Mouse movement/click | Mouse movement/click |
+| Action | Web 
+|--------|-----
+| Next Shader | `Next ▶` button or `↓` 
+| Prev Shader | `◀ Prev` button or `↑` 
+| Load Image | `🖼️ Load Image` button 
+| Save Screenshot | `💾 Save Image` or `S` 
+| Open Shader Editor | `✏️ Custom Shader` button 
+| Close Editor | `✕ Close` or `Esc` 
+| Interact with Effect | Mouse movement/click 
 
 ## Troubleshooting
 
