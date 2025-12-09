@@ -8,6 +8,8 @@ A powerful web-based demonstration application featuring real-time shader effect
 
 ## Features
 
+Uses libmx2 found here: https://github.com/lostjared/libmx2/
+
 ### 🎨 38+ Built-in Shaders
 Explore a diverse collection of visually stunning shader effects including:
 - **Kaleidoscope effects** - Symmetrical fractal patterns with real-time transformations
