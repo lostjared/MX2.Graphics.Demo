@@ -57,31 +57,12 @@ emcripten++ about.cpp -o MX2_app.js \
   --bind \
   -O3
 ```
-
-### Desktop Version
-
-```bash
-# Requires: SDL2, SDL2_image, OpenGL 3.0+, libpng
-
-# Compile
-g++ -std=c++17 about.cpp -o mx2_demo \
-  -lSDL2 -lSDL2_image -lGL -lpng
-
-# Run
-./mx2_demo -p /path/to/assets -R 1280x720
-```
-
 ## Usage
 
 ### Starting the Application
 
 **Web:**
 Open `index.html` in a modern web browser (Chrome, Firefox, Edge)
-
-**Desktop:**
-```bash
-./mx2_demo -p ./assets -R 1280x720
-```
 
 ### Navigation
 
