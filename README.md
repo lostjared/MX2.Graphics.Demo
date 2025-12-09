@@ -2,7 +2,7 @@
 MX2 Web Assembly Graphics Demo
 # MX2 - Interactive Graphics Demo
 
-A powerful web-based and desktop graphics demonstration application featuring real-time shader effects, interactive controls, and custom shader compilation.
+A powerful web-based demonstration application featuring real-time shader effects, interactive controls, and custom shader compilation.
 
 ## Features
 
@@ -191,15 +191,6 @@ void main(void) {
 | Close Editor | `✕ Close` or `Esc` | - |
 | Interact with Effect | Mouse movement/click | Mouse movement/click |
 
-## Command Line Options (Desktop)
-
-```
--p, --path PATH          Path to assets directory
--r, -R WIDTHxHEIGHT     Set resolution (e.g., 1920x1080)
--h                       Show help message
-
-...
-
 ## Troubleshooting
 
 ### Shader won't compile
@@ -269,7 +260,6 @@ Shader effects created with inspiration from:
 ## Performance Notes
 
 - Web version runs in WebGL 2.0 (hardware-accelerated)
-- Desktop version uses OpenGL 3.0+
 - 60 FPS target on modern hardware
 - Shader compilation happens in real-time
 - Image loading supports up to 4K resolution
