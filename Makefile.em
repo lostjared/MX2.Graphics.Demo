@@ -8,7 +8,7 @@ ZLIB_LIB = -s USE_ZLIB=1
 PNG_LIB = -s USE_LIBPNG=1
 LIBMX_LIB = $(LIBS_PATH)/mx2/lib/libmx.a 
 PRELOAD = --preload-file data
-SOURCES = about.cpp
+SOURCES = graphics.cpp
 OBJECTS = $(SOURCES:.cpp=.o)
 OUTPUT = MX_app.html
 
