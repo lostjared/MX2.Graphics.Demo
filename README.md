@@ -1,6 +1,8 @@
 # MX2.Graphics.Demo
+
 MX2 Web Assembly Graphics Demo
-# MX2 - Interactive Graphics Demo
+
+![browser](https://github.com/user-attachments/assets/c669d7dc-45ae-4cc9-b9ee-c608101f5756)
 
 A powerful web-based demonstration application featuring real-time shader effects, interactive controls, and custom shader compilation.
 
