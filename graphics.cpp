@@ -2008,6 +2008,9 @@ class About : public gl::GLObject {
     static const Uint32 DOUBLE_TAP_MAX_TIME = 400;  
     Uint32 lastUpdateTime = 0;
     int texWidth = 0, texHeight = 0;
+    uint64_t frameCount = 0;
+    float beatValue = 0.0f;
+    float audioLevel = 0.0f;
 public:
     About() = default;
     virtual ~About() override {
@@ -2056,12 +2059,21 @@ public:
             currentShaderIndex = index;
             shaders[currentShaderIndex]->useProgram();
             shaders[currentShaderIndex]->setUniform("time_f", animation);
+            shaders[currentShaderIndex]->setUniform("iTime", animation);
+            shaders[currentShaderIndex]->setUniform("iTimeDelta", 0.0f);
+            shaders[currentShaderIndex]->setUniform("iFrame", static_cast<float>(frameCount));
             shaders[currentShaderIndex]->setUniform("iResolution", glm::vec2(win->w, win->h));
             shaders[currentShaderIndex]->setUniform("iMouse", mouse);
+            shaders[currentShaderIndex]->setUniform("iMouseNormalized", glm::vec2(mouse.x / win->w, 1.0f - mouse.y / win->h));
+            shaders[currentShaderIndex]->setUniform("iMouseActive", mouse.z > 0.5f ? 1.0f : 0.0f);
+            shaders[currentShaderIndex]->setUniform("iAspectRatio", static_cast<float>(win->w) / static_cast<float>(win->h));
             shaders[currentShaderIndex]->setUniform("alpha", 1.0f);
             shaders[currentShaderIndex]->setUniform("amp", 0.5f);
             shaders[currentShaderIndex]->setUniform("uamp", 0.5f);
+            shaders[currentShaderIndex]->setUniform("iBeat", beatValue);
+            shaders[currentShaderIndex]->setUniform("iAudioLevel", audioLevel);
             shaders[currentShaderIndex]->setUniform("textTexture", 0);
+            glActiveTexture(GL_TEXTURE0);
             sprite.initSize(win->w, win->h);
             sprite.initWithTexture(shaders[currentShaderIndex].get(), texture, 0, 0, win->w, win->h);
         }
@@ -2087,6 +2099,9 @@ public:
         float deltaTime = (currentTime - lastUpdateTime) / 1000.0f;
         lastUpdateTime = currentTime;
         animation += deltaTime;
+        frameCount++;
+        beatValue = 0.5f + 0.5f * sinf(animation * 2.0f * M_PI);
+        audioLevel = 0.3f + 0.7f * (0.5f + 0.5f * sinf(animation * 0.5f));
         shaders[currentShaderIndex]->useProgram();
         shaders[currentShaderIndex]->setUniform("time_f", animation);
         shaders[currentShaderIndex]->setUniform("iResolution", glm::vec2(win->w, win->h));
@@ -2094,6 +2109,20 @@ public:
         shaders[currentShaderIndex]->setUniform("alpha", 1.0f);
         shaders[currentShaderIndex]->setUniform("amp", 0.5f);
         shaders[currentShaderIndex]->setUniform("uamp", 0.5f);
+        shaders[currentShaderIndex]->setUniform("textTexture", 0);
+        shaders[currentShaderIndex]->setUniform("iTime", SDL_GetTicks64()/1000.0f);
+        shaders[currentShaderIndex]->setUniform("iTimeDelta", deltaTime);
+        shaders[currentShaderIndex]->setUniform("iFrame", static_cast<float>(frameCount));
+        shaders[currentShaderIndex]->setUniform("iResolution", glm::vec2(win->w, win->h));
+        shaders[currentShaderIndex]->setUniform("iMouse", mouse);
+        shaders[currentShaderIndex]->setUniform("iMouseNormalized", glm::vec2(mouse.x / win->w, 1.0f - mouse.y / win->h));
+        shaders[currentShaderIndex]->setUniform("iMouseActive", mouse.z > 0.5f ? 1.0f : 0.0f);
+        shaders[currentShaderIndex]->setUniform("iAspectRatio", static_cast<float>(win->w) / static_cast<float>(win->h));
+        shaders[currentShaderIndex]->setUniform("alpha", 1.0f);
+        shaders[currentShaderIndex]->setUniform("amp", 0.5f);
+        shaders[currentShaderIndex]->setUniform("uamp", 0.5f);
+        shaders[currentShaderIndex]->setUniform("iBeat", beatValue);
+        shaders[currentShaderIndex]->setUniform("iAudioLevel", audioLevel);
         shaders[currentShaderIndex]->setUniform("textTexture", 0);
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, texture);
