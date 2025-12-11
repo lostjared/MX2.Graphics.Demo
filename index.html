@@ -313,6 +313,193 @@
             z-index: 10000;  
             position: relative;
         }
+
+        /* Uniforms Control Panel */
+        #uniforms-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            right: 0;
+            width: 320px;
+            height: 100%;
+            background: rgba(20, 20, 25, 0.98);
+            border-left: 2px solid #9C27B0;
+            z-index: 500;
+            flex-direction: column;
+            box-shadow: -5px 0 20px rgba(0, 0, 0, 0.5);
+            overflow: hidden;
+        }
+
+        #uniforms-modal.visible {
+            display: flex;
+        }
+
+        #uniforms-container {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+
+        #uniforms-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 20px;
+            background: linear-gradient(135deg, #2d2d2d 0%, #1a1a1a 100%);
+            border-bottom: 1px solid #444;
+        }
+
+        #uniforms-header h2 {
+            margin: 0;
+            font-size: 18px;
+            color: #fff;
+            font-weight: 600;
+        }
+
+        #close-uniforms-btn {
+            background: #f44336;
+            color: white;
+            border: none;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+        }
+
+        #close-uniforms-btn:hover {
+            background: #d32f2f;
+            transform: scale(1.1);
+        }
+
+        #uniforms-body {
+            flex: 1;
+            padding: 15px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        #uniforms-body::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        #uniforms-body::-webkit-scrollbar-track {
+            background: #1a1a1a;
+        }
+
+        #uniforms-body::-webkit-scrollbar-thumb {
+            background: #9C27B0;
+            border-radius: 4px;
+        }
+
+        .uniform-section {
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 8px;
+            padding: 15px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .uniform-section h3 {
+            margin: 0 0 12px 0;
+            font-size: 13px;
+            color: #9C27B0;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-weight: 600;
+        }
+
+        .uniform-control {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            margin-bottom: 12px;
+        }
+
+        .uniform-control:last-child {
+            margin-bottom: 0;
+        }
+
+        .uniform-control label {
+            font-size: 12px;
+            color: #aaa;
+            font-weight: 500;
+        }
+
+        .uniform-control input[type="range"] {
+            width: 100%;
+            height: 6px;
+            border-radius: 3px;
+            background: #333;
+            outline: none;
+            -webkit-appearance: none;
+            cursor: pointer;
+        }
+
+        .uniform-control input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #BA68C8 0%, #9C27B0 100%);
+            cursor: pointer;
+            box-shadow: 0 2px 6px rgba(156, 39, 176, 0.4);
+            transition: all 0.2s ease;
+        }
+
+        .uniform-control input[type="range"]::-webkit-slider-thumb:hover {
+            transform: scale(1.2);
+        }
+
+        .uniform-control span {
+            font-size: 12px;
+            color: #BA68C8;
+            text-align: right;
+            font-family: 'Monaco', 'Consolas', monospace;
+            font-weight: 600;
+        }
+
+        .checkbox-control {
+            flex-direction: row !important;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .checkbox-control input[type="checkbox"] {
+            width: 20px;
+            height: 20px;
+            cursor: pointer;
+            accent-color: #9C27B0;
+        }
+
+        #uniforms-footer {
+            padding: 15px 20px;
+            background: linear-gradient(135deg, #2d2d2d 0%, #1a1a1a 100%);
+            border-top: 1px solid #444;
+        }
+
+        #reset-uniforms-btn {
+            width: 100%;
+            background: linear-gradient(135deg, #ff9800 0%, #f57c00 100%);
+            color: white;
+            border: none;
+            padding: 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.2s ease;
+        }
+
+        #reset-uniforms-btn:hover {
+            background: linear-gradient(135deg, #ffb74d 0%, #ff9800 100%);
+            transform: translateY(-2px);
+        }
     </style>
 </head>
 <body>
@@ -327,6 +514,7 @@
         <input type="file" id="file-input" accept=".png,.jpg,.jpeg">
         <button id="save-image">💾 Save Image</button>
         <button id="shader-editor-btn">✏️ Custom Shader</button>
+        <button id="uniforms-btn" title="Uniform Controls">⚙️</button>
         <span id="shader-info">Double-tap to cycle: <a href="/activity/demo/shaders/index.html" target="_blank">List ES3 Shaders</a></span>
     </div>
 
@@ -358,6 +546,90 @@
         </div>
     </div>
 
+    <!-- Uniforms Control Panel Modal -->
+    <div id="uniforms-modal">
+        <div id="uniforms-container">
+            <div id="uniforms-header">
+                <h2>⚙️ Uniform Controls</h2>
+                <button id="close-uniforms-btn">✕</button>
+            </div>
+            <div id="uniforms-body">
+                <div class="uniform-section">
+                    <h3>Animation</h3>
+                    <div class="uniform-control">
+                        <label>Speed</label>
+                        <input type="range" id="iSpeed" min="0" max="3" step="0.1" value="1.0">
+                        <span id="iSpeed-value">1.00</span>
+                    </div>
+                    <div class="uniform-control">
+                        <label>Amplitude</label>
+                        <input type="range" id="iAmplitude" min="0" max="2" step="0.1" value="1.0">
+                        <span id="iAmplitude-value">1.00</span>
+                    </div>
+                    <div class="uniform-control">
+                        <label>Frequency</label>
+                        <input type="range" id="iFrequency" min="0" max="5" step="0.1" value="1.0">
+                        <span id="iFrequency-value">1.00</span>
+                    </div>
+                </div>
+                
+                <div class="uniform-section">
+                    <h3>Color</h3>
+                    <div class="uniform-control">
+                        <label>Brightness</label>
+                        <input type="range" id="iBrightness" min="0" max="2" step="0.1" value="1.0">
+                        <span id="iBrightness-value">1.00</span>
+                    </div>
+                    <div class="uniform-control">
+                        <label>Contrast</label>
+                        <input type="range" id="iContrast" min="0" max="2" step="0.1" value="1.0">
+                        <span id="iContrast-value">1.00</span>
+                    </div>
+                    <div class="uniform-control">
+                        <label>Saturation</label>
+                        <input type="range" id="iSaturation" min="0" max="2" step="0.1" value="1.0">
+                        <span id="iSaturation-value">1.00</span>
+                    </div>
+                    <div class="uniform-control">
+                        <label>Hue Shift</label>
+                        <input type="range" id="iHueShift" min="0" max="6.28" step="0.1" value="0">
+                        <span id="iHueShift-value">0.00</span>
+                    </div>
+                </div>
+                
+                <div class="uniform-section">
+                    <h3>Transform</h3>
+                    <div class="uniform-control">
+                        <label>Zoom</label>
+                        <input type="range" id="iZoom" min="0.1" max="5" step="0.1" value="1.0">
+                        <span id="iZoom-value">1.00</span>
+                    </div>
+                    <div class="uniform-control">
+                        <label>Rotation</label>
+                        <input type="range" id="iRotation" min="0" max="6.28" step="0.1" value="0">
+                        <span id="iRotation-value">0.00</span>
+                    </div>
+                </div>
+                
+                <div class="uniform-section">
+                    <h3>Quality</h3>
+                    <div class="uniform-control">
+                        <label>Quality Level</label>
+                        <input type="range" id="iQuality" min="0.5" max="2" step="0.1" value="1.0">
+                        <span id="iQuality-value">1.00</span>
+                    </div>
+                    <div class="uniform-control checkbox-control">
+                        <label>Debug Mode</label>
+                        <input type="checkbox" id="iDebugMode">
+                    </div>
+                </div>
+            </div>
+            <div id="uniforms-footer">
+                <button id="reset-uniforms-btn">🔄 Reset All</button>
+            </div>
+        </div>
+    </div>
+
     <script src="MX_app.js?v=2.60"></script>
     <script>
         const canvas = document.getElementById('canvas');
@@ -374,6 +646,137 @@
         const shaderLogTextarea = document.getElementById('shader-log-textarea');
         const compileShaderBtn = document.getElementById('compile-shader-btn');
         const resetShaderBtn = document.getElementById('reset-shader-btn');
+        const uniformsBtn = document.getElementById('uniforms-btn');
+        const uniformsModal = document.getElementById('uniforms-modal');
+        const closeUniformsBtn = document.getElementById('close-uniforms-btn');
+        const resetUniformsBtn = document.getElementById('reset-uniforms-btn');
+
+        const uniformDefaults = {
+            'iSpeed': 1.0,
+            'iAmplitude': 1.0,
+            'iFrequency': 1.0,
+            'iBrightness': 1.0,
+            'iContrast': 1.0,
+            'iSaturation': 1.0,
+            'iHueShift': 0.0,
+            'iZoom': 1.0,
+            'iRotation': 0.0,
+            'iQuality': 1.0,
+            'iDebugMode': false
+        };
+
+        const uniformSetters = {
+            'iSpeed': 'setUniformSpeed',
+            'iAmplitude': 'setUniformAmplitude',
+            'iFrequency': 'setUniformFrequency',
+            'iBrightness': 'setUniformBrightness',
+            'iContrast': 'setUniformContrast',
+            'iSaturation': 'setUniformSaturation',
+            'iHueShift': 'setUniformHueShift',
+            'iZoom': 'setUniformZoom',
+            'iRotation': 'setUniformRotation',
+            'iQuality': 'setUniformQuality',
+            'iDebugMode': 'setUniformDebugMode'
+        };
+
+        function updateUniformDisplay(uniformName) {
+            const input = document.getElementById(uniformName);
+            const display = document.getElementById(uniformName + '-value');
+            if (display && input && input.type !== 'checkbox') {
+                display.textContent = parseFloat(input.value).toFixed(2);
+            }
+        }
+
+        function sendUniformToWasm(uniformName, value) {
+            if (typeof Module === 'undefined') return;
+            
+            const setterName = uniformSetters[uniformName];
+            if (setterName && typeof Module[setterName] === 'function') {
+                try {
+                    if (uniformName === 'iDebugMode') {
+                        Module[setterName](value);
+                    } else {
+                        Module[setterName](parseFloat(value));
+                    }
+                } catch (error) {
+                    console.error(`Error setting ${uniformName}:`, error);
+                }
+            }
+        }
+
+        // Initialize uniform controls
+        Object.keys(uniformDefaults).forEach(uniformName => {
+            const element = document.getElementById(uniformName);
+            if (element) {
+                const saved = localStorage.getItem(uniformName);
+                if (saved !== null) {
+                    if (element.type === 'checkbox') {
+                        element.checked = saved === 'true';
+                    } else {
+                        element.value = saved;
+                    }
+                }
+                
+                updateUniformDisplay(uniformName);
+                
+                if (element.type === 'checkbox') {
+                    element.addEventListener('change', (e) => {
+                        const value = e.target.checked;
+                        localStorage.setItem(uniformName, value);
+                        sendUniformToWasm(uniformName, value);
+                    });
+                } else {
+                    element.addEventListener('input', (e) => {
+                        const value = e.target.value;
+                        localStorage.setItem(uniformName, value);
+                        updateUniformDisplay(uniformName);
+                        sendUniformToWasm(uniformName, value);
+                    });
+                }
+            }
+        });
+
+        // Modal controls
+        if (uniformsBtn) {
+            uniformsBtn.addEventListener('click', () => {
+                uniformsModal.classList.add('visible');
+            });
+        }
+
+        if (closeUniformsBtn) {
+            closeUniformsBtn.addEventListener('click', () => {
+                uniformsModal.classList.remove('visible');
+            });
+        }
+
+        if (uniformsModal) {
+            uniformsModal.addEventListener('click', (e) => {
+                if (e.target === uniformsModal) {
+                    uniformsModal.classList.remove('visible');
+                }
+            });
+        }
+
+        // Reset all uniforms
+        if (resetUniformsBtn) {
+            resetUniformsBtn.addEventListener('click', () => {
+                Object.keys(uniformDefaults).forEach(uniformName => {
+                    const element = document.getElementById(uniformName);
+                    if (element) {
+                        const defaultValue = uniformDefaults[uniformName];
+                        if (element.type === 'checkbox') {
+                            element.checked = defaultValue;
+                        } else {
+                            element.value = defaultValue;
+                        }
+                        localStorage.setItem(uniformName, defaultValue);
+                        updateUniformDisplay(uniformName);
+                        sendUniformToWasm(uniformName, defaultValue);
+                    }
+                });
+            });
+        }
+
         shaderCodeTextarea.addEventListener('focus', () => {
             if (typeof Module !== 'undefined') {
                 if (Module.SDL && Module.SDL.keyboardState) {
@@ -709,6 +1112,106 @@ void main(void) {
                 saveButton.click();
             }
         });
+
+        // Uniforms control panel
+        const updateUniformsDisplay = () => {
+            iSpeed.value = Module.getUniform("iSpeed");
+            iAmplitude.value = Module.getUniform("iAmplitude");
+            iFrequency.value = Module.getUniform("iFrequency");
+            iBrightness.value = Module.getUniform("iBrightness");
+            iContrast.value = Module.getUniform("iContrast");
+            iSaturation.value = Module.getUniform("iSaturation");
+            iHueShift.value = Module.getUniform("iHueShift");
+            iZoom.value = Module.getUniform("iZoom");
+            iRotation.value = Module.getUniform("iRotation");
+            iQuality.value = Module.getUniform("iQuality");
+            iDebugMode.checked = Module.getUniform("iDebugMode") === 1;
+        };
+
+        const setUniformValue = (name, value) => {
+            if (typeof Module !== 'undefined' && Module.setUniform) {
+                Module.setUniform(name, value);
+            }
+        };
+
+        iSpeed.addEventListener('input', () => {
+            const value = parseFloat(iSpeed.value);
+            setUniformValue("iSpeed", value);
+            document.getElementById('iSpeed-value').innerText = value.toFixed(2);
+        });
+
+        iAmplitude.addEventListener('input', () => {
+            const value = parseFloat(iAmplitude.value);
+            setUniformValue("iAmplitude", value);
+            document.getElementById('iAmplitude-value').innerText = value.toFixed(2);
+        });
+
+        iFrequency.addEventListener('input', () => {
+            const value = parseFloat(iFrequency.value);
+            setUniformValue("iFrequency", value);
+            document.getElementById('iFrequency-value').innerText = value.toFixed(2);
+        });
+
+        iBrightness.addEventListener('input', () => {
+            const value = parseFloat(iBrightness.value);
+            setUniformValue("iBrightness", value);
+            document.getElementById('iBrightness-value').innerText = value.toFixed(2);
+        });
+
+        iContrast.addEventListener('input', () => {
+            const value = parseFloat(iContrast.value);
+            setUniformValue("iContrast", value);
+            document.getElementById('iContrast-value').innerText = value.toFixed(2);
+        });
+
+        iSaturation.addEventListener('input', () => {
+            const value = parseFloat(iSaturation.value);
+            setUniformValue("iSaturation", value);
+            document.getElementById('iSaturation-value').innerText = value.toFixed(2);
+        });
+
+        iHueShift.addEventListener('input', () => {
+            const value = parseFloat(iHueShift.value);
+            setUniformValue("iHueShift", value);
+            document.getElementById('iHueShift-value').innerText = value.toFixed(2);
+        });
+
+        iZoom.addEventListener('input', () => {
+            const value = parseFloat(iZoom.value);
+            setUniformValue("iZoom", value);
+            document.getElementById('iZoom-value').innerText = value.toFixed(2);
+        });
+
+        iRotation.addEventListener('input', () => {
+            const value = parseFloat(iRotation.value);
+            setUniformValue("iRotation", value);
+            document.getElementById('iRotation-value').innerText = value.toFixed(2);
+        });
+
+        iQuality.addEventListener('input', () => {
+            const value = parseFloat(iQuality.value);
+            setUniformValue("iQuality", value);
+            document.getElementById('iQuality-value').innerText = value.toFixed(2);
+        });
+
+        iDebugMode.addEventListener('change', () => {
+            const value = iDebugMode.checked ? 1 : 0;
+            setUniformValue("iDebugMode", value);
+        });
+
+        closeUniformsBtn.addEventListener('click', () => {
+            uniformsModal.classList.remove('visible');
+        });
+
+        document.getElementById('reset-uniforms-btn').addEventListener('click', () => {
+            if (typeof Module !== 'undefined' && Module.resetUniforms) {
+                Module.resetUniforms();
+                updateUniformsDisplay();
+            }
+        });
+
+        // Initial uniform values
+        updateUniformsDisplay();
     </script>
 </body>
 </html>
