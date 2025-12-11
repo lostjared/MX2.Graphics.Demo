@@ -14,6 +14,7 @@
 #include<iostream>
 #include<vector>
 #include<cstdint>
+#include<algorithm>
 #include"shaders.hpp"
 #define CHECK_GL_ERROR() \
 { GLenum err = glGetError(); \
@@ -73,6 +74,7 @@ static const std::vector<ShaderInfo> shaderSources = {
 class About : public gl::GLObject {
     GLuint texture = 0;
     gl::ShaderProgram shader;
+    gl::GLSprite sprite;
     float animation = 0.0f;
     std::vector<std::unique_ptr<gl::ShaderProgram>> shaders;
     size_t currentShaderIndex = 0;
@@ -103,6 +105,12 @@ class About : public gl::GLObject {
     float iDebugMode = 0.0f;
     float iQuality = 1.0f;
     glm::vec2 prevMousePos = glm::vec2(0.0f);
+    int maxWidth = 1920, maxHeight = 1080;  
+    int canvasWidth = 1920, canvasHeight = 1080;
+    int displayX = 0, displayY = 0;
+    int displayW = 1920, displayH = 1080;
+    bool captureNextFrame = false;
+    int captureScale = 1;
 public:
     About() = default;
     virtual ~About() override {
@@ -111,7 +119,7 @@ public:
         }
     }
 
-    void loadNewTexture(SDL_Surface *surface, gl::GLWindow *win) {
+      void loadNewTexture(SDL_Surface *surface, gl::GLWindow *win) {
         if(texture != 0) {
             glDeleteTextures(1, &texture);
             texture = 0;
@@ -119,16 +127,55 @@ public:
         texture = gl::createTexture(surface, true);
         texWidth = surface->w;
         texHeight = surface->h;
-        sprite.initSize(win->w, win->h);
+        
+        
+        canvasWidth = maxWidth; 
+        canvasHeight = maxHeight;
+        
+        printf("loadNewTexture: tex=%dx%d, canvas=%dx%d, max=%dx%d\n",
+               texWidth, texHeight, canvasWidth, canvasHeight, maxWidth, maxHeight);
+
+        float imgAspect = static_cast<float>(texWidth) / static_cast<float>(texHeight);
+        float canvasAspect = static_cast<float>(canvasWidth) / static_cast<float>(canvasHeight);
+        
+        if (imgAspect > canvasAspect) {
+            
+            displayW = canvasWidth;
+            displayH = static_cast<int>(canvasWidth / imgAspect);
+            displayX = 0;
+            displayY = (canvasHeight - displayH) / 2;
+        } else {
+            
+            displayH = canvasHeight;
+            displayW = static_cast<int>(canvasHeight * imgAspect);
+            displayX = (canvasWidth - displayW) / 2;
+            displayY = 0;
+        }
+        
+        printf("Display: %d,%d %dx%d\n", displayX, displayY, displayW, displayH);
+        
+#ifdef __EMSCRIPTEN__
+        emscripten_set_canvas_element_size("#canvas", canvasWidth, canvasHeight);
+#endif
+        win->w = canvasWidth;
+        win->h = canvasHeight;
+        glViewport(0, 0, canvasWidth, canvasHeight);
+        
+        sprite.initSize(canvasWidth, canvasHeight);
         switchShader(currentShaderIndex, win);
     }
 
     void load(gl::GLWindow *win) override {
-        texture = gl::loadTexture(win->util.getFilePath("data/logo.png"));
-        if(texture == 0) {
-            throw mx::Exception("Error loading texture");
-        }
-         for(const auto& info : shaderSources) {
+        
+        maxWidth = win->w;
+        maxHeight = win->h;
+        canvasWidth = win->w;
+        canvasHeight = win->h;
+        
+        glViewport(0, 0, canvasWidth, canvasHeight);
+        
+        
+        for(const auto& info : shaderSources) {
             auto shader = std::make_unique<gl::ShaderProgram>();
             if(!shader->loadProgramFromText(gl::vSource, info.source)) {
                 mx::system_err << "Failed to load shader: " << info.name << "\n";
@@ -141,11 +188,27 @@ public:
         if(shaders.empty()) {
             throw mx::Exception("No shaders loaded successfully");
         }
-        sprite.initSize(win->w, win->h);
+        
+        
+        std::string logoPath = win->util.getFilePath("data/logo.png");
+        SDL_Surface *surface = IMG_Load(logoPath.c_str());
+        if(!surface) {
+            throw mx::Exception("Error loading logo.png");
+        }
+        
+        SDL_Surface *converted = SDL_ConvertSurfaceFormat(surface, SDL_PIXELFORMAT_RGBA32, 0);
+        SDL_FreeSurface(surface);
+        
+        if(!converted) {
+            throw mx::Exception("Error converting logo surface");
+        }
+        
         lastUpdateTime = SDL_GetTicks();
-        switchShader(0, win);
+        sprite.initSize(canvasWidth, canvasHeight);
+        loadNewTexture(converted, win);
+        SDL_FreeSurface(converted);
     }
-
+  
     void switchShader(size_t index, gl::GLWindow *win) {
         if(index < shaders.size()) {
             currentShaderIndex = index;
@@ -157,13 +220,17 @@ public:
             shaders[currentShaderIndex]->setUniform("iSeconds", iSeconds);
             shaders[currentShaderIndex]->setUniform("iMinutes", iMinutes);
             shaders[currentShaderIndex]->setUniform("iHours", iHours);
-            shaders[currentShaderIndex]->setUniform("iResolution", glm::vec2(win->w, win->h));
-            shaders[currentShaderIndex]->setUniform("iMouse", mouse);
-            shaders[currentShaderIndex]->setUniform("iMouseNormalized", glm::vec2(mouse.x / win->w, 1.0f - mouse.y / win->h));
+            shaders[currentShaderIndex]->setUniform("iResolution", glm::vec2(displayW, displayH));
+            glm::vec4 adjMouse = mouse;
+            adjMouse.x -= displayX;
+            adjMouse.y -= displayY;
+            shaders[currentShaderIndex]->setUniform("iMouse", adjMouse);
+            shaders[currentShaderIndex]->setUniform("iMouseNormalized", glm::vec2(adjMouse.x / displayW, 1.0f - adjMouse.y / displayH));
+            
             shaders[currentShaderIndex]->setUniform("iMouseActive", mouse.z > 0.5f ? 1.0f : 0.0f);
             shaders[currentShaderIndex]->setUniform("iMouseVelocity", iMouseVelocity);
             shaders[currentShaderIndex]->setUniform("iMouseClick", iMouseClick);
-            shaders[currentShaderIndex]->setUniform("iAspectRatio", static_cast<float>(win->w) / static_cast<float>(win->h));
+            shaders[currentShaderIndex]->setUniform("iAspectRatio", static_cast<float>(displayW) / static_cast<float>(displayH));
             shaders[currentShaderIndex]->setUniform("iSpeed", iSpeed);
             shaders[currentShaderIndex]->setUniform("iFrequency", iFrequency);
             shaders[currentShaderIndex]->setUniform("iAmplitude", iAmplitude);
@@ -183,11 +250,9 @@ public:
             shaders[currentShaderIndex]->setUniform("uamp", 0.5f);
             shaders[currentShaderIndex]->setUniform("textTexture", 0);
             glActiveTexture(GL_TEXTURE0);
-            sprite.initSize(win->w, win->h);
-            sprite.initWithTexture(shaders[currentShaderIndex].get(), texture, 0, 0, win->w, win->h);
+            sprite.initWithTexture(shaders[currentShaderIndex].get(), texture, displayX, displayY, displayW, displayH);
         }
     }
-
     void nextShader(gl::GLWindow *win) {
         currentShaderIndex = (currentShaderIndex + 1) % shaders.size();
         switchShader(currentShaderIndex, win);
@@ -226,13 +291,17 @@ public:
         shaders[currentShaderIndex]->setUniform("iSeconds", iSeconds);
         shaders[currentShaderIndex]->setUniform("iMinutes", iMinutes);
         shaders[currentShaderIndex]->setUniform("iHours", iHours);
-        shaders[currentShaderIndex]->setUniform("iResolution", glm::vec2(win->w, win->h));
-        shaders[currentShaderIndex]->setUniform("iMouse", mouse);
-        shaders[currentShaderIndex]->setUniform("iMouseNormalized", glm::vec2(mouse.x / win->w, 1.0f - mouse.y / win->h));
+        shaders[currentShaderIndex]->setUniform("iResolution", glm::vec2(displayW, displayH));
+        glm::vec4 adjMouse = mouse;
+        adjMouse.x -= displayX;
+        adjMouse.y -= displayY;
+        shaders[currentShaderIndex]->setUniform("iMouse", adjMouse);
+        shaders[currentShaderIndex]->setUniform("iMouseNormalized", glm::vec2(adjMouse.x / displayW, 1.0f - adjMouse.y / displayH));
+        
         shaders[currentShaderIndex]->setUniform("iMouseActive", iMouseClick);
         shaders[currentShaderIndex]->setUniform("iMouseVelocity", iMouseVelocity);
         shaders[currentShaderIndex]->setUniform("iMouseClick", iMouseClick);
-        shaders[currentShaderIndex]->setUniform("iAspectRatio", static_cast<float>(win->w) / static_cast<float>(win->h));
+        shaders[currentShaderIndex]->setUniform("iAspectRatio", static_cast<float>(displayW) / static_cast<float>(displayH));
         shaders[currentShaderIndex]->setUniform("iSpeed", iSpeed);
         shaders[currentShaderIndex]->setUniform("iFrequency", iFrequency);
         shaders[currentShaderIndex]->setUniform("iAmplitude", iAmplitude);
@@ -255,7 +324,12 @@ public:
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, texture);
         update(deltaTime);
+        sprite.initSize(canvasWidth, canvasHeight);
         sprite.draw();
+        if (captureNextFrame) {
+            captureNextFrame = false;
+            captureFrame();
+        }
     }
 
     bool mouseDown = false;
@@ -276,7 +350,59 @@ public:
     void setRotation(float value) { iRotation = value; }
     void setQuality(float value) { iQuality = value; }
     void setDebugMode(bool value) { iDebugMode = value ? 1.0f : 0.0f; }
+    
+    float getSpeed() const { return iSpeed; }
+    float getAmplitude() const { return iAmplitude; }
+    float getFrequency() const { return iFrequency; }
+    float getBrightness() const { return iBrightness; }
+    float getContrast() const { return iContrast; }
+    float getSaturation() const { return iSaturation; }
+    float getHueShift() const { return iHueShift; }
+    float getZoom() const { return iZoom; }
+    float getRotation() const { return iRotation; }
+    float getQuality() const { return iQuality; }
+    bool getDebugMode() const { return iDebugMode > 0.5f; }
+    int getCanvasWidth() const { return canvasWidth; }
+    int getCanvasHeight() const { return canvasHeight; }
+    int getDisplayX() const { return displayX; }
+    int getDisplayY() const { return displayY; }
+    int getDisplayWidth() const { return displayW; }
+    int getDisplayHeight() const { return displayH; }
 
+    
+
+    void resize(gl::GLWindow *win) {
+        maxWidth = win->w;
+        maxHeight = win->h;
+        canvasWidth = win->w;
+        canvasHeight = win->h;
+        
+        glViewport(0, 0, canvasWidth, canvasHeight);
+        
+        
+        if (texWidth > 0 && texHeight > 0) {
+            float imgAspect = static_cast<float>(texWidth) / static_cast<float>(texHeight);
+            float canvasAspect = static_cast<float>(canvasWidth) / static_cast<float>(canvasHeight);
+            
+            if (imgAspect > canvasAspect) {
+                displayW = canvasWidth;
+                displayH = static_cast<int>(canvasWidth / imgAspect);
+                displayX = 0;
+                displayY = (canvasHeight - displayH) / 2;
+            } else {
+                displayH = canvasHeight;
+                displayW = static_cast<int>(canvasHeight * imgAspect);
+                displayX = (canvasWidth - displayW) / 2;
+                displayY = 0;
+            }
+            
+            printf("resize: canvas=%dx%d, display=(%d,%d) %dx%d\n",
+                   canvasWidth, canvasHeight, displayX, displayY, displayW, displayH);
+            
+            sprite.initSize(canvasWidth, canvasHeight);
+            switchShader(currentShaderIndex, win);
+        }
+    }
 
     void event(gl::GLWindow *win, SDL_Event &e) override {
         switch(e.type) {
@@ -429,9 +555,132 @@ public:
             switchShader(0, win);
         }
     }
+
+    void saveImage(int scale) {
+        captureNextFrame = true;
+        captureScale = scale;
+    }
+
+
     
-private:
-    gl::GLSprite sprite;
+
+    void captureFrame() {
+        int readW = canvasWidth;
+        int readH = canvasHeight;
+        
+        printf("Capturing: canvas=%dx%d, display=(%d,%d) %dx%d, scale=%d\n", 
+               readW, readH, displayX, displayY, displayW, displayH, captureScale);
+        
+        if (readW <= 0 || readH <= 0 || displayW <= 0 || displayH <= 0) {
+            printf("Invalid dimensions\n");
+            return;
+        }
+        
+        
+        std::vector<uint8_t> pixels(readW * readH * 4);
+        glReadPixels(0, 0, readW, readH, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
+        
+        GLenum err = glGetError();
+        if (err != GL_NO_ERROR) {
+            printf("glReadPixels error: %d\n", err);
+            return;
+        }
+        
+        
+        int stride = readW * 4;
+        std::vector<uint8_t> row(stride);
+        for (int y = 0; y < readH / 2; ++y) {
+            uint8_t* top = pixels.data() + y * stride;
+            uint8_t* bot = pixels.data() + (readH - 1 - y) * stride;
+            memcpy(row.data(), top, stride);
+            memcpy(top, bot, stride);
+            memcpy(bot, row.data(), stride);
+        }
+        
+        
+        int cropX = displayX;
+        int cropY = 0; 
+        int cropW = displayW;
+        int cropH = displayH;
+        
+        printf("Crop: x=%d, y=%d, w=%d, h=%d\n", cropX, cropY, cropW, cropH);
+        
+        if (cropW <= 0 || cropH <= 0) {
+            printf("Invalid crop dimensions\n");
+            return;
+        }
+        
+        
+        std::vector<uint8_t> croppedPixels(cropW * cropH * 4);
+        
+        for (int y = 0; y < cropH; ++y) {
+            int srcY = cropY + y;
+            int srcOffset = (srcY * readW + cropX) * 4;
+            int dstOffset = y * cropW * 4;
+            memcpy(croppedPixels.data() + dstOffset, pixels.data() + srcOffset, cropW * 4);
+        }
+        
+        
+        int finalW = cropW * captureScale;
+        int finalH = cropH * captureScale;
+        
+        printf("Output: %dx%d (scale %d)\n", finalW, finalH, captureScale);
+        
+#ifdef __EMSCRIPTEN__
+        EM_ASM({
+            var cropW = $0;
+            var cropH = $1;
+            var dataPtr = $2;
+            var finalW = $3;
+            var finalH = $4;
+            
+            try {
+                var srcCanvas = document.createElement('canvas');
+                srcCanvas.width = cropW;
+                srcCanvas.height = cropH;
+                var srcCtx = srcCanvas.getContext('2d');
+                
+                var pixelArray = new Uint8ClampedArray(cropW * cropH * 4);
+                for (var i = 0; i < cropW * cropH * 4; i++) {
+                    pixelArray[i] = Module.HEAPU8[dataPtr + i];
+                }
+                
+                var imageData = new ImageData(pixelArray, cropW, cropH);
+                srcCtx.putImageData(imageData, 0, 0);
+                
+                var outCanvas = document.createElement('canvas');
+                outCanvas.width = finalW;
+                outCanvas.height = finalH;
+                var outCtx = outCanvas.getContext('2d');
+                
+                outCtx.imageSmoothingEnabled = true;
+                outCtx.imageSmoothingQuality = 'high';
+                
+                outCtx.drawImage(srcCanvas, 0, 0, finalW, finalH);
+                
+                var now = new Date();
+                var timestamp = now.getFullYear() + 
+                    String(now.getMonth() + 1).padStart(2, '0') + 
+                    String(now.getDate()).padStart(2, '0') + '_' +
+                    String(now.getHours()).padStart(2, '0') + 
+                    String(now.getMinutes()).padStart(2, '0') + 
+                    String(now.getSeconds()).padStart(2, '0');
+                
+                var link = document.createElement('a');
+                link.download = 'mx2_shader_' + finalW + 'x' + finalH + '_' + timestamp + '.png';
+                link.href = outCanvas.toDataURL('image/png');
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                
+                console.log('Image saved:', finalW, 'x', finalH);
+            } catch (e) {
+                console.error('Save error:', e);
+            }
+        }, cropW, cropH, croppedPixels.data(), finalW, finalH);
+#endif
+        printf("Frame captured and saved\n");
+    }
 };
 
 class MainWindow : public gl::GLWindow {
@@ -463,6 +712,23 @@ MainWindow *main_w = nullptr;
 About *about_ptr = nullptr;
 
 #ifdef __EMSCRIPTEN__
+
+    void resizeWeb() {
+        if (about_ptr && main_w) {
+            int w, h;
+            emscripten_get_canvas_element_size("#canvas", &w, &h);
+            printf("resizeWeb: new canvas size %dx%d\n", w, h);
+            main_w->w = w;
+            main_w->h = h;
+            about_ptr->resize(main_w);
+        }
+    }
+
+    void saveImageWeb(int scale) {
+        if (about_ptr) {
+            about_ptr->saveImage(scale);
+        }
+    }
 
     void nextShaderWeb() {
         if(about_ptr) {
@@ -588,6 +854,93 @@ About *about_ptr = nullptr;
         if(about_ptr) about_ptr->setDebugMode(value);
     }
 
+
+    float getUniformSpeed() {
+        if(about_ptr) return about_ptr->getSpeed();
+        return 1.0f;
+    }
+    
+    float getUniformAmplitude() {
+        if(about_ptr) return about_ptr->getAmplitude();
+        return 1.0f;
+    }
+    
+    float getUniformFrequency() {
+        if(about_ptr) return about_ptr->getFrequency();
+        return 1.0f;
+    }
+    
+    float getUniformBrightness() {
+        if(about_ptr) return about_ptr->getBrightness();
+        return 1.0f;
+    }
+    
+    float getUniformContrast() {
+        if(about_ptr) return about_ptr->getContrast();
+        return 1.0f;
+    }
+    
+    float getUniformSaturation() {
+        if(about_ptr) return about_ptr->getSaturation();
+        return 1.0f;
+    }
+    
+    float getUniformHueShift() {
+        if(about_ptr) return about_ptr->getHueShift();
+        return 0.0f;
+    }
+    
+    float getUniformZoom() {
+        if(about_ptr) return about_ptr->getZoom();
+        return 1.0f;
+    }
+    
+    float getUniformRotation() {
+        if(about_ptr) return about_ptr->getRotation();
+        return 0.0f;
+    }
+    
+    float getUniformQuality() {
+        if(about_ptr) return about_ptr->getQuality();
+        return 1.0f;
+    }
+    
+    bool getUniformDebugMode() {
+        if(about_ptr) return about_ptr->getDebugMode();
+        return false;
+    }
+    
+    int getCanvasWidthWeb() {
+        if(about_ptr) return about_ptr->getCanvasWidth();
+        return 1280;
+    }
+    
+    int getCanvasHeightWeb() {
+        if(about_ptr) return about_ptr->getCanvasHeight();
+        return 720;
+    }
+
+    
+    int getDisplayXWeb() {
+        if(about_ptr) return about_ptr->getDisplayX();
+        return 0;
+    }
+    
+    int getDisplayYWeb() {
+        if(about_ptr) return about_ptr->getDisplayY();
+        return 0;
+    }
+    
+    int getDisplayWidthWeb() {
+        if(about_ptr) return about_ptr->getDisplayWidth();
+        return 1280;
+    }
+    
+    int getDisplayHeightWeb() {
+        if(about_ptr) return about_ptr->getDisplayHeight();
+        return 720;
+    }
+
     EMSCRIPTEN_BINDINGS(image_loader) {
         emscripten::function("nextShaderWeb", &nextShaderWeb);
         emscripten::function("prevShaderWeb", &prevShaderWeb);
@@ -608,6 +961,25 @@ About *about_ptr = nullptr;
         emscripten::function("setUniformRotation", &setUniformRotation);
         emscripten::function("setUniformQuality", &setUniformQuality);
         emscripten::function("setUniformDebugMode", &setUniformDebugMode);
+        emscripten::function("getUniformSpeed", &getUniformSpeed);
+        emscripten::function("getUniformAmplitude", &getUniformAmplitude);
+        emscripten::function("getUniformFrequency", &getUniformFrequency);
+        emscripten::function("getUniformBrightness", &getUniformBrightness);
+        emscripten::function("getUniformContrast", &getUniformContrast);
+        emscripten::function("getUniformSaturation", &getUniformSaturation);
+        emscripten::function("getUniformHueShift", &getUniformHueShift);
+        emscripten::function("getUniformZoom", &getUniformZoom);
+        emscripten::function("getUniformRotation", &getUniformRotation);
+        emscripten::function("getUniformQuality", &getUniformQuality);
+        emscripten::function("getUniformDebugMode", &getUniformDebugMode);
+        emscripten::function("getCanvasWidth", &getCanvasWidthWeb);
+        emscripten::function("getCanvasHeight", &getCanvasHeightWeb);
+        emscripten::function("getDisplayX", &getDisplayXWeb);
+        emscripten::function("getDisplayY", &getDisplayYWeb);
+        emscripten::function("getDisplayWidth", &getDisplayWidthWeb);
+        emscripten::function("getDisplayHeight", &getDisplayHeightWeb);
+        emscripten::function("saveImage", &saveImageWeb);
+        emscripten::function("resize", &resizeWeb);
     };
 
 #endif
@@ -619,7 +991,7 @@ void eventProc() {
 int main(int argc, char **argv) {
 #ifdef __EMSCRIPTEN__
     try {
-        MainWindow main_window("/", 1280, 720);
+        MainWindow main_window("/", 1920, 1080);
         main_w =&main_window;
         about_ptr = dynamic_cast<About *>(main_w->object.get());
         emscripten_set_main_loop(eventProc, 0, 1);

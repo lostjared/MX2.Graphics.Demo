@@ -504,7 +504,7 @@
 </head>
 <body>
     <div id="canvas-container">
-        <canvas id="canvas" width="1280" height="720"></canvas>
+        <canvas id="canvas"></canvas>
     </div>
     <div id="controls">
         <button id="prev-shader">◀ Prev</button>
@@ -512,7 +512,13 @@
         <button id="reset-btn">⟲ Reset</button>
         <label id="file-label" for="file-input">🖼️ Load Image</label>
         <input type="file" id="file-input" accept=".png,.jpg,.jpeg">
-        <button id="save-image">💾 Save Image</button>
+        <button id="save-image">💾 Save</button>
+        <select id="save-scale" style="padding: 8px; font-size: 14px; background: #333; color: #fff; border: 1px solid #555; border-radius: 4px; cursor: pointer;">
+            <option value="1">1x</option>
+            <option value="2" selected>2x</option>
+            <option value="3">3x</option>
+            <option value="4">4x</option>
+        </select>
         <button id="shader-editor-btn">✏️ Custom Shader</button>
         <button id="uniforms-btn" title="Uniform Controls">⚙️</button>
         <span id="shader-info">Double-tap to cycle: <a href="/activity/demo/shaders/index.html" target="_blank">List ES3 Shaders</a></span>
@@ -629,8 +635,19 @@
             </div>
         </div>
     </div>
-
-    <script src="MX_app.js?v=2.60"></script>
+    <script>
+      var Module = {
+            onRuntimeInitialized: function() {
+                console.log('Module ready, calling resize');
+                setTimeout(function() {
+                    if (typeof Module.resize === 'function') {
+                        Module.resize();
+                    }
+                }, 100);
+            }
+        };
+    </script>
+    <script src="MX_app.js?v=2.80"></script>
     <script>
         const canvas = document.getElementById('canvas');
         const canvasContainer = document.getElementById('canvas-container');
@@ -882,34 +899,39 @@ void main(void) {
     color = vec4(r, g, b, 1.0);
 }`;
 
-        // Initialize with basic template
         shaderCodeTextarea.value = basicTemplate;
 
-        function resizeCanvas() {
+       function resizeCanvas() {
+            const container = document.getElementById('canvas-container');
             const aspectRatio = 16 / 9;
-            const containerWidth = canvasContainer.clientWidth;
-            const containerHeight = canvasContainer.clientHeight;
+            
+            const containerWidth = container.clientWidth;
+            const containerHeight = container.clientHeight;
 
-            let canvasWidth = containerWidth;
-            let canvasHeight = containerWidth / aspectRatio;
+            let targetWidth = containerWidth;
+            let targetHeight = containerWidth / aspectRatio;
 
-            if (canvasHeight > containerHeight) {
-                canvasHeight = containerHeight;
-                canvasWidth = containerHeight * aspectRatio;
+            if (targetHeight > containerHeight) {
+                targetHeight = containerHeight;
+                targetWidth = targetHeight * aspectRatio;
             }
 
-            canvas.width = canvasWidth;
-            canvas.height = canvasHeight;
+            targetWidth = Math.floor(targetWidth);
+            targetHeight = Math.floor(targetHeight);
 
-            canvas.style.width = `${canvasWidth}px`;
-            canvas.style.height = `${canvasHeight}px`;
-            canvas.style.position = 'absolute';
-            canvas.style.left = `${(containerWidth - canvasWidth) / 2}px`;
-            canvas.style.top = `${(containerHeight - canvasHeight) / 2}px`;
+            canvas.width = targetWidth;
+            canvas.height = targetHeight;
+
+            canvas.style.width = `${targetWidth}px`;
+            canvas.style.height = `${targetHeight}px`;
+            
+            if (typeof Module !== 'undefined' && typeof Module.resize === 'function') {
+                Module.resize();
+            }
         }
 
-        window.addEventListener('resize', resizeCanvas);
         resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
 
         prevButton.addEventListener('click', () => {
             if (typeof Module !== 'undefined' && Module.prevShaderWeb) {
@@ -924,39 +946,41 @@ void main(void) {
         });
 
         saveButton.addEventListener('click', () => {
+            console.log('Save button clicked');
+            
+            
+            if (typeof Module === 'undefined') {
+                console.error('Module is undefined');
+                alert('App not loaded yet. Please wait.');
+                return;
+            }
+            
+            
+            if (typeof Module.saveImage !== 'function') {
+                console.error('Module.saveImage is not a function');
+                console.log('Available Module functions:', Object.keys(Module).filter(k => typeof Module[k] === 'function'));
+                alert('Save function not available.');
+                return;
+            }
+            
+            
+            const scaleSelect = document.getElementById('save-scale');
+            let scale = 1;
+            if (scaleSelect) {
+                scale = parseInt(scaleSelect.value) || 1;
+            }
+            console.log('Saving with scale:', scale);
+            
             try {
-                let gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
-                
-                if (gl) {
-                    gl.finish();
-                }
-                
-                requestAnimationFrame(() => {
-                    const now = new Date();
-                    const timestamp = now.getFullYear() + 
-                                    String(now.getMonth() + 1).padStart(2, '0') + 
-                                    String(now.getDate()).padStart(2, '0') + '_' +
-                                    String(now.getHours()).padStart(2, '0') + 
-                                    String(now.getMinutes()).padStart(2, '0') + 
-                                    String(now.getSeconds()).padStart(2, '0');
-                    
-                    const imageData = canvas.toDataURL('image/png');
-                    const link = document.createElement('a');
-                    link.href = imageData;
-                    link.download = `mx2_shader_${timestamp}.png`;
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
-                    
-                    console.log('Image saved successfully');
-                });
+                Module.saveImage(scale);
+                console.log('saveImage called successfully');
             } catch (error) {
-                console.error('Error saving image:', error);
-                alert('Failed to save image. Please try again.');
+                console.error('Error calling saveImage:', error);
+                alert('Failed to save: ' + error.message);
             }
         });
 
-        // Shader editor modal controls
+        
         shaderEditorBtn.addEventListener('click', () => {
             shaderEditorModal.classList.add('visible');
         });
@@ -971,7 +995,7 @@ void main(void) {
             }
         });
 
-        // Template buttons
+        
         document.getElementById('template-basic').addEventListener('click', () => {
             shaderCodeTextarea.value = basicTemplate;
         });
@@ -1115,17 +1139,41 @@ void main(void) {
 
         // Uniforms control panel
         const updateUniformsDisplay = () => {
-            iSpeed.value = Module.getUniform("iSpeed");
-            iAmplitude.value = Module.getUniform("iAmplitude");
-            iFrequency.value = Module.getUniform("iFrequency");
-            iBrightness.value = Module.getUniform("iBrightness");
-            iContrast.value = Module.getUniform("iContrast");
-            iSaturation.value = Module.getUniform("iSaturation");
-            iHueShift.value = Module.getUniform("iHueShift");
-            iZoom.value = Module.getUniform("iZoom");
-            iRotation.value = Module.getUniform("iRotation");
-            iQuality.value = Module.getUniform("iQuality");
-            iDebugMode.checked = Module.getUniform("iDebugMode") === 1;
+            if (typeof Module === 'undefined') return;
+            
+            const getters = {
+                'iSpeed': 'getUniformSpeed',
+                'iAmplitude': 'getUniformAmplitude',
+                'iFrequency': 'getUniformFrequency',
+                'iBrightness': 'getUniformBrightness',
+                'iContrast': 'getUniformContrast',
+                'iSaturation': 'getUniformSaturation',
+                'iHueShift': 'getUniformHueShift',
+                'iZoom': 'getUniformZoom',
+                'iRotation': 'getUniformRotation',
+                'iQuality': 'getUniformQuality',
+                'iDebugMode': 'getUniformDebugMode'
+            };
+            
+            Object.keys(getters).forEach(uniformName => {
+                const getterName = getters[uniformName];
+                if (Module[getterName] && typeof Module[getterName] === 'function') {
+                    try {
+                        const value = Module[getterName]();
+                        const element = document.getElementById(uniformName);
+                        if (element) {
+                            if (element.type === 'checkbox') {
+                                element.checked = value;
+                            } else {
+                                element.value = value;
+                            }
+                            updateUniformDisplay(uniformName);
+                        }
+                    } catch (e) {
+                        console.log(`Could not get ${uniformName}:`, e);
+                    }
+                }
+            });
         };
 
         const setUniformValue = (name, value) => {
@@ -1133,71 +1181,6 @@ void main(void) {
                 Module.setUniform(name, value);
             }
         };
-
-        iSpeed.addEventListener('input', () => {
-            const value = parseFloat(iSpeed.value);
-            setUniformValue("iSpeed", value);
-            document.getElementById('iSpeed-value').innerText = value.toFixed(2);
-        });
-
-        iAmplitude.addEventListener('input', () => {
-            const value = parseFloat(iAmplitude.value);
-            setUniformValue("iAmplitude", value);
-            document.getElementById('iAmplitude-value').innerText = value.toFixed(2);
-        });
-
-        iFrequency.addEventListener('input', () => {
-            const value = parseFloat(iFrequency.value);
-            setUniformValue("iFrequency", value);
-            document.getElementById('iFrequency-value').innerText = value.toFixed(2);
-        });
-
-        iBrightness.addEventListener('input', () => {
-            const value = parseFloat(iBrightness.value);
-            setUniformValue("iBrightness", value);
-            document.getElementById('iBrightness-value').innerText = value.toFixed(2);
-        });
-
-        iContrast.addEventListener('input', () => {
-            const value = parseFloat(iContrast.value);
-            setUniformValue("iContrast", value);
-            document.getElementById('iContrast-value').innerText = value.toFixed(2);
-        });
-
-        iSaturation.addEventListener('input', () => {
-            const value = parseFloat(iSaturation.value);
-            setUniformValue("iSaturation", value);
-            document.getElementById('iSaturation-value').innerText = value.toFixed(2);
-        });
-
-        iHueShift.addEventListener('input', () => {
-            const value = parseFloat(iHueShift.value);
-            setUniformValue("iHueShift", value);
-            document.getElementById('iHueShift-value').innerText = value.toFixed(2);
-        });
-
-        iZoom.addEventListener('input', () => {
-            const value = parseFloat(iZoom.value);
-            setUniformValue("iZoom", value);
-            document.getElementById('iZoom-value').innerText = value.toFixed(2);
-        });
-
-        iRotation.addEventListener('input', () => {
-            const value = parseFloat(iRotation.value);
-            setUniformValue("iRotation", value);
-            document.getElementById('iRotation-value').innerText = value.toFixed(2);
-        });
-
-        iQuality.addEventListener('input', () => {
-            const value = parseFloat(iQuality.value);
-            setUniformValue("iQuality", value);
-            document.getElementById('iQuality-value').innerText = value.toFixed(2);
-        });
-
-        iDebugMode.addEventListener('change', () => {
-            const value = iDebugMode.checked ? 1 : 0;
-            setUniformValue("iDebugMode", value);
-        });
 
         closeUniformsBtn.addEventListener('click', () => {
             uniformsModal.classList.remove('visible');
@@ -1210,8 +1193,10 @@ void main(void) {
             }
         });
 
-        // Initial uniform values
+
         updateUniformsDisplay();
+
+
     </script>
 </body>
 </html>
