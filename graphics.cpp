@@ -1,3 +1,13 @@
+/* 
+
+MX2 Graphics Demo
+Coded by Jared Bruni
+https://lostsidedead.biz
+GPL v3
+
+*/
+
+
 #include"mx.hpp"
 #include"argz.hpp"
 
