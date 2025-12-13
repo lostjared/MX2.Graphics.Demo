@@ -3112,7 +3112,7 @@ void main(void){
     float mix1 = 0.5 + 0.5 * sin(t * 0.6);
     float mix2 = 0.5 + 0.5 * cos(t * 0.45);
 
-    vec3 warpCol = mix(sin(t1.rgb * pingPong(time_f * PI, 10.0)), sin(t2.rgb * pingPong(time_f * PI/2,8.0)), mix1);
+    vec3 warpCol = mix(sin(t1.rgb * pingPong(time_f * PI, 10.0)), sin(t2.rgb * pingPong(time_f * PI/2.0,8.0)), mix1);
     warpCol = mix(warpCol, t3.rgb, mix2 * 0.5);
     warpCol *= tint * (0.92 + 0.08 * slowBeat);
     vec3 base = textureGrad(textTexture, TexCoord, dFdx(TexCoord), dFdy(TexCoord)).rgb;
@@ -3208,7 +3208,7 @@ void main(void){
     vec2 ar = vec2(iResolution.x / iResolution.y, 1.0);
     vec2 m = (iMouse.z > 0.5 ? (iMouse.xy / iResolution) : vec2(0.5));
 
-    float t = time_f + iTime * (PI/2);
+    float t = time_f + iTime * (PI/2.0);
     float sr = clamp(iSampleRate / 48000.0, 0.25, 4.0);
     float aMix = clamp(amp * 0.7 + uamp * 0.3, 0.0, 20.0);
 
@@ -3397,7 +3397,7 @@ void main(void){
 
     float hueBase = fract(t * 0.06 + iDate.x * 0.01);
     float sat = 0.7 + 0.25 * sin(t * 0.4 + sr + chanBeat);
-    float val = 0.6 + 0.35 * sin(t * 0.5 + dot(baseUV, vec2(2.3, 1.9)) + iFrame * 0.002);
+    float val = 0.6 + 0.35 * sin(t * 0.5 + dot(baseUV, vec2(2.3, 1.9)) + float(iFrame) * 0.002);
 
     vec3 tint = hsv2rgb(vec3(hueBase + r * 0.25, sat, val));
 
@@ -11983,14 +11983,14 @@ void main(void) {
     vec3 bC = preBlendColor(u2 - off);
     vec3 kaleidoRGB = vec3(rC.r, gC.g, bC.b);
     float ring = smoothstep(0.0, 0.7, sin(log(rD + 1e-3) * 9.5 + time_f * 1.2));
-    ring = ring * pingPong((time_f * (PI/2)), 5.0);
+    ring = ring * pingPong((time_f * (PI/2.0)), 5.0);
     float pulse = 0.5 + 0.5 * sin(time_f * 2.0 + rD * 28.0 + k * 12.0);
     vec3 outCol = vec3(kaleidoRGB.r * pingPong(time_f * PI, 2.0), kaleidoRGB.g * pingPong(time_f * PI, 2.0), kaleidoRGB.b * pingPong(time_f * PI, 2.0));
     outCol *= (0.75 + 0.25 * ring) * (0.85 + 0.15 * pulse) * vign;
     vec3 bloom = outCol * outCol * 0.18 + pow(max(outCol - 0.6, 0.0), vec3(2.0)) * 0.12;
 
     outCol += bloom;
-    outCol = mix(outCol, baseCol, pingPong(pulse *  PI*2, 5.0) * 0.18);
+    outCol = mix(outCol, baseCol, pingPong(pulse *  PI*2.0, 5.0) * 0.18);
     outCol = clamp(outCol, vec3(0.05), vec3(0.97));
     vec3 finalRGB = mix(baseTex.rgb, outCol, pingPong(glow * PI, 5.0) * 0.8);
     color = vec4(finalRGB, baseTex.a);

@@ -173,6 +173,9 @@ class About : public gl::GLObject {
     int displayW = 1920, displayH = 1080;
     bool captureNextFrame = false;
     int captureScale = 1;
+    int loadingShaderIndex = 0;
+    bool loadingComplete = false;
+    gl::GLWindow* loadingWin = nullptr;
 public:
     About() = default;
     virtual ~About() override {
@@ -227,48 +230,159 @@ public:
         switchShader(currentShaderIndex, win);
     }
 
-    void load(gl::GLWindow *win) override {
-        
-        maxWidth = win->w;
-        maxHeight = win->h;
-        canvasWidth = win->w;
-        canvasHeight = win->h;
-        
-        glViewport(0, 0, canvasWidth, canvasHeight);
-        
-        
-        for(const auto& info : shaderSources) {
+    void loadShaderAsync(void* arg) {
+        About* self = static_cast<About*>(arg);
+        self->loadNextShader();
+    }
+    
+    void loadNextShader() {
+        if (loadingShaderIndex < static_cast<int>(shaderSources.size())) {
+            const auto& info = shaderSources[loadingShaderIndex];
+            
+#ifdef __EMSCRIPTEN__
+            EM_ASM({
+                if (typeof window.addLoadingMessage === 'function') {
+                    var name = UTF8ToString($0);
+                    var idx = $1;
+                    var total = $2;
+                    window.addLoadingMessage('[' + idx + '/' + total + '] Compiling: ' + name, 'normal');
+                }
+            }, info.name, loadingShaderIndex + 1, (int)shaderSources.size());
+#endif
+            
             auto shader = std::make_unique<gl::ShaderProgram>();
-            if(!shader->loadProgramFromText(gl::vSource, info.source)) {
-                mx::system_err << "Failed to load shader: " << info.name << "\n";
-                continue;
+            bool success = shader->loadProgramFromText(gl::vSource, info.source);
+            
+#ifdef __EMSCRIPTEN__
+            EM_ASM({
+                if (typeof window.addLoadingMessage === 'function') {
+                    var name = UTF8ToString($0);
+                    var ok = $1;
+                    if (ok) {
+                        window.addLoadingMessage('    OK: ' + name, 'success');
+                    } else {
+                        window.addLoadingMessage('    FAILED: ' + name, 'error');
+                    }
+                }
+            }, info.name, success ? 1 : 0);
+#endif
+            
+            if (success) {
+                shader->setSilent(true);
+                shaders.push_back(std::move(shader));
             }
-            shader->setSilent(true);
-            shaders.push_back(std::move(shader));
+            
+            loadingShaderIndex++;
+            
+            
+#ifdef __EMSCRIPTEN__
+            emscripten_async_call([](void* arg) {
+                About* self = static_cast<About*>(arg);
+                self->loadNextShader();
+            }, this, 10);  
+#endif
+        } else {
+            finishLoading();
+        }
+    }
+    
+    void finishLoading() {
+        if (shaders.empty()) {
+            mx::system_err << "No shaders loaded successfully\n";
+            return;
         }
         
-        if(shaders.empty()) {
-            throw mx::Exception("No shaders loaded successfully");
-        }
+#ifdef __EMSCRIPTEN__
+        EM_ASM({
+            if (typeof window.addLoadingMessage === 'function') {
+                window.addLoadingMessage(' ', 'normal');
+                window.addLoadingMessage('Compiled ' + $0 + ' shaders successfully!', 'success');
+                window.addLoadingMessage(' ', 'normal');
+                window.addLoadingMessage('Loading texture...', 'info');
+            }
+        }, (int)shaders.size());
+#endif
         
-        
-        std::string logoPath = win->util.getFilePath("data/logo.png");
+        std::string logoPath = loadingWin->util.getFilePath("data/logo.png");
         SDL_Surface *surface = IMG_Load(logoPath.c_str());
-        if(!surface) {
-            throw mx::Exception("Error loading logo.png");
+        if (!surface) {
+            mx::system_err << "Error loading logo.png\n";
+            return;
         }
         
         SDL_Surface *converted = SDL_ConvertSurfaceFormat(surface, SDL_PIXELFORMAT_RGBA32, 0);
         SDL_FreeSurface(surface);
         
-        if(!converted) {
-            throw mx::Exception("Error converting logo surface");
+        if (!converted) {
+            mx::system_err << "Error converting logo surface\n";
+            return;
         }
+        
+#ifdef __EMSCRIPTEN__
+        EM_ASM({
+            if (typeof window.addLoadingMessage === 'function') {
+                window.addLoadingMessage('Texture loaded: ' + $0 + 'x' + $1, 'success');
+                window.addLoadingMessage(' ', 'normal');
+                window.addLoadingMessage('Initialization complete!', 'success');
+            }
+        }, converted->w, converted->h);
+#endif
         
         lastUpdateTime = SDL_GetTicks();
         sprite.initSize(canvasWidth, canvasHeight);
-        loadNewTexture(converted, win);
+        loadNewTexture(converted, loadingWin);
         SDL_FreeSurface(converted);
+        
+        loadingComplete = true;
+        
+#ifdef __EMSCRIPTEN__
+        EM_ASM({
+            setTimeout(function() {
+                if (typeof window.hideLoadingScreen === 'function') {
+                    window.hideLoadingScreen();
+                }
+            }, 1000);
+        });
+#endif
+    }
+
+    void load(gl::GLWindow *win) override {
+        maxWidth = win->w;
+        maxHeight = win->h;
+        canvasWidth = win->w;
+        canvasHeight = win->h;
+        loadingWin = win;
+        
+        glViewport(0, 0, canvasWidth, canvasHeight);
+        
+#ifdef __EMSCRIPTEN__
+        EM_ASM({
+            if (typeof window.addLoadingMessage === 'function') {
+                window.addLoadingMessage('MX2 Graphics Demo', 'info');
+                window.addLoadingMessage('OpenGL initialized: ' + $0 + 'x' + $1, 'success');
+                window.addLoadingMessage(' ', 'normal');
+                window.addLoadingMessage('Compiling ' + $2 + ' shaders...', 'info');
+                window.addLoadingMessage(' ', 'normal');
+            }
+        }, canvasWidth, canvasHeight, (int)shaderSources.size());
+#endif
+        loadingShaderIndex = 0;
+        loadingComplete = false;
+#ifdef __EMSCRIPTEN__   
+        emscripten_async_call([](void* arg) {
+            About* self = static_cast<About*>(arg);
+            self->loadNextShader();
+        }, this, 50);  
+#else
+        for (const auto& info : shaderSources) {
+            auto shader = std::make_unique<gl::ShaderProgram>();
+            if (shader->loadProgramFromText(gl::vSource, info.source)) {
+                shader->setSilent(true);
+                shaders.push_back(std::move(shader));
+            }
+        }
+        finishLoading();
+#endif
     }
   
     void switchShader(size_t index, gl::GLWindow *win) {
@@ -288,7 +402,6 @@ public:
             adjMouse.y -= displayY;
             shaders[currentShaderIndex]->setUniform("iMouse", adjMouse);
             shaders[currentShaderIndex]->setUniform("iMouseNormalized", glm::vec2(adjMouse.x / displayW, 1.0f - adjMouse.y / displayH));
-            
             shaders[currentShaderIndex]->setUniform("iMouseActive", mouse.z > 0.5f ? 1.0f : 0.0f);
             shaders[currentShaderIndex]->setUniform("iMouseVelocity", iMouseVelocity);
             shaders[currentShaderIndex]->setUniform("iMouseClick", iMouseClick);
@@ -328,6 +441,9 @@ public:
     }
 
     void draw(gl::GLWindow *win) override {
+        if (!loadingComplete) {
+            return;
+        }
         glDisable(GL_DEPTH_TEST);
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
