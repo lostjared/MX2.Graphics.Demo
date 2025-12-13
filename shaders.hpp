@@ -2185,5 +2185,10733 @@ void main(void) {
     color = vec4(col, 1.0);
 })";
 
+inline const char *src_frac_shader02_dmdi6i_zoom_xor = R"SHD(#version 300 es
+precision highp float;
+out vec4 color;
+in vec2 TexCoord;
+
+uniform sampler2D textTexture;
+uniform vec2 iResolution;
+uniform float time_f;
+uniform vec4 iMouse;
+)SHD" COMMON_UNIFORMS COLOR_HELPERS R"SHD(
+const float PI = 3.1415926535897932384626433832795;
+
+vec4 xor_RGB(vec4 icolor, vec4 source){
+    ivec3 int_color;
+    ivec4 isource = ivec4(source * 255.0);
+    for(int i=0;i<3;++i){
+        int_color[i] = int(255.0*icolor[i]);
+        int_color[i] = int_color[i] ^ isource[i];
+        if(int_color[i]>255) int_color[i] = int_color[i] % 255;
+        icolor[i] = float(int_color[i]) / 255.0;
+    }
+    icolor.a = 1.0;
+    return icolor;
+}
+
+float pingPong(float x, float length) {
+    float m = mod(x, length * 2.0);
+    return m <= length ? m : length * 2.0 - m;
+}
+
+vec3 hsv2rgb(vec3 c) {
+    vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+
+vec2 rotateUV(vec2 uv, float angle, vec2 c, float aspect) {
+    float s = sin(angle), cc = cos(angle);
+    vec2 p = uv - c;
+    p.x *= aspect;
+    p = mat2(cc, -s, s, cc) * p;
+    p.x /= aspect;
+    return p + c;
+}
+
+vec2 reflectUV(vec2 uv, float segments, vec2 c, float aspect) {
+    vec2 p = uv - c;
+    p.x *= aspect;
+    float ang = atan(p.y, p.x);
+    float rad = length(p);
+    float stepA = 6.28318530718 / segments;
+    ang = mod(ang, stepA);
+    ang = abs(ang - stepA * 0.5);
+    vec2 r = vec2(cos(ang), sin(ang)) * rad;
+    r.x /= aspect;
+    return r + c;
+}
+
+vec2 fractalFold(vec2 uv, float zoom, float t, vec2 c, float aspect) {
+    vec2 p = uv;
+    for (int i = 0; i < 6; i++) {
+        p = abs((p - c) * (zoom + 0.15 * sin(t * 0.35 + float(i)))) - 0.5 + c;
+        p = rotateUV(p, t * 0.12 + float(i) * 0.07, c, aspect);
+    }
+    return p;
+}
+
+vec3 neonPalette(float t) {
+    vec3 pink = vec3(1.0, 0.15, 0.75);
+    vec3 blue = vec3(0.10, 0.55, 1.0);
+    vec3 green = vec3(0.10, 1.00, 0.45);
+    float ph = fract(t * 0.08);
+    vec3 k1 = mix(pink, blue, smoothstep(0.00, 0.33, ph));
+    vec3 k2 = mix(blue, green, smoothstep(0.33, 0.66, ph));
+    vec3 k3 = mix(green, pink, smoothstep(0.66, 1.00, ph));
+    float a = step(ph, 0.33);
+    float b = step(0.33, ph) * step(ph, 0.66);
+    float c = step(0.66, ph);
+    return normalize(a * k1 + b * k2 + c * k3) * 1.05;
+}
+
+vec3 softTone(vec3 c) {
+    c = pow(max(c, 0.0), vec3(0.95));
+    float l = dot(c, vec3(0.299, 0.587, 0.114));
+    c = mix(vec3(l), c, 0.9);
+    return clamp(c, 0.0, 1.0);
+}
+
+vec3 tentBlur3(sampler2D img, vec2 uv, vec2 res) {
+    vec2 ts = 1.0 / res;
+    vec3 s00 = textureGrad(img, uv + ts * vec2(-1.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s10 = textureGrad(img, uv + ts * vec2(0.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s20 = textureGrad(img, uv + ts * vec2(1.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s01 = textureGrad(img, uv + ts * vec2(-1.0, 0.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s11 = textureGrad(img, uv, dFdx(uv), dFdy(uv)).rgb;
+    vec3 s21 = textureGrad(img, uv + ts * vec2(1.0, 0.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s02 = textureGrad(img, uv + ts * vec2(-1.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s12 = textureGrad(img, uv + ts * vec2(0.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s22 = textureGrad(img, uv + ts * vec2(1.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    return (s00 + 2.0 * s10 + s20 + 2.0 * s01 + 4.0 * s11 + 2.0 * s21 + s02 + 2.0 * s12 + s22) / 16.0;
+}
+
+vec3 preBlendColor(vec2 uv) {
+    vec3 tex = tentBlur3(textTexture, uv, iResolution);
+    float aspect = iResolution.x / iResolution.y;
+    vec2 p = (uv - 0.5) * vec2(aspect, 1.0);
+    float r = length(p);
+    float t = time_f;
+    vec3 neon = neonPalette(t + r * 1.3);
+    float neonAmt = smoothstep(0.1, 0.8, r);
+    neonAmt = 0.3 + 0.4 * (1.0 - neonAmt);
+    vec3 grad = mix(tex, neon, neonAmt);
+    grad = mix(grad, tex, 0.2);
+    grad = softTone(grad);
+    return grad;
+}
+
+float diamondRadius(vec2 p) {
+    p = sin(abs(p));
+    return max(p.x, p.y);
+}
+
+vec2 diamondFold(vec2 uv, vec2 c, float aspect) {
+    vec2 p = (uv - c) * vec2(aspect, 1.0);
+    p = abs(p);
+    if (p.y > p.x) p = p.yx;
+    p.x /= aspect;
+    return p + c;
+}
+
+void main(void) {
+    float aspect = iResolution.x / iResolution.y;
+    vec2 m = (iMouse.z > 0.5 || iMouse.w > 0.5) ? (iMouse.xy / iResolution) : vec2(0.5);
+    vec2 ar = vec2(aspect, 1.0);
+
+    float zoomPhase = time_f * 0.12;
+    float zCycle = floor(zoomPhase);
+    float zLocal = fract(zoomPhase);
+    float tri = 1.0 - abs(zLocal * 2.0 - 1.0);
+    float sgn = mix(-1.0, 1.0, step(0.5, mod(zCycle, 2.0)));
+    float depth = 1.0 + zCycle * 0.35;
+    float zoomExp = sgn * tri * depth;
+    float zoom = pow(1.45, zoomExp);
+
+    vec2 z = TexCoord - m;
+    z.x *= aspect;
+    z /= zoom;
+    z.x /= aspect;
+    vec2 zoomTC = fract(z + m);
+
+    vec4 baseTex = texture(textTexture, zoomTC);
+
+    vec2 uv = zoomTC * 2.0 - 1.0;
+    uv.x *= aspect;
+    float r = pingPong(sin(length(uv) * time_f), 5.0);
+    float radius = sqrt(aspect * aspect + 1.0) + 0.5;
+    float glow = smoothstep(radius, radius - 0.25, r);
+
+    vec3 baseCol = preBlendColor(zoomTC);
+    float seg = 4.0 + 2.0 * sin(time_f * 0.33);
+    vec2 kUV = reflectUV(zoomTC, seg, m, aspect);
+    kUV = diamondFold(kUV, m, aspect);
+    float foldZoom = 1.45 + 0.55 * sin(time_f * 0.42);
+    kUV = fractalFold(kUV, foldZoom, time_f, m, aspect);
+    kUV = rotateUV(kUV, time_f * 0.23, m, aspect);
+    kUV = diamondFold(kUV, m, aspect);
+
+    vec2 p = (kUV - m) * ar;
+    vec2 q = abs(p);
+    if (q.y > q.x) q = q.yx;
+
+    float base = 1.82 + 0.18 * pingPong(sin(time_f * 0.2) * (PI * time_f), 5.0);
+    float period = log(base) * pingPong(time_f * PI, 5.0);
+    float tz = time_f * 0.65;
+    float rD = diamondRadius(p) + 1e-6;
+    float ang = atan(q.y, q.x) + tz * 0.35 + 0.35 * sin(rD * 18.0 + time_f * 0.6);
+    float k = fract((log(rD) - tz) / period);
+    float rw = exp(k * period);
+    vec2 pwrap = vec2(cos(ang), sin(ang)) * rw;
+
+    vec2 u0 = fract(pwrap / ar + m);
+    vec2 u1 = fract((pwrap * 1.045) / ar + m);
+    vec2 u2 = fract((pwrap * 0.955) / ar + m);
+    vec2 dir = normalize(pwrap + 1e-6);
+    vec2 off = dir * (0.0015 + 0.001 * sin(time_f * 1.3)) * vec2(1.0, 1.0 / aspect);
+
+    float vign = 1.0 - smoothstep(0.75, 1.2, length((zoomTC - m) * ar));
+    vign = mix(0.9, 1.15, vign);
+
+    vec3 rC = preBlendColor(u0 + off);
+    vec3 gC = preBlendColor(u1);
+    vec3 bC = preBlendColor(u2 - off);
+    vec3 kaleidoRGB = vec3(rC.r, gC.g, bC.b);
+
+    float ring = smoothstep(0.0, 0.7, sin(log(rD + 1e-3) * 9.5 + time_f * 1.2));
+    ring = ring * pingPong((time_f * PI), 5.0);
+    float pulse = 0.5 + 0.5 * sin(time_f * 2.0 + rD * 28.0 + k * 12.0);
+
+    vec3 outCol = kaleidoRGB;
+    outCol *= (0.75 + 0.25 * ring) * (0.85 + 0.15 * pulse) * vign;
+
+    vec3 bloom = outCol * outCol * 0.18 + pow(max(outCol - 0.6, 0.0), vec3(2.0)) * 0.12;
+    outCol += bloom;
+
+    outCol = mix(outCol, baseCol, pingPong(pulse * PI, 5.0) * 0.18);
+    outCol = clamp(outCol, vec3(0.05), vec3(0.97));
+    vec3 finalCore = mix(baseTex.rgb, outCol, pingPong(glow * PI, 5.0) * 0.8);
+
+    vec2 center = m;
+    vec2 pSwirl = (zoomTC - center) * vec2(1.0, iResolution.y / iResolution.x);
+    float intensity = pingPong(time_f, 10.0);
+    float angleS = atan(pSwirl.y, pSwirl.x);
+    float radiusS = length(pSwirl);
+    float swirl = sin(time_f * 0.5) * 0.5 + 0.5;
+    angleS += intensity * swirl * sin(radiusS * 10.0 + time_f);
+    vec2 qSwirl = vec2(cos(angleS), sin(angleS)) * radiusS;
+    vec2 uvSwirl = qSwirl * vec2(1.0, iResolution.x / iResolution.y) + center;
+
+    vec4 texSwirl = texture(textTexture, uvSwirl);
+    float fluctuation = sin(time_f * 2.0) * 0.5 + 0.5;
+    vec3 xorPalette = mix(vec3(1.0, 0.0, 0.0), vec3(0.0, 0.0, 1.0), fluctuation);
+    xorPalette = mix(xorPalette, neonPalette(time_f), 0.5);
+    vec4 fluctuatedColor = vec4(xorPalette, 1.0);
+    vec4 xorResult = xor_RGB(texSwirl, fluctuatedColor);
+    vec3 xorMix = mix(texSwirl.rgb, xorResult.rgb, 0.6);
+
+    float xorStrength = (0.25 + 0.35 * pulse) * vign;
+    xorStrength = clamp(xorStrength, 0.0, 1.0);
+
+    vec3 finalRGB = mix(finalCore, xorMix, xorStrength);
+
+    color = vec4(finalRGB, baseTex.a);
+}
+)SHD";
+inline const char *src_frac_shader02_dmdi6i_zoom_xor_amp = R"SHD(#version 300 es
+precision highp float;
+out vec4 color;
+in vec2 TexCoord;
+
+uniform sampler2D textTexture;
+uniform vec2 iResolution;
+uniform float time_f;
+uniform vec4 iMouse;
+)SHD" COMMON_UNIFORMS COLOR_HELPERS R"SHD(
+uniform float amp;
+uniform float uamp;
+
+const float PI = 3.1415926535897932384626433832795;
+
+float gAmp01;
+float gSlow;
+float gFast;
+float gDetail;
+
+vec4 xor_RGB(vec4 icolor, vec4 source){
+    ivec3 int_color;
+    ivec4 isource = ivec4(source * 255.0);
+    for(int i=0;i<3;++i){
+        int_color[i] = int(255.0*icolor[i]);
+        int_color[i] = int_color[i] ^ isource[i];
+        if(int_color[i]>255) int_color[i] = int_color[i] % 255;
+        icolor[i] = float(int_color[i]) / 255.0;
+    }
+    icolor.a = 1.0;
+    return icolor;
+}
+
+float pingPong(float x, float length) {
+    float m = mod(x, length * 2.0);
+    return m <= length ? m : length * 2.0 - m;
+}
+
+vec3 hsv2rgb(vec3 c) {
+    vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+
+vec2 rotateUV(vec2 uv, float angle, vec2 c, float aspect) {
+    float s = sin(angle), cc = cos(angle);
+    vec2 p = uv - c;
+    p.x *= aspect;
+    p = mat2(cc, -s, s, cc) * p;
+    p.x /= aspect;
+    return p + c;
+}
+
+vec2 reflectUV(vec2 uv, float segments, vec2 c, float aspect) {
+    vec2 p = uv - c;
+    p.x *= aspect;
+    float ang = atan(p.y, p.x);
+    float rad = length(p);
+    float stepA = 6.28318530718 / segments;
+    ang = mod(ang, stepA);
+    ang = abs(ang - stepA * 0.5);
+    vec2 r = vec2(cos(ang), sin(ang)) * rad;
+    r.x /= aspect;
+    return r + c;
+}
+
+vec2 fractalFold(vec2 uv, float zoom, float t, vec2 c, float aspect) {
+    vec2 p = uv;
+    for (int i = 0; i < 6; i++) {
+        p = abs((p - c) * (zoom + 0.15 * sin(t * 0.35 + float(i)))) - 0.5 + c;
+        p = rotateUV(p, t * 0.12 + float(i) * 0.07, c, aspect);
+    }
+    return p;
+}
+
+vec3 neonPalette(float t) {
+    vec3 pink = vec3(1.0, 0.15, 0.75);
+    vec3 blue = vec3(0.10, 0.55, 1.0);
+    vec3 green = vec3(0.10, 1.00, 0.45);
+    float ph = fract(t * 0.08);
+    vec3 k1 = mix(pink, blue, smoothstep(0.00, 0.33, ph));
+    vec3 k2 = mix(blue, green, smoothstep(0.33, 0.66, ph));
+    vec3 k3 = mix(green, pink, smoothstep(0.66, 1.00, ph));
+    float a = step(ph, 0.33);
+    float b = step(0.33, ph) * step(ph, 0.66);
+    float c = step(0.66, ph);
+    return normalize(a * k1 + b * k2 + c * k3) * 1.05;
+}
+
+vec3 softTone(vec3 c) {
+    c = pow(max(c, 0.0), vec3(0.95));
+    float l = dot(c, vec3(0.299, 0.587, 0.114));
+    c = mix(vec3(l), c, 0.9);
+    return clamp(c, 0.0, 1.0);
+}
+
+vec3 tentBlur3(sampler2D img, vec2 uv, vec2 res) {
+    vec2 ts = 1.0 / res;
+    vec3 s00 = textureGrad(img, uv + ts * vec2(-1.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s10 = textureGrad(img, uv + ts * vec2(0.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s20 = textureGrad(img, uv + ts * vec2(1.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s01 = textureGrad(img, uv + ts * vec2(-1.0, 0.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s11 = textureGrad(img, uv, dFdx(uv), dFdy(uv)).rgb;
+    vec3 s21 = textureGrad(img, uv + ts * vec2(1.0, 0.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s02 = textureGrad(img, uv + ts * vec2(-1.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s12 = textureGrad(img, uv + ts * vec2(0.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s22 = textureGrad(img, uv + ts * vec2(1.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    return (s00 + 2.0 * s10 + s20 + 2.0 * s01 + 4.0 * s11 + 2.0 * s21 + s02 + 2.0 * s12 + s22) / 16.0;
+}
+
+vec3 preBlendColor(vec2 uv) {
+    vec3 tex = tentBlur3(textTexture, uv, iResolution);
+    float aspect = iResolution.x / iResolution.y;
+    vec2 p = (uv - 0.5) * vec2(aspect, 1.0);
+    float r = length(p);
+    float t = time_f;
+    vec3 neon = neonPalette(t + r * 1.3);
+    float neonAmt = smoothstep(0.1, 0.8, r);
+    neonAmt = 0.3 + 0.4 * (1.0 - neonAmt);
+    vec3 grad = mix(tex, neon, neonAmt);
+    grad = mix(grad, tex, 0.2);
+    grad = softTone(grad);
+    return grad;
+}
+
+float diamondRadius(vec2 p) {
+    p = sin(abs(p));
+    return max(p.x, p.y);
+}
+
+vec2 diamondFold(vec2 uv, vec2 c, float aspect) {
+    vec2 p = (uv - c) * vec2(aspect, 1.0);
+    p = abs(p);
+    if (p.y > p.x) p = p.yx;
+    p.x /= aspect;
+    return p + c;
+}
+
+void main(void) {
+    float aAcc = clamp(amp, 0.0, 4.0);
+    float aInst = clamp(uamp, 0.0, 4.0);
+    float ampMix = clamp(aAcc * 0.6 + aInst * 1.4, 0.0, 4.0);
+    gAmp01 = clamp(ampMix / 2.5, 0.0, 1.0);
+
+    gSlow = time_f * mix(0.15, 0.7, gAmp01);
+    gFast = time_f * mix(0.6, 3.5, gAmp01);
+    gDetail = time_f * mix(0.3, 2.0, gAmp01);
+
+    float aspect = iResolution.x / iResolution.y;
+    vec2 m = (iMouse.z > 0.5 || iMouse.w > 0.5) ? (iMouse.xy / iResolution) : vec2(0.5);
+    vec2 ar = vec2(aspect, 1.0);
+
+    float zoomPhase = gSlow * 0.12;
+    float zCycle = floor(zoomPhase);
+    float zLocal = fract(zoomPhase);
+    float tri = 1.0 - abs(zLocal * 2.0 - 1.0);
+    float sgn = mix(-1.0, 1.0, step(0.5, mod(zCycle, 2.0)));
+    float depth = 1.0 + zCycle * 0.35 + gAmp01 * 1.2;
+    float zoomExp = sgn * tri * depth;
+    float zoom = pow(1.45, zoomExp);
+
+    vec2 z = TexCoord - m;
+    z.x *= aspect;
+    z /= zoom;
+    z.x /= aspect;
+    vec2 zoomTC = fract(z + m);
+
+    vec4 baseTex = texture(textTexture, zoomTC);
+
+    vec2 uv = zoomTC * 2.0 - 1.0;
+    uv.x *= aspect;
+    float r = pingPong(sin(length(uv) * gSlow), 5.0);
+    float radius = sqrt(aspect * aspect + 1.0) + 0.5;
+    float glow = smoothstep(radius, radius - 0.25, r);
+
+    vec3 baseCol = preBlendColor(zoomTC);
+    float seg = 4.0 + 2.0 * sin(gSlow * 0.33 + gAmp01 * 2.0);
+    vec2 kUV = reflectUV(zoomTC, seg, m, aspect);
+    kUV = diamondFold(kUV, m, aspect);
+    float foldZoom = 1.45 + 0.55 * sin(gSlow * 0.42 + gAmp01 * 3.0);
+    kUV = fractalFold(kUV, foldZoom, gDetail, m, aspect);
+    kUV = rotateUV(kUV, gSlow * 0.23 + gAmp01 * 1.2, m, aspect);
+    kUV = diamondFold(kUV, m, aspect);
+
+    vec2 p = (kUV - m) * ar;
+    vec2 q = abs(p);
+    if (q.y > q.x) q = q.yx;
+
+    float base = 1.82 + 0.18 * pingPong(sin(gSlow * 0.2) * (PI * gSlow), 5.0);
+    float period = log(base) * pingPong(gSlow * PI, 5.0);
+    float tz = gSlow * 0.65;
+    float rD = diamondRadius(p) + 1e-6;
+    float ang = atan(q.y, q.x) + tz * 0.35 + 0.35 * sin(rD * 18.0 + gFast * 0.6);
+    float k = fract((log(rD) - tz) / period);
+    float rw = exp(k * period);
+    vec2 pwrap = vec2(cos(ang), sin(ang)) * rw;
+
+    vec2 u0 = fract(pwrap / ar + m);
+    vec2 u1 = fract((pwrap * 1.045) / ar + m);
+    vec2 u2 = fract((pwrap * 0.955) / ar + m);
+    vec2 dir = normalize(pwrap + 1e-6);
+    vec2 off = dir * (0.0015 + 0.001 * sin(gFast * 1.3)) * vec2(1.0, 1.0 / aspect);
+
+    float vign = 1.0 - smoothstep(0.75, 1.2, length((zoomTC - m) * ar));
+    vign = mix(0.9, 1.15, vign);
+
+    vec3 rC = preBlendColor(u0 + off);
+    vec3 gC = preBlendColor(u1);
+    vec3 bC = preBlendColor(u2 - off);
+    vec3 kaleidoRGB = vec3(rC.r, gC.g, bC.b);
+
+    float ring = smoothstep(0.0, 0.7, sin(log(rD + 1e-3) * 9.5 + gFast * 1.2));
+    ring = ring * pingPong(gSlow * PI, 5.0);
+    float pulse = 0.5 + 0.5 * sin(gFast * 2.0 + rD * 28.0 + k * 12.0);
+    pulse *= mix(0.4, 1.6, gAmp01);
+
+    vec3 outCol = kaleidoRGB;
+    outCol *= (0.75 + 0.25 * ring) * (0.85 + 0.15 * pulse) * vign;
+
+    vec3 bloom = outCol * outCol * 0.18 + pow(max(outCol - 0.6, 0.0), vec3(2.0)) * 0.12;
+    outCol += bloom;
+
+    outCol = mix(outCol, baseCol, pingPong(pulse * PI, 5.0) * 0.18);
+    outCol = clamp(outCol, vec3(0.05), vec3(0.97));
+    outCol *= mix(0.7, 1.5, gAmp01);
+    vec3 finalCore = mix(baseTex.rgb, outCol, pingPong(glow * PI, 5.0) * 0.8);
+
+    vec2 center = m;
+    vec2 pSwirl = (zoomTC - center) * vec2(1.0, iResolution.y / iResolution.x);
+    float intensity = pingPong(gSlow, 10.0) * (0.3 + 1.7 * gAmp01);
+    float angleS = atan(pSwirl.y, pSwirl.x);
+    float radiusS = length(pSwirl);
+    float swirl = sin(gSlow * 0.5) * 0.5 + 0.5;
+    angleS += intensity * swirl * sin(radiusS * 10.0 + gFast);
+    vec2 qSwirl = vec2(cos(angleS), sin(angleS)) * radiusS;
+    vec2 uvSwirl = qSwirl * vec2(1.0, iResolution.x / iResolution.y) + center;
+
+    vec4 texSwirl = texture(textTexture, uvSwirl);
+    float fluctuation = sin(gFast * 2.0) * 0.5 + 0.5;
+    vec3 xorPalette = mix(vec3(1.0, 0.0, 0.0), vec3(0.0, 0.0, 1.0), fluctuation);
+    xorPalette = mix(xorPalette, neonPalette(gFast), 0.5);
+    vec4 fluctuatedColor = vec4(xorPalette, 1.0);
+    vec4 xorResult = xor_RGB(texSwirl, fluctuatedColor);
+    vec3 xorMix = mix(texSwirl.rgb, xorResult.rgb, 0.6);
+
+    float xorStrength = (0.25 + 0.35 * pulse) * vign * mix(0.4, 1.4, gAmp01);
+    xorStrength = clamp(xorStrength, 0.0, 1.0);
+
+    vec3 finalRGB = mix(finalCore, xorMix, xorStrength);
+
+    color = vec4(finalRGB, baseTex.a);
+}
+)SHD";
+inline const char *src_frac_shader02_dmdXi = R"SHD(#version 300 es
+precision highp float;
+out vec4 color;
+in vec2 TexCoord;
+
+uniform sampler2D textTexture;
+uniform vec2 iResolution;
+uniform float time_f;
+uniform vec4 iMouse;
+)SHD" COMMON_UNIFORMS COLOR_HELPERS R"SHD(
+uniform float amp;
+uniform float uamp;
+uniform float iTime;
+uniform int iFrame; 
+uniform float iTimeDelta;
+uniform vec4 iDate;
+uniform vec2 iMouseClick;
+uniform float iFrameRate;
+uniform vec3 iChannelResolution[4];
+uniform float iChannelTime[4];
+uniform float iSampleRate;
+
+const float PI = 3.1415926535897932384626433832795;
+
+float pingPong(float x, float length){
+    float m = mod(x, length * 2.0);
+    return m <= length ? m : length * 2.0 - m;
+}
+
+vec3 hsv2rgb(vec3 c){
+    vec4 K = vec4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
+    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+
+vec2 rotateUV(vec2 uv, float angle, vec2 c, float aspect){
+    float s = sin(angle), cc = cos(angle);
+    vec2 p = uv - c;
+    p.x *= aspect;
+    p = mat2(cc, -s, s, cc) * p;
+    p.x /= aspect;
+    return p + c;
+}
+
+vec2 reflectUV(vec2 uv, float segments, vec2 c, float aspect){
+    vec2 p = uv - c;
+    p.x *= aspect;
+    float ang = atan(p.y, p.x);
+    float rad = length(p);
+    float stepA = 6.28318530718 / segments;
+    ang = mod(ang, stepA);
+    ang = abs(ang - stepA * 0.5);
+    vec2 r = vec2(cos(ang), sin(ang)) * rad;
+    r.x /= aspect;
+    return r + c;
+}
+
+vec2 fractalFold(vec2 uv, float zoom, float t, vec2 c, float aspect){
+    vec2 p = uv;
+    for(int i = 0; i < 6; i++){
+        p = abs((p - c) * (zoom + 0.15 * sin(t * 0.35 + float(i)))) - 0.5 + c;
+        p = rotateUV(p, t * 0.12 + float(i) * 0.07, c, aspect);
+    }
+    return p;
+}
+
+vec3 neonPalette(float t){
+    vec3 pink = vec3(1.0, 0.15, 0.75);
+    vec3 blue = vec3(0.10, 0.55, 1.0);
+    vec3 green = vec3(0.10, 1.00, 0.45);
+    float ph = fract(t * 0.05);
+    vec3 k1 = mix(pink, blue, smoothstep(0.00, 0.33, ph));
+    vec3 k2 = mix(blue, green, smoothstep(0.33, 0.66, ph));
+    vec3 k3 = mix(green, pink, smoothstep(0.66, 1.00, ph));
+    float a = step(ph, 0.33);
+    float b = step(0.33, ph) * step(ph, 0.66);
+    float c = step(0.66, ph);
+    return normalize(a * k1 + b * k2 + c * k3) * 1.05;
+}
+
+void main(void){
+    vec2 ar = vec2(iResolution.x / iResolution.y, 1.0);
+    vec2 m = (iMouse.z > 0.5 ? (iMouse.xy / iResolution) : vec2(0.5));
+
+    float t = time_f + iTime;
+    float sr = clamp(iSampleRate / 48000.0, 0.25, 4.0);
+    float aMix = clamp(amp * 0.7 + uamp * 0.3, 0.0, 20.0);
+
+    float seg = 4.0 + 2.0 * sin(t * 0.25);
+    float zoom = 1.45 + 0.45 * sin(t * 0.35 + 0.2 * sr);
+
+    vec2 kUV = reflectUV(TexCoord, seg, m, ar.x);
+    kUV = fractalFold(kUV, zoom, t, m, ar.x);
+    kUV = rotateUV(kUV, t * 0.22, m, ar.x);
+
+    vec2 dir = (kUV - m) * ar;
+    float r = length(dir);
+    float ripple = sin(20.0 * r - t * 9.0) * 0.012 / (1.0 + 18.0 * r);
+    ripple *= 1.0 / (1.0 + 12.0 * (abs(dFdx(r)) + abs(dFdy(r))));
+
+    vec2 uA = kUV + normalize(dir + 1e-5) * ripple;
+    vec2 uB = mix(TexCoord, kUV, 0.88);
+    vec2 uC = mix(TexCoord, kUV, 0.94) + vec2(0.002 * sin(t), 0.002 * cos(t));
+
+    vec4 t1 = textureGrad(textTexture, fract(uA), dFdx(uA), dFdy(uA));
+    vec4 t2 = textureGrad(textTexture, fract(uB), dFdx(uB), dFdy(uB));
+    vec4 t3 = textureGrad(textTexture, fract(uC), dFdx(uC), dFdy(uC));
+
+    float hueBase = fract(t * 0.06);
+    float sat = 0.7 + 0.25 * sin(t * 0.4 + sr);
+    float val = 0.6 + 0.35 * sin(t * 0.5 + dot(TexCoord, vec2(2.3, 1.9)));
+    vec3 tint = hsv2rgb(vec3(hueBase + r * 0.25, sat, val));
+
+    float slowBeat = 0.5 + 0.5 * sin(t * 0.8 + aMix * 0.05);
+    float mix1 = 0.5 + 0.5 * sin(t * 0.6);
+    float mix2 = 0.5 + 0.5 * cos(t * 0.45);
+
+    vec3 warpCol = mix(t1.rgb, t2.rgb, mix1);
+    warpCol = mix(warpCol, t3.rgb, mix2 * 0.5);
+    warpCol *= tint * (0.92 + 0.08 * slowBeat);
+    vec3 base = textureGrad(textTexture, TexCoord, dFdx(TexCoord), dFdy(TexCoord)).rgb;
+    vec3 combined = mix(base, warpCol * 3.0, 0.6); 
+    vec3 bloom = combined * combined * 0.18 + pow(max(combined - 0.6, 0.0), vec3(2.0)) * 0.10;
+    combined += bloom;
+
+    combined = clamp(combined, vec3(0.0), vec3(1.0));
+    color = vec4(combined, 1.0);
+}
+)SHD";
+inline const char *src_frac_shader02_dmdXi_amp = R"SHD(#version 300 es
+precision highp float;
+out vec4 color;
+in vec2 TexCoord;
+
+uniform sampler2D textTexture;
+uniform vec2 iResolution;
+uniform float time_f;
+uniform vec4 iMouse;
+)SHD" COMMON_UNIFORMS COLOR_HELPERS R"SHD(
+uniform float amp;
+uniform float uamp;
+uniform float iTime;
+uniform int iFrame; 
+uniform float iTimeDelta;
+uniform vec4 iDate;
+uniform vec2 iMouseClick;
+uniform float iFrameRate;
+uniform vec3 iChannelResolution[4];
+uniform float iChannelTime[4];
+uniform float iSampleRate;
+
+const float PI = 3.1415926535897932384626433832795;
+
+float gAmp01;
+float gInst01;
+float gSlow;
+float gFast;
+float gDetail;
+
+float pingPong(float x, float length){
+    float m = mod(x, length * 2.0);
+    return m <= length ? m : length * 2.0 - m;
+}
+
+vec3 hsv2rgb(vec3 c){
+    vec4 K = vec4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
+    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+
+vec2 rotateUV(vec2 uv, float angle, vec2 c, float aspect){
+    float s = sin(angle), cc = cos(angle);
+    vec2 p = uv - c;
+    p.x *= aspect;
+    p = mat2(cc, -s, s, cc) * p;
+    p.x /= aspect;
+    return p + c;
+}
+
+vec2 reflectUV(vec2 uv, float segments, vec2 c, float aspect){
+    vec2 p = uv - c;
+    p.x *= aspect;
+    float ang = atan(p.y, p.x);
+    float rad = length(p);
+    float stepA = 6.28318530718 / segments;
+    ang = mod(ang, stepA);
+    ang = abs(ang - stepA * 0.5);
+    vec2 r = vec2(cos(ang), sin(ang)) * rad;
+    r.x /= aspect;
+    return r + c;
+}
+
+vec2 fractalFold(vec2 uv, float zoom, float t, vec2 c, float aspect){
+    vec2 p = uv;
+    for(int i = 0; i < 6; i++){
+        p = abs((p - c) * (zoom + 0.15 * sin(t * 0.35 + float(i)))) - 0.5 + c;
+        p = rotateUV(p, t * 0.12 + float(i) * 0.07, c, aspect);
+    }
+    return p;
+}
+
+vec3 neonPalette(float t){
+    vec3 pink = vec3(1.0, 0.15, 0.75);
+    vec3 blue = vec3(0.10, 0.55, 1.0);
+    vec3 green = vec3(0.10, 1.00, 0.45);
+    float ph = fract(t * 0.05);
+    vec3 k1 = mix(pink, blue, smoothstep(0.00, 0.33, ph));
+    vec3 k2 = mix(blue, green, smoothstep(0.33, 0.66, ph));
+    vec3 k3 = mix(green, pink, smoothstep(0.66, 1.00, ph));
+    float a = step(ph, 0.33);
+    float b = step(0.33, ph) * step(ph, 0.66);
+    float c = step(0.66, ph);
+    return normalize(a * k1 + b * k2 + c * k3) * 1.05;
+}
+
+vec3 limitHighlights(vec3 c){
+    float m = max(c.r, max(c.g, c.b));
+    if(m > 0.9) c *= 0.9 / m;
+    return c;
+}
+
+void main(void){
+    float aAcc = clamp(amp, 0.0, 20.0);
+    float aInst = clamp(uamp, 0.0, 20.0);
+    float aMix = clamp(aAcc * 0.7 + aInst * 0.3, 0.0, 20.0);
+    gAmp01 = clamp(aMix / 8.0, 0.0, 1.0);
+    gInst01 = clamp(aInst / 8.0, 0.0, 1.0);
+
+    float tGlobal = time_f + iTime;
+    float fpsNorm = clamp(iFrameRate / 60.0, 0.4, 2.5);
+    float t = tGlobal * fpsNorm;
+
+    float sr = clamp(iSampleRate / 48000.0, 0.25, 4.0);
+    float chT0 = iChannelTime[0];
+    vec2 chRes0 = iChannelResolution[0].xy;
+    float chAspect = (chRes0.y > 0.0) ? chRes0.x / chRes0.y : (iResolution.x / iResolution.y);
+
+    float framePhase = float(iFrame) * 0.009 + iTimeDelta * 3.0;
+    float frameJitter = sin(framePhase) * 0.004;
+
+    float datePhase = iDate.y * 0.13 + iDate.z * 0.03 + iDate.w * 0.001;
+
+    gSlow   = t * mix(0.18, 0.7, gAmp01);
+    gFast   = t * mix(0.7,  4.0, gAmp01);
+    gDetail = t * mix(0.35, 2.3, gAmp01);
+
+    vec2 ar = vec2(iResolution.x / iResolution.y, 1.0);
+
+    vec2 baseCenter = (iMouse.z > 0.5 ? (iMouse.xy / iResolution) : vec2(0.5));
+    vec2 clickCenter = (iMouseClick.x > 0.0 || iMouseClick.y > 0.0)
+        ? (iMouseClick / iResolution)
+        : baseCenter;
+    float clickMix = 0.25 + 0.35 * smoothstep(0.2, 1.0, gAmp01);
+    vec2 m = mix(baseCenter, clickCenter, clickMix);
+
+    float aspect = ar.x;
+
+    vec2 uv0 = TexCoord * 2.0 - 1.0;
+    uv0.x *= aspect;
+    float baseR = length(uv0);
+
+    float segBase = 4.0 + 2.0 * sin(gSlow * 0.25 + datePhase);
+    float segAmp = 3.0 * gAmp01 + 4.0 * gInst01;
+    float seg = segBase + segAmp * sin(gFast * 0.21 + chT0 * 0.37);
+
+    float zoomBase = 1.35 + 0.35 * sin(gSlow * 0.35 + 0.2 * sr);
+    float zoomAmp = 0.5 + 0.9 * gAmp01;
+    float zoom = zoomBase + zoomAmp * sin(gFast * 0.27 + baseR * 2.0 + framePhase);
+
+    vec2 kUV = reflectUV(TexCoord, seg, m, aspect);
+    kUV = fractalFold(kUV, zoom, gDetail, m, aspect);
+    kUV = rotateUV(kUV, gSlow * 0.22 + gInst01 * 1.3, m, aspect + 0.2 * (chAspect - aspect));
+
+    vec2 dir = (kUV - m) * ar;
+    float r = length(dir);
+
+    float rippleAmp = mix(0.006, 0.02, gAmp01) * (0.7 + 0.6 * gInst01);
+    float rippleFreq = 18.0 + 6.0 * gAmp01 + 8.0 * gInst01;
+    float rippleTime = gFast * (0.8 + 0.4 * gInst01 * sr);
+    float ripple = sin(rippleFreq * r - rippleTime) * rippleAmp / (1.0 + 18.0 * r);
+    ripple *= 1.0 / (1.0 + 12.0 * (abs(dFdx(r)) + abs(dFdy(r))));
+    ripple += frameJitter * 0.4;
+
+    vec2 dirN = normalize(dir + 1e-5);
+    vec2 uA = kUV + dirN * ripple;
+    vec2 uB = mix(TexCoord, kUV, 0.84 + 0.08 * gAmp01);
+    vec2 jitter = vec2(0.002 * sin(t + framePhase), 0.002 * cos(t * 0.91 + framePhase * 1.3));
+    jitter *= (0.6 + 0.8 * gInst01);
+    vec2 uC = mix(TexCoord, kUV, 0.93) + jitter;
+
+    vec4 t1 = textureGrad(textTexture, fract(uA), dFdx(uA), dFdy(uA));
+    vec4 t2 = textureGrad(textTexture, fract(uB), dFdx(uB), dFdy(uB));
+    vec4 t3 = textureGrad(textTexture, fract(uC), dFdx(uC), dFdy(uC));
+
+    float hueBase = fract(gSlow * 0.04 + chT0 * 0.05 + datePhase * 0.1);
+    float sat = 0.65 + 0.25 * sin(gSlow * 0.4 + sr + gAmp01 * 2.0);
+    float val = 0.6 + 0.3 * sin(gFast * 0.35 + dot(TexCoord, vec2(2.3, 1.9)) + gInst01 * 3.0);
+    vec3 tint = hsv2rgb(vec3(hueBase + r * 0.25, sat, val));
+
+    float slowBeat = 0.5 + 0.5 * sin(gSlow * 0.8 + aMix * 0.05);
+    float mix1 = 0.5 + 0.5 * sin(gFast * 0.6 + chT0 * 0.3);
+    float mix2 = 0.5 + 0.5 * cos(gSlow * 0.45 + framePhase);
+
+    vec3 warpCol = mix(t1.rgb, t2.rgb, mix1);
+    warpCol = mix(warpCol, t3.rgb, mix2 * (0.4 + 0.4 * gAmp01));
+    float gain = mix(0.9, 1.5, gAmp01) * (0.9 + 0.3 * slowBeat);
+    warpCol *= tint * gain;
+
+    vec3 base = textureGrad(textTexture, TexCoord, dFdx(TexCoord), dFdy(TexCoord)).rgb;
+
+    float warpMix = 0.45 + 0.35 * gAmp01;
+    vec3 combined = mix(base, warpCol, warpMix);
+
+    vec3 bloom = combined * combined * 0.08
+               + pow(max(combined - 0.6, 0.0), vec3(2.0)) * 0.05;
+    combined += bloom;
+
+    combined = limitHighlights(combined);
+    combined = clamp(combined, vec3(0.0), vec3(1.0));
+
+    color = vec4(combined, 1.0);
+}
+)SHD";
+inline const char *src_frac_shader02_dmdXi2 = R"SHD(#version 300 es
+precision highp float;
+out vec4 color;
+in vec2 TexCoord;
+
+uniform sampler2D textTexture;
+uniform vec2 iResolution;
+uniform float time_f;
+uniform vec4 iMouse;
+)SHD" COMMON_UNIFORMS COLOR_HELPERS R"SHD(
+uniform float amp;
+uniform float uamp;
+uniform float iTime;
+uniform int iFrame; 
+uniform float iTimeDelta;
+uniform vec4 iDate;
+uniform vec2 iMouseClick;
+uniform float iFrameRate;
+uniform vec3 iChannelResolution[4];
+uniform float iChannelTime[4];
+uniform float iSampleRate;
+
+const float PI = 3.1415926535897932384626433832795;
+
+float pingPong(float x, float length){
+    float m = mod(x, length * 2.0);
+    return m <= length ? m : length * 2.0 - m;
+}
+
+vec3 hsv2rgb(vec3 c){
+    vec4 K = vec4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
+    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+
+vec2 rotateUV(vec2 uv, float angle, vec2 c, float aspect){
+    float s = sin(angle), cc = cos(angle);
+    vec2 p = uv - c;
+    p.x *= aspect;
+    p = mat2(cc, -s, s, cc) * p;
+    p.x /= aspect;
+    return p + c;
+}
+
+vec2 reflectUV(vec2 uv, float segments, vec2 c, float aspect){
+    vec2 p = uv - c;
+    p.x *= aspect;
+    float ang = atan(p.y, p.x);
+    float rad = length(p);
+    float stepA = 6.28318530718 / segments;
+    ang = mod(ang, stepA);
+    ang = abs(ang - stepA * 0.5);
+    vec2 r = vec2(cos(ang), sin(ang)) * rad;
+    r.x /= aspect;
+    return r + c;
+}
+
+vec2 fractalFold(vec2 uv, float zoom, float t, vec2 c, float aspect){
+    vec2 p = uv;
+    for(int i = 0; i < 6; i++){
+        p = abs((p - c) * (zoom + 0.15 * sin(t * 0.35 + float(i)))) - 0.5 + c;
+        p = rotateUV(p, t * 0.12 + float(i) * 0.07, c, aspect);
+    }
+    return p;
+}
+
+vec3 neonPalette(float t){
+    vec3 pink = vec3(1.0, 0.15, 0.75);
+    vec3 blue = vec3(0.10, 0.55, 1.0);
+    vec3 green = vec3(0.10, 1.00, 0.45);
+    float ph = fract(t * 0.05);
+    vec3 k1 = mix(pink, blue, smoothstep(0.00, 0.33, ph));
+    vec3 k2 = mix(blue, green, smoothstep(0.33, 0.66, ph));
+    vec3 k3 = mix(green, pink, smoothstep(0.66, 1.00, ph));
+    float a = step(ph, 0.33);
+    float b = step(0.33, ph) * step(ph, 0.66);
+    float c = step(0.66, ph);
+    return normalize(a * k1 + b * k2 + c * k3) * 1.05;
+}
+
+void main(void){
+    vec2 ar = vec2(iResolution.x / iResolution.y, 1.0);
+    vec2 m = (iMouse.z > 0.5 ? (iMouse.xy / iResolution) : vec2(0.5));
+
+    float t = time_f + iTime;
+    float sr = clamp(iSampleRate / 48000.0, 0.25, 4.0);
+    float aMix = clamp(amp * 0.7 + uamp * 0.3, 0.0, 20.0);
+
+    float seg = 4.0 + 2.0 * sin(t * 0.25);
+    float zoom = 1.45 + 0.45 * sin(t * 0.35 + 0.2 * sr);
+
+    vec2 kUV = reflectUV(TexCoord, seg, m, ar.x);
+    kUV = fractalFold(kUV, zoom, t, m, ar.x);
+    kUV = rotateUV(kUV, t * 0.22, m, ar.x);
+
+    vec2 dir = (kUV - m) * ar;
+    float r = length(dir);
+    float ripple = sin(20.0 * r - t * 9.0) * 0.012 / (1.0 + 18.0 * r);
+    ripple *= 1.0 / (1.0 + 12.0 * (abs(dFdx(r)) + abs(dFdy(r))));
+
+    vec2 uA = kUV + normalize(dir + 1e-5) * ripple;
+    vec2 uB = mix(TexCoord, kUV, 0.88);
+    vec2 uC = mix(TexCoord, kUV, 0.94) + vec2(0.002 * sin(t), 0.002 * cos(t));
+
+    vec4 t1 = textureGrad(textTexture, fract(uA), dFdx(uA), dFdy(uA));
+    vec4 t2 = textureGrad(textTexture, fract(uB), dFdx(uB), dFdy(uB));
+    vec4 t3 = textureGrad(textTexture, fract(uC), dFdx(uC), dFdy(uC));
+
+    float hueBase = fract(t * 0.06);
+    float sat = 0.7 + 0.25 * sin(t * 0.4 + sr);
+    float val = 0.6 + 0.35 * sin(t * 0.5 + dot(TexCoord, vec2(2.3, 1.9)));
+    vec3 tint = hsv2rgb(vec3(hueBase + r * 0.25, sat, val));
+
+    float slowBeat = 0.5 + 0.5 * sin(t * 0.8 + aMix * 0.05);
+    float mix1 = 0.5 + 0.5 * sin(t * 0.6);
+    float mix2 = 0.5 + 0.5 * cos(t * 0.45);
+
+    vec3 warpCol = mix(sin(t1.rgb * pingPong(time_f * PI, 10.0)), sin(t2.rgb * pingPong(time_f * PI/2,8.0)), mix1);
+    warpCol = mix(warpCol, t3.rgb, mix2 * 0.5);
+    warpCol *= tint * (0.92 + 0.08 * slowBeat);
+    vec3 base = textureGrad(textTexture, TexCoord, dFdx(TexCoord), dFdy(TexCoord)).rgb;
+    vec3 combined = mix(base, warpCol * 3.0, 0.6); 
+    vec3 bloom = combined * combined * 0.18 + pow(max(combined - 0.6, 0.0), vec3(2.0)) * 0.10;
+    combined += bloom;
+
+    combined = clamp(combined, vec3(0.0), vec3(1.0));
+    color = vec4(combined, 1.0);
+}
+)SHD";
+inline const char *src_frac_shader02_dmdXi3 = R"SHD(#version 300 es
+precision highp float;
+out vec4 color;
+in vec2 TexCoord;
+
+uniform sampler2D textTexture;
+uniform vec2 iResolution;
+uniform float time_f;
+uniform vec4 iMouse;
+)SHD" COMMON_UNIFORMS COLOR_HELPERS R"SHD(
+uniform float amp;
+uniform float uamp;
+uniform float iTime;
+uniform int iFrame; 
+uniform float iTimeDelta;
+uniform vec4 iDate;
+uniform vec2 iMouseClick;
+uniform float iFrameRate;
+uniform vec3 iChannelResolution[4];
+uniform float iChannelTime[4];
+uniform float iSampleRate;
+
+const float PI = 3.1415926535897932384626433832795;
+
+float pingPong(float x, float length){
+    float m = mod(x, length * 2.0);
+    return m <= length ? m : length * 2.0 - m;
+}
+
+vec3 hsv2rgb(vec3 c){
+    vec4 K = vec4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
+    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+
+vec2 rotateUV(vec2 uv, float angle, vec2 c, float aspect){
+    float s = sin(angle), cc = cos(angle);
+    vec2 p = uv - c;
+    p.x *= aspect;
+    p = mat2(cc, -s, s, cc) * p;
+    p.x /= aspect;
+    return p + c;
+}
+
+vec2 reflectUV(vec2 uv, float segments, vec2 c, float aspect){
+    vec2 p = uv - c;
+    p.x *= aspect;
+    float ang = atan(p.y, p.x);
+    float rad = length(p);
+    float stepA = 6.28318530718 / segments;
+    ang = mod(ang, stepA);
+    ang = abs(ang - stepA * 0.5);
+    vec2 r = vec2(cos(ang), sin(ang)) * rad;
+    r.x /= aspect;
+    return r + c;
+}
+
+vec2 fractalFold(vec2 uv, float zoom, float t, vec2 c, float aspect){
+    vec2 p = uv;
+    for(int i = 0; i < 6; i++){
+        p = abs((p - c) * (zoom + 0.15 * sin(t * 0.35 + float(i)))) - 0.5 + c;
+        p = rotateUV(p, t * 0.12 + float(i) * 0.07, c, aspect);
+    }
+    return p;
+}
+
+vec3 neonPalette(float t){
+    vec3 pink = vec3(1.0, 0.15, 0.75);
+    vec3 blue = vec3(0.10, 0.55, 1.0);
+    vec3 green = vec3(0.10, 1.00, 0.45);
+    float ph = fract(t * 0.05);
+    vec3 k1 = mix(pink, blue, smoothstep(0.00, 0.33, ph));
+    vec3 k2 = mix(blue, green, smoothstep(0.33, 0.66, ph));
+    vec3 k3 = mix(green, pink, smoothstep(0.66, 1.00, ph));
+    float a = step(ph, 0.33);
+    float b = step(0.33, ph) * step(ph, 0.66);
+    float c = step(0.66, ph);
+    return normalize(a * k1 + b * k2 + c * k3) * 1.05;
+}
+
+void main(void){
+    vec2 ar = vec2(iResolution.x / iResolution.y, 1.0);
+    vec2 m = (iMouse.z > 0.5 ? (iMouse.xy / iResolution) : vec2(0.5));
+
+    float t = time_f + iTime * (PI/2);
+    float sr = clamp(iSampleRate / 48000.0, 0.25, 4.0);
+    float aMix = clamp(amp * 0.7 + uamp * 0.3, 0.0, 20.0);
+
+    float seg = 4.0 + 2.0 * sin(t * 0.25);
+    float zoom = 1.45 + 0.45 * sin(t * 0.35 + 0.2 * sr);
+
+    vec2 kUV = reflectUV(TexCoord, seg, m, ar.x);
+    kUV = fractalFold(kUV, zoom, t, m, ar.x);
+    kUV = rotateUV(kUV, t * 0.22, m, ar.x);
+
+    vec2 dir = (kUV - m) * ar;
+    float r = length(dir);
+    float ripple = sin(20.0 * r - t * 9.0) * 0.012 / (1.0 + 18.0 * r);
+    ripple *= 1.0 / (1.0 + 12.0 * (abs(dFdx(r)) + abs(dFdy(r))));
+    ripple = sin(ripple * pingPong(time_f * PI, 3.0));
+
+    vec2 uA = kUV + normalize(dir + 1e-5) * ripple;
+    vec2 uB = mix(TexCoord, kUV, 0.88);
+    vec2 uC = mix(TexCoord, kUV, 0.94) + vec2(0.002 * sin(t), 0.002 * cos(t));
+
+    vec4 t1 = textureGrad(textTexture, fract(uA), dFdx(uA), dFdy(uA));
+    vec4 t2 = textureGrad(textTexture, fract(uB), dFdx(uB), dFdy(uB));
+    vec4 t3 = textureGrad(textTexture, fract(uC), dFdx(uC), dFdy(uC));
+
+    float hueBase = fract(t * 0.06);
+    float sat = 0.7 + 0.25 * sin(t * 0.4 + sr);
+    float val = 0.6 + 0.35 * sin(t * 0.5 + dot(TexCoord, vec2(2.3, 1.9)));
+    vec3 tint = hsv2rgb(vec3(hueBase + r * 0.25, sat, val));
+
+    float slowBeat = 0.5 + 0.5 * sin(t * 0.8 + aMix * 0.05);
+    float mix1 = 0.5 + 0.5 * sin(t * 0.6);
+    float mix2 = 0.5 + 0.5 * cos(t * 0.45);
+
+    vec3 warpCol = mix(t1.rgb, t2.rgb, mix1);
+    warpCol = mix(warpCol, t3.rgb, mix2 * 0.5);
+    warpCol *= tint * (0.92 + 0.08 * slowBeat);
+    vec3 base = textureGrad(textTexture, TexCoord, dFdx(TexCoord), dFdy(TexCoord)).rgb;
+    vec3 combined = mix(base, warpCol * 3.0, 0.6); 
+    vec3 bloom = combined * combined * 0.18 + pow(max(combined - 0.6, 0.0), vec3(2.0)) * 0.10;
+    combined += bloom;
+
+    combined = clamp(combined, vec3(0.0), vec3(1.0));
+    color = vec4(combined, 1.0);
+}
+)SHD";
+inline const char *src_frac_shader02_dmdXi3_drain = R"SHD(#version 300 es
+precision highp float;
+out vec4 color;
+in vec2 TexCoord;
+
+uniform sampler2D textTexture;
+uniform vec2 iResolution;
+uniform float time_f;
+uniform vec4 iMouse;
+)SHD" COMMON_UNIFORMS COLOR_HELPERS R"SHD(
+uniform float amp;
+uniform float uamp;
+uniform float iTime;
+uniform int iFrame; 
+uniform float iTimeDelta;
+uniform vec4 iDate;
+uniform vec2 iMouseClick;
+uniform float iFrameRate;
+uniform vec3 iChannelResolution[4];
+uniform float iChannelTime[4];
+uniform float iSampleRate;
+
+const float PI = 3.1415926535897932384626433832795;
+
+float pingPong(float x, float length){
+    float m = mod(x, length * 2.0);
+    return m <= length ? m : length * 2.0 - m;
+}
+
+vec3 hsv2rgb(vec3 c){
+    vec4 K = vec4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
+    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+
+vec2 rotateUV(vec2 uv, float angle, vec2 c, float aspect){
+    float s = sin(angle), cc = cos(angle);
+    vec2 p = uv - c;
+    p.x *= aspect;
+    p = mat2(cc, -s, s, cc) * p;
+    p.x /= aspect;
+    return p + c;
+}
+
+vec2 reflectUV(vec2 uv, float segments, vec2 c, float aspect){
+    vec2 p = uv - c;
+    p.x *= aspect;
+    float ang = atan(p.y, p.x);
+    float rad = length(p);
+    float stepA = 6.28318530718 / segments;
+    ang = mod(ang, stepA);
+    ang = abs(ang - stepA * 0.5);
+    vec2 r = vec2(cos(ang), sin(ang)) * rad;
+    r.x /= aspect;
+    return r + c;
+}
+
+vec2 fractalFold(vec2 uv, float zoom, float t, vec2 c, float aspect){
+    vec2 p = uv;
+    for(int i = 0; i < 6; i++){
+        float z = zoom + 0.15 * sin(t * 0.35 + float(i));
+        p = abs((p - c) * z) - 0.5 + c;
+        p = rotateUV(p, t * 0.12 + float(i) * 0.07, c, aspect);
+    }
+    return p;
+}
+
+void main(void){
+    vec2 ar = vec2(iResolution.x / iResolution.y, 1.0);
+
+    vec2 m = (iMouse.z > 0.5 ? (iMouse.xy / iResolution) : vec2(0.5));
+    m += (iMouseClick / iResolution) * 0.1;
+
+    float t = time_f + iTime * (PI / 2.0);
+    float rate = max(iFrameRate, 1.0);
+    float sr = clamp((iSampleRate / 48000.0) * (rate / 60.0), 0.25, 4.0);
+    float aMix = clamp(amp * 0.7 + uamp * 0.3, 0.0, 20.0);
+
+    float chanAspect = iChannelResolution[0].y > 0.0 
+        ? iChannelResolution[0].x / iChannelResolution[0].y 
+        : 1.0;
+    float chanBeat = 0.5 + 0.5 * sin(iChannelTime[0] * 0.5 + iDate.x * 0.1);
+
+    float loopDuration = 25.0;
+    float currentTime = mod(time_f + float(iFrame) * 0.01, loopDuration);
+    float zoomPing = pingPong((time_f + iTimeDelta * 60.0) * 0.25 + chanBeat, 1.0);
+
+    vec2 normCoord = (TexCoord * 2.0 - 1.0) * vec2(iResolution.x / iResolution.y, 1.0);
+    normCoord.x = abs(normCoord.x);
+    float dist = length(normCoord);
+    dist = clamp(dist, 0.0, 1.4);
+
+    float angle = atan(normCoord.y, normCoord.x);
+    float spiralSpeed = 5.0;
+    float inwardBase = currentTime / loopDuration;
+    float inwardSpeed = mix(inwardBase, zoomPing, 0.5);
+
+    float edgeFade = 1.0 - smoothstep(0.0, 8.0, dist);
+    angle += edgeFade * currentTime * spiralSpeed * (0.6 + 0.4 * chanBeat);
+
+    dist *= 1.0 - inwardSpeed;
+    float distWarp = tan(dist * (0.4 + 0.3 * zoomPing));
+    vec2 spiralCoord = vec2(cos(angle), sin(angle)) * distWarp;
+    spiralCoord = (spiralCoord / vec2(iResolution.x / iResolution.y, 1.0) + 1.0) * 0.5;
+
+    vec2 baseUV = mix(TexCoord, spiralCoord, 0.75);
+    baseUV = fract(baseUV);
+
+    float osc = 0.5 + 0.5 * sin(t * 0.35 + 0.2 * sr + iDate.y * 0.01);
+    float seg = 4.0 + 2.0 * sin(t * 0.25 + chanAspect * 0.2);
+    float zoomBase = mix(1.1, 2.1, osc);
+    float zoom = zoomBase * (0.7 + 1.8 * zoomPing);
+
+    float spinAngle = osc * 2.0 * PI * (0.8 + 0.4 * chanBeat);
+
+    vec2 kUV = reflectUV(baseUV, seg, m, ar.x);
+    kUV = fractalFold(kUV, zoom, t, m, ar.x);
+    kUV = rotateUV(kUV, spinAngle, m, ar.x);
+
+    vec2 dir = (kUV - m) * ar;
+    float r = length(dir);
+
+    float ripple = sin(20.0 * r - t * 9.0 - iDate.z * 0.02) * 0.012 / (1.0 + 18.0 * r);
+    ripple *= 1.0 / (1.0 + 12.0 * (abs(dFdx(r)) + abs(dFdy(r))));
+    ripple = sin(ripple * pingPong(time_f * PI + chanBeat, 3.0 + 1.5 * zoomPing));
+
+    ripple *= 1.0 + 0.6 * sin(aMix * 0.1 + iTimeDelta * 10.0);
+
+    vec2 uA = kUV + normalize(dir + 1e-5) * ripple;
+    vec2 uB = mix(baseUV, kUV, 0.88);
+    vec2 uC = mix(baseUV, kUV, 0.94) 
+              + vec2(0.002 * sin(t + iDate.w * 0.05), 0.002 * cos(t + iTimeDelta * 5.0));
+
+    vec2 fA = fract(uA);
+    vec2 fB = fract(uB);
+    vec2 fC = fract(uC);
+
+    vec4 t1 = textureGrad(textTexture, fA, dFdx(fA), dFdy(fA));
+    vec4 t2 = textureGrad(textTexture, fB, dFdx(fB), dFdy(fB));
+    vec4 t3 = textureGrad(textTexture, fC, dFdx(fC), dFdy(fC));
+
+    float hueBase = fract(t * 0.06 + iDate.x * 0.01);
+    float sat = 0.7 + 0.25 * sin(t * 0.4 + sr + chanBeat);
+    float val = 0.6 + 0.35 * sin(t * 0.5 + dot(baseUV, vec2(2.3, 1.9)) + iFrame * 0.002);
+
+    vec3 tint = hsv2rgb(vec3(hueBase + r * 0.25, sat, val));
+
+    float slowBeat = 0.5 + 0.5 * sin(t * 0.8 + aMix * 0.05 + chanBeat);
+    float mix1 = 0.5 + 0.5 * sin(t * 0.6 + zoomPing * PI);
+    float mix2 = 0.5 + 0.5 * cos(t * 0.45 + inwardBase * PI);
+
+    vec3 warpCol = mix(t1.rgb, t2.rgb, mix1);
+    warpCol = mix(warpCol, t3.rgb, mix2 * 0.5);
+    warpCol *= tint * (0.92 + 0.08 * slowBeat);
+
+    vec3 baseTex = textureGrad(textTexture, TexCoord, dFdx(TexCoord), dFdy(TexCoord)).rgb;
+    vec3 spiralTex = textureGrad(textTexture, spiralCoord, dFdx(spiralCoord), dFdy(spiralCoord)).rgb;
+    vec3 spiralMix = mix(baseTex, spiralTex, 0.7 + 0.3 * zoomPing);
+
+    vec3 combined = mix(spiralMix, warpCol * 3.0, 0.6);
+
+    vec3 bloom = combined * combined * 0.18 
+               + pow(max(combined - 0.6, 0.0), vec3(2.0)) * 0.10;
+    combined += bloom;
+
+    combined = clamp(combined, vec3(0.0), vec3(1.0));
+    color = vec4(combined, 1.0);
+}
+)SHD";
+inline const char *src_frac_shader02_dmdXi3_warp = R"SHD(#version 300 es
+precision highp float;
+out vec4 color;
+in vec2 TexCoord;
+
+uniform sampler2D textTexture;
+uniform vec2 iResolution;
+uniform float time_f;
+uniform vec4 iMouse;
+)SHD" COMMON_UNIFORMS COLOR_HELPERS R"SHD(
+uniform float amp;
+uniform float uamp;
+uniform float iTime;
+uniform int iFrame; 
+uniform float iTimeDelta;
+uniform vec4 iDate;
+uniform vec2 iMouseClick;
+uniform float iFrameRate;
+uniform vec3 iChannelResolution[4];
+uniform float iChannelTime[4];
+uniform float iSampleRate;
+
+const float PI = 3.1415926535897932384626433832795;
+
+float pingPong(float x, float length){
+    float m = mod(x, length * 2.0);
+    return m <= length ? m : length * 2.0 - m;
+}
+
+vec3 hsv2rgb(vec3 c){
+    vec4 K = vec4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
+    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+
+vec3 neonPalette(float t){
+    vec3 pink = vec3(1.0, 0.15, 0.75);
+    vec3 blue = vec3(0.10, 0.55, 1.0);
+    vec3 green = vec3(0.10, 1.00, 0.45);
+    float ph = fract(t * 0.05);
+    vec3 k1 = mix(pink, blue, smoothstep(0.00, 0.33, ph));
+    vec3 k2 = mix(blue, green, smoothstep(0.33, 0.66, ph));
+    vec3 k3 = mix(green, pink, smoothstep(0.66, 1.00, ph));
+    float a = step(ph, 0.33);
+    float b = step(0.33, ph) * step(ph, 0.66);
+    float c = step(0.66, ph);
+    return normalize(a * k1 + b * k2 + c * k3) * 1.05;
+}
+
+vec2 rotateUV(vec2 uv, float angle, vec2 c, float aspect){
+    float s = sin(angle), cc = cos(angle);
+    vec2 p = uv - c;
+    p.x *= aspect;
+    p = mat2(cc, -s, s, cc) * p;
+    p.x /= aspect;
+    return p + c;
+}
+
+vec2 reflectUV(vec2 uv, float segments, vec2 c, float aspect){
+    vec2 p = uv - c;
+    p.x *= aspect;
+    float ang = atan(p.y, p.x);
+    float rad = length(p);
+    float stepA = 6.28318530718 / segments;
+    ang = mod(ang, stepA);
+    ang = abs(ang - stepA * 0.5);
+    vec2 r = vec2(cos(ang), sin(ang)) * rad;
+    r.x /= aspect;
+    return r + c;
+}
+
+vec2 fractalFold(vec2 uv, float zoom, float t, vec2 c, float aspect){
+    vec2 p = uv;
+    for(int i = 0; i < 6; i++){
+        p = abs((p - c) * (zoom + 0.15 * sin(t * 0.35 + float(i)))) - 0.5 + c;
+        p = rotateUV(p, t * 0.12 + float(i) * 0.07, c, aspect);
+    }
+    return p;
+}
+
+vec2 spinWarp(vec2 uv, float t){
+    vec2 center = vec2(0.5);
+    float angle = atan(uv.y - center.y, uv.x - center.x);
+    float modulatedTime = pingPong(t, 5.0);
+    angle += modulatedTime;
+
+    vec2 rel = uv - center;
+    float s = sin(angle), c = cos(angle);
+    vec2 rot;
+    rot.x = c * rel.x - s * rel.y;
+    rot.y = s * rel.x + c * rel.y;
+    vec2 rotated = rot + center;
+
+    float warpFactor = sin(t) * 0.5 + 0.5;
+    vec2 warped;
+    warped.x = pingPong(rotated.x + t * 0.1, 1.0);
+    warped.y = pingPong(rotated.y + t * 0.1, 1.0);
+
+    return mix(rotated, warped, warpFactor);
+}
+
+void main(void){
+    vec2 ar = vec2(iResolution.x / iResolution.y, 1.0);
+    vec2 m = (iMouse.z > 0.5 ? (iMouse.xy / iResolution) : vec2(0.5));
+
+    float t = time_f + iTime * (PI / 2.0);
+    float sr = clamp(iSampleRate / 48000.0, 0.25, 4.0);
+    float aMix = clamp(amp * 0.7 + uamp * 0.3, 0.0, 20.0);
+
+    float osc = 0.5 + 0.5 * sin(t * 0.35 + 0.2 * sr);
+    float seg = 4.0 + 2.0 * sin(t * 0.25);
+    float zoom = mix(1.1, 2.1, osc);
+    float spinAngle = osc * 2.0 * PI;
+
+    vec2 baseUV = spinWarp(TexCoord, t);
+    vec2 tcMix = mix(TexCoord, baseUV, 0.75);
+
+    vec2 kUV = reflectUV(tcMix, seg, m, ar.x);
+    kUV = fractalFold(kUV, zoom, t, m, ar.x);
+    kUV = rotateUV(kUV, spinAngle, m, ar.x);
+    kUV = spinWarp(kUV, t * 0.7);
+
+    vec2 dir = (kUV - m) * ar;
+    float r = length(dir);
+
+    float ripple = sin(20.0 * r - t * 9.0) * 0.012 / (1.0 + 18.0 * r);
+    ripple *= 1.0 / (1.0 + 12.0 * (abs(dFdx(r)) + abs(dFdy(r))));
+    ripple = sin(ripple * pingPong(time_f * PI, 3.0));
+
+    vec2 uA = kUV + normalize(dir + 1e-5) * ripple;
+    vec2 uB = mix(baseUV, kUV, 0.88);
+    vec2 uC = mix(tcMix, kUV, 0.94) + vec2(0.002 * sin(t), 0.002 * cos(t));
+
+    vec4 t1 = textureGrad(textTexture, fract(uA), dFdx(uA), dFdy(uA));
+    vec4 t2 = textureGrad(textTexture, fract(uB), dFdx(uB), dFdy(uB));
+    vec4 t3 = textureGrad(textTexture, fract(uC), dFdx(uC), dFdy(uC));
+
+    float hueBase = fract(t * 0.06);
+    float sat = 0.7 + 0.25 * sin(t * 0.4 + sr);
+    float val = 0.6 + 0.35 * sin(t * 0.5 + dot(TexCoord, vec2(2.3, 1.9)));
+    vec3 hsvTint = hsv2rgb(vec3(hueBase + r * 0.25, sat, val));
+    vec3 neon = neonPalette(hueBase + r * 0.15);
+    vec3 tint = normalize(hsvTint * 0.7 + neon * 1.3);
+
+    float slowBeat = 0.5 + 0.5 * sin(t * 0.8 + aMix * 0.05);
+    float mix1 = 0.5 + 0.5 * sin(t * 0.6);
+    float mix2 = 0.5 + 0.5 * cos(t * 0.45);
+
+    vec3 warpCol = mix(t1.rgb, t2.rgb, mix1);
+    warpCol = mix(warpCol, t3.rgb, mix2 * 0.5);
+    warpCol *= tint * (0.92 + 0.08 * slowBeat);
+
+    vec3 base = textureGrad(textTexture, baseUV, dFdx(baseUV), dFdy(baseUV)).rgb;
+    vec3 combined = mix(base, warpCol * 3.0, 0.6);
+
+    vec3 bloom = combined * combined * 0.18 + pow(max(combined - 0.6, 0.0), vec3(2.0)) * 0.10;
+    combined += bloom;
+
+    combined = clamp(combined, vec3(0.0), vec3(1.0));
+    color = vec4(combined, 1.0);
+}
+)SHD";
+inline const char *src_frac_shader02_dmdXi4 = R"SHD(#version 300 es
+precision highp float;
+out vec4 color;
+in vec2 TexCoord;
+
+uniform sampler2D textTexture;
+uniform vec2 iResolution;
+uniform float time_f;
+uniform vec4 iMouse;
+)SHD" COMMON_UNIFORMS COLOR_HELPERS R"SHD(
+uniform float amp;
+uniform float uamp;
+uniform float iTime;
+uniform int iFrame; 
+uniform float iTimeDelta;
+uniform vec4 iDate;
+uniform vec2 iMouseClick;
+uniform float iFrameRate;
+uniform vec3 iChannelResolution[4];
+uniform float iChannelTime[4];
+uniform float iSampleRate;
+
+const float PI = 3.1415926535897932384626433832795;
+
+float pingPong(float x, float length){
+    float m = mod(x, length * 2.0);
+    return m <= length ? m : length * 2.0 - m;
+}
+
+vec3 hsv2rgb(vec3 c){
+    vec4 K = vec4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
+    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+
+vec2 rotateUV(vec2 uv, float angle, vec2 c, float aspect){
+    float s = sin(angle), cc = cos(angle);
+    vec2 p = uv - c;
+    p.x *= aspect;
+    p = mat2(cc, -s, s, cc) * p;
+    p.x /= aspect;
+    return p + c;
+}
+
+vec2 reflectUV(vec2 uv, float segments, vec2 c, float aspect){
+    vec2 p = uv - c;
+    p.x *= aspect;
+    float ang = atan(p.y, p.x);
+    float rad = length(p);
+    float stepA = 6.28318530718 / segments;
+    ang = mod(ang, stepA);
+    ang = abs(ang - stepA * 0.5);
+    vec2 r = vec2(cos(ang), sin(ang)) * rad;
+    r.x /= aspect;
+    return r + c;
+}
+
+vec2 fractalFold(vec2 uv, float zoom, float t, vec2 c, float aspect){
+    vec2 p = uv;
+    for(int i = 0; i < 6; i++){
+        p = abs((p - c) * (zoom + 0.15 * sin(t * 0.35 + float(i)))) - 0.5 + c;
+        p = rotateUV(p, t * 0.12 + float(i) * 0.07, c, aspect);
+    }
+    return p;
+}
+
+vec2 inwardSpiral(vec2 uv, vec2 c, float aspect, float t){
+    vec2 p = uv - c;
+    p.x *= aspect;
+    float r = length(p) + 1e-6;
+    float ang = atan(p.y, p.x);
+    float spin = -0.65 * t;
+    float swirl = -1.35 / (1.0 + 10.0 * r);
+    ang += spin + swirl;
+    float pull = 0.18 / (1.0 + 8.0 * r);
+    r = max(r - pull, 0.0);
+    vec2 q = vec2(cos(ang), sin(ang)) * r;
+    q.x /= aspect;
+    return q + c;
+}
+
+vec3 satBoost(vec3 c, float s){
+    float l = dot(c, vec3(0.2126,0.7152,0.0722));
+    return mix(vec3(l), c, 1.0 + s);
+}
+
+vec3 vibrance(vec3 c, float v){
+    float mx = max(c.r, max(c.g, c.b));
+    float mn = min(c.r, min(c.g, c.b));
+    float sat = mx - mn;
+    float amt = 1.0 + v * (1.0 - sat);
+    float l = dot(c, vec3(0.2126,0.7152,0.0722));
+    return mix(vec3(l), c, amt);
+}
+
+vec3 screen(vec3 a, vec3 b){
+    return 1.0 - (1.0 - a)*(1.0 - b);
+}
+
+vec3 aces(vec3 x){
+    const float a=2.51;
+    const float b=0.03;
+    const float c=2.43;
+    const float d=0.59;
+    const float e=0.14;
+    x = (x*(a*x+b))/(x*(c*x+d)+e);
+    return clamp(x,0.0,1.0);
+}
+
+void main(void){
+    vec2 ar = vec2(iResolution.x / iResolution.y, 1.0);
+    vec2 m = (iMouse.z > 0.5 ? (iMouse.xy / iResolution) : vec2(0.5));
+
+    float t = (time_f + iTime);
+    float sr = clamp(iSampleRate / 48000.0, 0.25, 4.0);
+    float aMix = clamp(amp * 0.7 + uamp * 0.3, 0.0, 20.0);
+
+    float seg = 6.0 + 4.0 * sin(t * 0.25);
+    float zoom = 1.65 + 0.55 * sin(t * 0.35 + 0.2 * sr);
+
+    vec2 kUV = reflectUV(TexCoord, seg, m, ar.x);
+    kUV = fractalFold(kUV, zoom, t, m, ar.x);
+    kUV = rotateUV(kUV, t * 0.28, m, ar.x);
+    kUV = inwardSpiral(kUV, m, ar.x, t);
+
+    vec2 dir = (kUV - m) * ar;
+    float r = length(dir);
+    float ripple = sin(22.0 * r - t * 9.5) * 0.013 / (1.0 + 18.0 * r);
+    ripple *= 1.0 / (1.0 + 12.0 * (abs(dFdx(r)) + abs(dFdy(r))));
+
+    vec2 uA = kUV + normalize(dir + 1e-5) * ripple;
+    vec2 uB = mix(TexCoord, kUV, 0.94);
+    vec2 uC = mix(TexCoord, kUV, 0.985) + vec2(0.0018 * sin(t), 0.0018 * cos(t));
+
+    vec4 t1 = textureGrad(textTexture, fract(uA), dFdx(uA), dFdy(uA));
+    vec4 t2 = textureGrad(textTexture, fract(uB), dFdx(uB), dFdy(uB));
+    vec4 t3 = textureGrad(textTexture, fract(uC), dFdx(uC), dFdy(uC));
+
+    float hueSweep = fract(t*0.07 + TexCoord.x*0.35 + TexCoord.y*0.18 + r*0.25);
+    float hueSweep2 = fract(t*0.05 - TexCoord.y*0.28 + TexCoord.x*0.12 - r*0.18);
+    float sat = 0.85 + 0.12*sin(t*0.6 + sr);
+    vec3 gradA = hsv2rgb(vec3(hueSweep, sat, 1.0));
+    vec3 gradB = hsv2rgb(vec3(hueSweep2, 0.95, 1.0));
+    vec3 gradient = mix(gradA, gradB, 0.5 + 0.5*sin(t*0.4 + dot(TexCoord, vec2(1.7,1.3))));
+
+    float slowBeat = 0.5 + 0.5 * sin(t * 0.8 + aMix * 0.05);
+    float mix1 = 0.55 + 0.45 * sin(t * 0.6);
+    float mix2 = 0.55 + 0.45 * cos(t * 0.45);
+
+    vec3 warpCol = mix(t1.rgb, t2.rgb, mix1);
+    warpCol = mix(warpCol, t3.rgb, mix2 * 0.65);
+
+    vec3 neon = screen(warpCol, gradient);
+    neon = satBoost(neon, 0.65);
+    neon = vibrance(neon, 0.9);
+    neon = pow(max(neon, 0.0), vec3(0.9))*(1.15 + 0.1*slowBeat);
+
+    vec3 base = textureGrad(textTexture, TexCoord, dFdx(TexCoord), dFdy(TexCoord)).rgb;
+    float patMix = clamp(0.82 + 0.16*slowBeat + 0.12*clamp(aMix*0.08,0.0,1.0), 0.0, 0.98);
+    vec3 combined = mix(base, neon, patMix);
+
+    vec3 bloom = combined*combined*0.16 + pow(max(combined-0.7,0.0), vec3(2.0))*0.10;
+    combined += bloom;
+
+    combined = aces(combined);
+    color = vec4(combined, 1.0);
+    color  = mix(color, texture(textTexture, TexCoord), 0.8);
+}
+)SHD";
+inline const char *src_frac_shader02_dmdXi5 = R"SHD(#version 300 es
+precision highp float;
+out vec4 color;
+in vec2 TexCoord;
+
+uniform sampler2D textTexture;
+uniform vec2 iResolution;
+uniform float time_f;
+uniform vec4 iMouse;
+)SHD" COMMON_UNIFORMS COLOR_HELPERS R"SHD(
+uniform float amp;
+uniform float uamp;
+uniform float iTime;
+uniform int iFrame; 
+uniform float iTimeDelta;
+uniform vec4 iDate;
+uniform vec2 iMouseClick;
+uniform float iFrameRate;
+uniform vec3 iChannelResolution[4];
+uniform float iChannelTime[4];
+uniform float iSampleRate;
+
+const float PI = 3.1415926535897932384626433832795;
+
+float pingPong(float x, float length){
+    float m = mod(x, length * 2.0);
+    return m <= length ? m : length * 2.0 - m;
+}
+
+vec2 mirror(vec2 uv){
+    vec2 w = abs(fract(uv*0.5+0.5)*2.0-1.0);
+    return clamp(w, 0.0, 1.0);
+}
+
+vec3 hsv2rgb(vec3 c){
+    vec4 K = vec4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
+    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+
+vec2 rotateUV(vec2 uv, float angle, vec2 c, float aspect){
+    float s = sin(angle), cc = cos(angle);
+    vec2 p = uv - c;
+    p.x *= aspect;
+    p = mat2(cc, -s, s, cc) * p;
+    p.x /= aspect;
+    return p + c;
+}
+
+vec2 reflectUV(vec2 uv, float segments, vec2 c, float aspect){
+    vec2 p = uv - c;
+    p.x *= aspect;
+    float ang = atan(p.y, p.x);
+    float rad = length(p);
+    float stepA = 6.28318530718 / segments;
+    ang = mod(ang, stepA);
+    ang = abs(ang - stepA * 0.5);
+    vec2 r = vec2(cos(ang), sin(ang)) * rad;
+    r.x /= aspect;
+    return r + c;
+}
+
+vec2 fractalFold(vec2 uv, float zoom, float t, vec2 c, float aspect){
+    vec2 p = uv;
+    for(int i = 0; i < 6; i++){
+        float z = zoom + 0.10 * sin(t * 0.20 + float(i)*0.7);
+        p = abs((p - c) * z) - 0.5 + c;
+        p = rotateUV(p, t * 0.10 + float(i) * 0.06, c, aspect);
+    }
+    return p;
+}
+
+vec3 neonPalette(float t){
+    vec3 pink = vec3(1.0, 0.15, 0.75);
+    vec3 blue = vec3(0.10, 0.55, 1.0);
+    vec3 green = vec3(0.10, 1.00, 0.45);
+    float ph = fract(t * 0.04);
+    vec3 k1 = mix(pink, blue, smoothstep(0.00, 0.33, ph));
+    vec3 k2 = mix(blue, green, smoothstep(0.33, 0.66, ph));
+    vec3 k3 = mix(green, pink, smoothstep(0.66, 1.00, ph));
+    float a = step(ph, 0.33);
+    float b = step(0.33, ph) * step(ph, 0.66);
+    float c = step(0.66, ph);
+    return normalize(a * k1 + b * k2 + c * k3) * 1.02;
+}
+
+vec3 softTone(vec3 c){
+    c = pow(max(c, 0.0), vec3(0.96));
+    float l = dot(c, vec3(0.299, 0.587, 0.114));
+    c = mix(vec3(l), c, 0.9);
+    return clamp(c, 0.0, 1.0);
+}
+
+vec3 tentBlur3(sampler2D img, vec2 uv, vec2 res){
+    vec2 ts = 1.0 / res;
+    vec3 s00 = textureGrad(img, uv + ts * vec2(-1.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s10 = textureGrad(img, uv + ts * vec2(0.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s20 = textureGrad(img, uv + ts * vec2(1.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s01 = textureGrad(img, uv + ts * vec2(-1.0, 0.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s11 = textureGrad(img, uv, dFdx(uv), dFdy(uv)).rgb;
+    vec3 s21 = textureGrad(img, uv + ts * vec2(1.0, 0.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s02 = textureGrad(img, uv + ts * vec2(-1.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s12 = textureGrad(img, uv + ts * vec2(0.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s22 = textureGrad(img, uv + ts * vec2(1.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    return (s00 + 2.0 * s10 + s20 + 2.0 * s01 + 4.0 * s11 + 2.0 * s21 + s02 + 2.0 * s12 + s22) / 16.0;
+}
+
+vec3 preBlendColor(vec2 uv, float t, float sr){
+    vec3 tex = tentBlur3(textTexture, uv, iResolution);
+    vec2 gdir = normalize(vec2(cos(t * 0.18 + 0.3*sr), sin(t * 0.20 - 0.3*sr)));
+    float s = dot((uv - 0.5) * vec2(iResolution.x / iResolution.y, 1.0), gdir);
+    float w = max(fwidth(s) * 6.0, 0.003);
+    float band = smoothstep(-0.5 - w, -0.5 + w, sin(s * 1.6 + t * 0.6));
+    vec3 neon = neonPalette(t);
+    vec3 grad = mix(tex, mix(tex, neon, 0.55), 0.30 + 0.20 * band);
+    grad = mix(grad, tex, 0.12);
+    grad = softTone(grad);
+    return grad;
+}
+
+float diamondRadius(vec2 p){
+    p = sin(abs(p));
+    return max(p.x, p.y);
+}
+
+vec2 diamondFold(vec2 uv, vec2 c, float aspect){
+    vec2 p = (uv - c) * vec2(aspect, 1.0);
+    p = abs(p);
+    if(p.y > p.x) p = p.yx;
+    p.x /= aspect;
+    return p + c;
+}
+
+vec2 wormholeUV(vec2 uv, vec2 c, float aspect, float t){
+    vec2 ar = vec2(aspect, 1.0);
+    vec2 p = (uv - c) * ar;
+    float r = length(p) + 1e-6;
+    float a = atan(p.y, p.x);
+    float swirl = 0.18 / r;
+    a += t * 0.25 + swirl;
+    float z = 0.55 + 0.30 * sin(t * 0.45) + 0.10 * sin(r * 9.0 - t * 2.0);
+    float rr = 1.0 / (r * 3.2 + 0.08) + 0.06 * z;
+    vec2 q = vec2(cos(a), sin(a)) * rr;
+    q /= ar;
+    return mirror(q + c);
+}
+
+float sceneLuma(){
+    vec3 s0 = texture(textTexture, vec2(0.25,0.25)).rgb;
+    vec3 s1 = texture(textTexture, vec2(0.50,0.25)).rgb;
+    vec3 s2 = texture(textTexture, vec2(0.75,0.25)).rgb;
+    vec3 s3 = texture(textTexture, vec2(0.25,0.50)).rgb;
+    vec3 s4 = texture(textTexture, vec2(0.50,0.50)).rgb;
+    vec3 s5 = texture(textTexture, vec2(0.75,0.50)).rgb;
+    vec3 s6 = texture(textTexture, vec2(0.25,0.75)).rgb;
+    vec3 s7 = texture(textTexture, vec2(0.50,0.75)).rgb;
+    vec3 s8 = texture(textTexture, vec2(0.75,0.75)).rgb;
+    float L = 0.0;
+    L += dot(s0, vec3(0.299,0.587,0.114));
+    L += dot(s1, vec3(0.299,0.587,0.114));
+    L += dot(s2, vec3(0.299,0.587,0.114));
+    L += dot(s3, vec3(0.299,0.587,0.114));
+    L += dot(s4, vec3(0.299,0.587,0.114));
+    L += dot(s5, vec3(0.299,0.587,0.114));
+    L += dot(s6, vec3(0.299,0.587,0.114));
+    L += dot(s7, vec3(0.299,0.587,0.114));
+    L += dot(s8, vec3(0.299,0.587,0.114));
+    return L / 9.0;
+}
+
+vec3 toneDownWhite(vec3 c){
+    float lum = dot(c, vec3(0.299, 0.587, 0.114));
+    float factor = smoothstep(0.6, 1.0, lum);
+    c = mix(c, c * 0.7, factor);
+    c = pow(c, vec3(0.95 + 0.05 * (1.0 - factor)));
+    return clamp(c, 0.0, 1.0);
+}
+
+void main(void){
+    vec2 ar = vec2(iResolution.x / iResolution.y, 1.0);
+    vec2 m = (iMouse.z > 0.5 ? (iMouse.xy / iResolution) : vec2(0.5));
+    float t = time_f + iTime;
+    float sr = clamp(iSampleRate / 48000.0, 0.25, 4.0);
+    float aMix = clamp(amp * 0.7 + uamp * 0.3, 0.0, 20.0);
+
+    float seg = 4.0 + 2.0 * sin(t * 0.20 + 0.25 * aMix);
+    float zoom = 1.45 + 0.40 * sin(t * 0.28 + 0.15 * sr);
+
+    vec2 kUV = reflectUV(TexCoord, seg, m, ar.x);
+    kUV = fractalFold(kUV, zoom, t, m, ar.x);
+    kUV = rotateUV(kUV, t * 0.18, m, ar.x);
+    kUV = diamondFold(kUV, m, ar.x);
+
+    vec2 dir = (kUV - m) * ar;
+    float r = length(dir);
+    float ripple = sin(14.0 * r - t * 5.0) * 0.008 / (1.0 + 12.0 * r);
+    ripple *= 1.0 / (1.0 + 10.0 * (abs(dFdx(r)) + abs(dFdy(r))));
+    vec2 uA = kUV + normalize(dir + 1e-5) * ripple;
+    vec2 uB = mix(TexCoord, kUV, 0.82);
+    vec2 uC = mix(TexCoord, kUV, 0.90) + vec2(0.0015 * sin(t*0.8), 0.0015 * cos(t*0.8));
+
+    vec2 sA = mirror(uA);
+    vec2 sB = mirror(uB);
+    vec2 sC = mirror(uC);
+
+    vec4 t1 = textureGrad(textTexture, sA, dFdx(sA), dFdy(sA));
+    vec4 t2 = textureGrad(textTexture, sB, dFdx(sB), dFdy(sB));
+    vec4 t3 = textureGrad(textTexture, sC, dFdx(sC), dFdy(sC));
+
+    vec3 warpCol = mix(t1.rgb, t2.rgb, 0.5 + 0.5 * sin(t * 0.45));
+    warpCol = mix(warpCol, t3.rgb, 0.25 + 0.25 * cos(t * 0.33));
+
+    float sat = 0.72 + 0.22 * sin(t * 0.32 + sr);
+    float val = 0.62 + 0.30 * sin(t * 0.36 + dot(TexCoord, vec2(2.1, 1.7)));
+    vec3 tint = hsv2rgb(vec3(fract(t * 0.045) + r * 0.20, sat, val));
+    warpCol *= tint * (0.94 + 0.06 * (0.5 + 0.5 * sin(t * 0.6 + aMix * 0.04)));
+
+    vec3 baseTex = textureGrad(textTexture, TexCoord, dFdx(TexCoord), dFdy(TexCoord)).rgb;
+    vec3 preK = preBlendColor(mirror(kUV), t, sr);
+
+    vec2 wh0 = wormholeUV(TexCoord, m, ar.x, t);
+    vec2 wh1 = wormholeUV(TexCoord + vec2(0.0009, 0.0), m, ar.x, t + 0.02);
+    vec2 wh2 = wormholeUV(TexCoord - vec2(0.0009, 0.0), m, ar.x, t - 0.02);
+    vec2 off = normalize(dir + 1e-5) * (0.0012 + 0.0008 * sin(t * 0.9)) * vec2(1.0, 1.0 / ar.x);
+
+    vec3 whR = preBlendColor(mirror(wh0 + off), t, sr);
+    vec3 whG = preBlendColor(mirror(wh1), t, sr);
+    vec3 whB = preBlendColor(mirror(wh2 - off), t, sr);
+    vec3 wormRGB = vec3(sin(whR.r * pingPong(t * PI, 1.1)),
+                        sin(whG.g * pingPong(t * PI, 1.2)),
+                        sin(whB.b * pingPong(t * PI, 1.3)));
+
+    float rCenter = length((TexCoord - m) * ar);
+    float throatBase = smoothstep(0.45, 0.10, rCenter);
+    float throat = mix(throatBase, throatBase*throatBase, 0.5) * (0.55 + 0.45 * sin(t * 0.35));
+    float swirlGate = smoothstep(0.8, 1.6, t * 0.18 + 0.25 * sin(t * 0.5));
+    float gateRaw = throat * (0.55 + 0.35 * pingPong(t * PI, 3.0)) + swirlGate * 0.12;
+    float wGate = max(fwidth(gateRaw)*2.0, 0.002);
+    float gate = smoothstep(0.0, 1.0, clamp(gateRaw, 0.0, 1.0));
+    gate = smoothstep(0.0, 1.0, mix(gate, gate, 1.0 - wGate));
+
+    vec3 mixA = mix(preK, warpCol, 0.52);
+    vec3 mixB = mix(mixA, wormRGB, gate * 0.72);
+
+    vec3 bloom = mixB * mixB * 0.14 + pow(max(mixB - 0.65, 0.0), vec3(2.0)) * 0.08;
+    vec3 combined = mixB + bloom;
+
+    float vign = 1.0 - smoothstep(0.78, 1.10, length((TexCoord - m) * ar));
+    combined *= mix(0.96, 1.06, vign);
+
+    float Lscene = sceneLuma();
+    float baseFactor = mix(1.0, 0.75, smoothstep(0.55, 0.9, Lscene));
+    float finalFactor = mix(1.0, 0.72, smoothstep(0.55, 0.9, Lscene));
+
+    baseTex = toneDownWhite(baseTex) * baseFactor;
+
+    vec3 master = mix(baseTex, combined * 2.6, 0.58) * finalFactor;
+    master = clamp(master, vec3(0.03), vec3(0.97));
+
+    color = vec4(master, 1.0);
+}
+)SHD";
+inline const char *src_frac_shader02_prisim = R"SHD(#version 300 es
+precision highp float;
+out vec4 color;
+in vec2 TexCoord;
+
+uniform sampler2D textTexture;
+uniform vec2 iResolution;
+uniform float time_f;
+uniform vec4 iMouse;
+)SHD" COMMON_UNIFORMS COLOR_HELPERS R"SHD(
+uniform float amp;
+uniform float uamp;
+uniform float iTime;
+uniform int iFrame; 
+uniform float iTimeDelta;
+uniform vec4 iDate;
+uniform vec2 iMouseClick;
+uniform float iFrameRate;
+uniform vec3 iChannelResolution[4];
+uniform float iChannelTime[4];
+uniform float iSampleRate;
+
+const float PI = 3.1415926535897932384626433832795;
+
+float pingPong(float x, float length){
+    float m = mod(x, length * 2.0);
+    return m <= length ? m : length * 2.0 - m;
+}
+
+vec3 hsv2rgb(vec3 c){
+    vec4 K = vec4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
+    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+
+vec2 rotateUV(vec2 uv, float angle, vec2 c, float aspect){
+    float s = sin(angle), cc = cos(angle);
+    vec2 p = uv - c;
+    p.x *= aspect;
+    p = mat2(cc, -s, s, cc) * p;
+    p.x /= aspect;
+    return p + c;
+}
+
+vec2 reflectUV(vec2 uv, float segments, vec2 c, float aspect){
+    vec2 p = uv - c;
+    p.x *= aspect;
+    float ang = atan(p.y, p.x);
+    float rad = length(p);
+    float stepA = 6.28318530718 / segments;
+    ang = mod(ang, stepA);
+    ang = abs(ang - stepA * 0.5);
+    vec2 r = vec2(cos(ang), sin(ang)) * rad;
+    r.x /= aspect;
+    return r + c;
+}
+
+vec2 fractalFold(vec2 uv, float zoom, float t, vec2 c, float aspect){
+    vec2 p = uv;
+    for(int i = 0; i < 6; i++){
+        p = abs((p - c) * (zoom + 0.15 * sin(t * 0.35 + float(i)))) - 0.5 + c;
+        p = rotateUV(p, t * 0.12 + float(i) * 0.07, c, aspect);
+    }
+    return p;
+}
+
+vec3 neonPalette(float t){
+    vec3 pink = vec3(1.0, 0.15, 0.75);
+    vec3 blue = vec3(0.10, 0.55, 1.0);
+    vec3 green = vec3(0.10, 1.00, 0.45);
+    float ph = fract(t * 0.05);
+    vec3 k1 = mix(pink, blue, smoothstep(0.00, 0.33, ph));
+    vec3 k2 = mix(blue, green, smoothstep(0.33, 0.66, ph));
+    vec3 k3 = mix(green, pink, smoothstep(0.66, 1.00, ph));
+    float a = step(ph, 0.33);
+    float b = step(0.33, ph) * step(ph, 0.66);
+    float c = step(0.66, ph);
+    return normalize(a * k1 + b * k2 + c * k3) * 1.05;
+}
+
+vec3 warpTexture(vec2 baseUV, float seg, float zoom, float t, vec2 m, float aspect, float aMix, float sr, float spinAngle){
+    vec2 ar = vec2(aspect, 1.0);
+    vec2 kUV = reflectUV(baseUV, seg, m, aspect);
+    kUV = fractalFold(kUV, zoom, t, m, aspect);
+    kUV = rotateUV(kUV, spinAngle, m, aspect);
+
+    vec2 dir = (kUV - m) * ar;
+    float r = length(dir);
+
+    float ripple = sin(20.0 * r - t * 9.0) * 0.012 / (1.0 + 18.0 * r);
+    ripple *= 1.0 / (1.0 + 12.0 * (abs(dFdx(r)) + abs(dFdy(r))));
+    ripple = sin(ripple * pingPong(time_f * PI, 3.0));
+
+    vec2 nDir = normalize(dir + 1e-5);
+    vec2 uA = kUV + nDir * ripple;
+    vec2 uB = mix(baseUV, kUV, 0.88);
+    vec2 uC = mix(baseUV, kUV, 0.94) + vec2(0.002 * sin(t), 0.002 * cos(t));
+
+    vec4 t1 = textureGrad(textTexture, fract(uA), dFdx(uA), dFdy(uA));
+    vec4 t2 = textureGrad(textTexture, fract(uB), dFdx(uB), dFdy(uB));
+    vec4 t3 = textureGrad(textTexture, fract(uC), dFdx(uC), dFdy(uC));
+
+    float ampNorm = clamp(aMix * 0.12, 0.0, 1.5);
+    float hueBase = fract(t * 0.06 + r * 0.22 + ampNorm * 0.3);
+    float sat = 0.75 + 0.20 * sin(t * 0.4 + sr * 0.7 + ampNorm * 0.4);
+    float val = 0.70 + 0.35 * sin(t * 0.55 + r * 1.9 + ampNorm * 0.5);
+
+    vec3 tint = hsv2rgb(vec3(hueBase, sat, val));
+    vec3 neon = neonPalette(t + r * 2.0 + ampNorm);
+
+    float mix1 = 0.5 + 0.5 * sin(t * 0.6 + ampNorm * 0.3);
+    float mix2 = 0.5 + 0.5 * cos(t * 0.45 + ampNorm * 0.5);
+
+    vec3 warpCol = mix(t1.rgb, t2.rgb, mix1);
+    warpCol = mix(warpCol, t3.rgb, mix2 * 0.7);
+    warpCol *= tint * neon;
+    warpCol *= 1.1 + 0.7 * clamp(aMix * 0.1, 0.0, 1.0);
+
+    vec3 baseTex = textureGrad(textTexture, baseUV, dFdx(baseUV), dFdy(baseUV)).rgb;
+    float warpMix = 0.55 + 0.35 * clamp(aMix * 0.08, 0.0, 1.0);
+    vec3 combined = mix(baseTex, warpCol * 1.9, warpMix);
+
+    vec3 bloom = combined * combined * 0.12 + pow(max(combined - 0.6, 0.0), vec3(2.0)) * 0.08;
+    combined += bloom;
+
+    return combined;
+}
+
+void main(void){
+    float aspect = iResolution.x / iResolution.y;
+    vec2 ar = vec2(aspect, 1.0);
+    vec2 m = (iMouse.z > 0.5 ? (iMouse.xy / iResolution) : vec2(0.5));
+
+    float t = time_f + iTime * (PI / 2.0);
+    float sr = clamp(iSampleRate / 48000.0, 0.25, 4.0);
+    float aMix = clamp(amp * 0.7 + uamp * 0.3, 0.0, 20.0);
+    float ampNorm = clamp(aMix * 0.12, 0.0, 1.5);
+
+    float osc = 0.5 + 0.5 * sin(t * 0.35 + 0.2 * sr + ampNorm * 0.2);
+    float seg = 4.0 + 2.0 * sin(t * 0.25) + 2.5 * clamp(ampNorm, 0.0, 2.0);
+    float zoom = mix(1.1, 2.3 + ampNorm * 0.4, osc);
+    float spinAngle = osc * 2.0 * PI * (0.6 + 0.4 * clamp(ampNorm, 0.0, 1.5));
+
+    vec2 centerPx = iResolution * 0.5;
+    vec2 texCoordPx = TexCoord * iResolution;
+    vec2 deltaPx = texCoordPx - centerPx;
+    float dist = length(deltaPx);
+
+    float radius = 0.45 + 0.3 * clamp(ampNorm * 0.7, 0.0, 1.0);
+    float maxRadius = min(iResolution.x, iResolution.y) * radius;
+
+    float scaleFactor = 1.0 - pow(clamp(dist / maxRadius, 0.0, 1.0), 2.0);
+    scaleFactor *= 1.0 + 0.9 * clamp(ampNorm, 0.0, 1.5);
+    scaleFactor = clamp(scaleFactor, 0.0, 1.9);
+
+    vec2 dirN = dist > 0.0 ? deltaPx / dist : vec2(0.0);
+
+    float offsetBase = mix(0.008, 0.03, clamp(ampNorm * 0.6, 0.0, 1.0));
+    float offsetR = offsetBase;
+    float offsetG = 0.0;
+    float offsetB = -offsetBase;
+
+    vec3 colBase = warpTexture(TexCoord, seg, zoom, t, m, aspect, aMix, sr, spinAngle);
+
+    vec3 colBubble = colBase;
+    if(dist < maxRadius){
+        vec2 texCoordR = centerPx + deltaPx * scaleFactor + dirN * offsetR * maxRadius;
+        vec2 texCoordG = centerPx + deltaPx * scaleFactor + dirN * offsetG * maxRadius;
+        vec2 texCoordB = centerPx + deltaPx * scaleFactor + dirN * offsetB * maxRadius;
+
+        vec2 uvR = clamp(texCoordR / iResolution, 0.0, 1.0);
+        vec2 uvG = clamp(texCoordG / iResolution, 0.0, 1.0);
+        vec2 uvB = clamp(texCoordB / iResolution, 0.0, 1.0);
+
+        vec3 colR = warpTexture(uvR, seg, zoom, t, m, aspect, aMix, sr, spinAngle);
+        vec3 colG = warpTexture(uvG, seg, zoom, t, m, aspect, aMix, sr, spinAngle);
+        vec3 colB = warpTexture(uvB, seg, zoom, t, m, aspect, aMix, sr, spinAngle);
+
+        vec3 rgbSplit = vec3(colR.r, colG.g, colB.b);
+
+        float mask = smoothstep(maxRadius, maxRadius * 0.65, dist);
+        colBubble = mix(colBase, rgbSplit, mask);
+    }
+
+    vec3 baseVideo = textureGrad(textTexture, TexCoord, dFdx(TexCoord), dFdy(TexCoord)).rgb;
+    float globalMix = 0.50 + 0.35 * clamp(ampNorm * 0.5, 0.0, 1.0);
+    vec3 combined = mix(baseVideo, colBubble, globalMix);
+
+    combined = combined / (1.0 + combined);
+    combined = clamp(combined, vec3(0.0), vec3(1.0));
+
+    color = vec4(combined, 1.0);
+}
+)SHD";
+inline const char *src_frac_shader03_size = R"SHD(#version 300 es
+precision highp float;
+out vec4 color;
+in vec2 TexCoord;
+
+uniform sampler2D textTexture;
+uniform vec2 iResolution;
+uniform float time_f;
+uniform vec4 iMouse;
+)SHD" COMMON_UNIFORMS COLOR_HELPERS R"SHD(
+float pingPong(float x, float length){
+    float m = mod(x, length*2.0);
+    return m <= length ? m : length*2.0 - m;
+}
+
+vec2 rotateUV(vec2 uv, float angle, vec2 c, float aspect){
+    float s = sin(angle), cc = cos(angle);
+    vec2 p = uv - c;
+    p.x *= aspect;
+    p = mat2(cc, -s, s, cc) * p;
+    p.x /= aspect;
+    return p + c;
+}
+
+vec2 reflectUV(vec2 uv, float segments, vec2 c, float aspect){
+    vec2 p = uv - c;
+    p.x *= aspect;
+    float ang = atan(p.y, p.x);
+    float rad = length(p);
+    float stepA = 6.28318530718 / segments;
+    ang = mod(ang, stepA);
+    ang = abs(ang - stepA * 0.5);
+    vec2 r = vec2(cos(ang), sin(ang)) * rad;
+    r.x /= aspect;
+    return r + c;
+}
+
+vec2 fractalFold(vec2 uv, float zoom, float t, vec2 c, float aspect){
+    vec2 p = uv;
+    for(int i=0;i<6;i++){
+        p = abs((p - c) * (zoom + 0.15*sin(t*0.35+float(i)))) - 0.5 + c;
+        p = rotateUV(p, t*0.12 + float(i)*0.07, c, aspect);
+    }
+    return p;
+}
+
+vec3 hsv2rgb(vec3 c){
+    vec4 K = vec4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
+    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+
+vec3 movingGradient(vec2 uv, vec2 c, float t, float aspect){
+    vec2 ar = vec2(aspect, 1.0);
+    vec2 p = (uv - c) * ar;
+    vec2 d = normalize(vec2(cos(t*0.27), sin(t*0.31)));
+    float s = dot(p, d);
+    float band = 0.5 + 0.5*sin(s*6.28318530718*0.35 + t*0.9);
+    float h = fract(s*0.22 + t*0.07 + 0.15*sin(t*0.33));
+    float S = 0.75 + 0.25*sin(t*0.21 + s*2.0);
+    float V = 0.75 + 0.25*band;
+    vec3 base = hsv2rgb(vec3(h, S, V));
+    float edge = smoothstep(0.2, 0.8, band);
+    return mix(base*0.6, base, edge);
+}
+
+vec2 diamondFold(vec2 uv, vec2 c, float aspect){
+    vec2 p = (uv - c) * vec2(aspect, 1.0);
+    p = abs(p);
+    if(p.y > p.x) p = p.yx;
+    p.x /= aspect;
+    return p + c;
+}
+
+float diamondRadius(vec2 p){
+    p = abs(p);
+    return max(p.x, p.y);
+}
+
+float hash(vec2 p){
+    return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453123);
+}
+
+float starWeight(vec2 uv, float grid, float t, float aspect, float cls){
+    vec2 g = uv * grid;
+    vec2 id = floor(g);
+    vec2 f = fract(g) - 0.5;
+    float r = hash(id + cls*13.37);
+    float sz = mix(0.35, 0.9, r);
+    float d = max(abs(f.x)*aspect, abs(f.y));
+    float fall = smoothstep(sz*0.9, 0.0, d);
+    float tw = 0.5 + 0.5*sin(t*(2.0+6.0*r) + r*6.2831853);
+    return fall * tw;
+}
+
+void main(){
+    float aspect = iResolution.x / iResolution.y;
+    vec2 ar = vec2(aspect, 1.0);
+    vec2 m = (iMouse.z > 0.5) ? (iMouse.xy / iResolution) : vec2(0.5);
+    vec2 uv = TexCoord;
+    vec4 originalTexture = texture(textTexture, TexCoord);
+
+    float seg = 4.0 + 2.0*sin(time_f*0.33);
+    vec2 kUV = reflectUV(uv, seg, m, aspect);
+    kUV = diamondFold(kUV, m, aspect);
+    float foldZoom = 1.45 + 0.55 * sin(time_f * 0.42);
+    kUV = fractalFold(kUV, foldZoom, time_f, m, aspect);
+    kUV = rotateUV(kUV, time_f * 0.23, m, aspect);
+    kUV = diamondFold(kUV, m, aspect);
+
+    vec2 p = (kUV - m) * ar;
+    vec2 q = abs(p);
+    if(q.y > q.x) q = q.yx;
+
+    float base = 1.82 + 0.18*sin(time_f*0.2);
+    float period = log(base);
+    float tz = time_f * 0.65;
+    float rD = diamondRadius(p) + 1e-6;
+    float ang = atan(q.y, q.x) + tz * 0.35 + 0.35*sin(rD*18.0 + time_f*0.6);
+    float k = fract((log(rD) - tz) / period);
+    float rw = exp(k * period);
+
+    vec2 pwrap = vec2(cos(ang), sin(ang)) * rw;
+
+    vec2 u0 = fract(pwrap / ar + m);
+    vec2 u1 = fract((pwrap*1.045) / ar + m);
+    vec2 u2 = fract((pwrap*0.955) / ar + m);
+
+    vec2 dir = normalize(pwrap + 1e-6);
+    vec2 off = dir * (0.0015 + 0.001 * sin(time_f*1.3)) * vec2(1.0, 1.0/aspect);
+
+    float hue = fract(ang*0.25 + time_f*0.08 + k*0.5);
+    float sat = 0.75 - 0.25*cos(time_f*0.7 + rD*10.0);
+    float val = 0.8 + 0.2*sin(time_f*0.9 + k*6.28318530718);
+    vec3 tint = hsv2rgb(vec3(hue, sat, val));
+
+    float ring = smoothstep(0.0, 0.7, sin(log(rD+1e-3)*9.5 + time_f*1.2));
+    float pulse = 0.5 + 0.5*sin(time_f*2.0 + rD*28.0 + k*12.0);
+
+    float vign = 1.0 - smoothstep(0.75, 1.2, length((TexCoord - m)*ar));
+    vign = mix(0.85, 1.2, vign);
+
+    float blendFactor = 0.58;
+
+    float rC = texture(textTexture, u0 + off).r;
+    float gC = texture(textTexture, u1).g;
+    float bC = texture(textTexture, u2 - off).b;
+    vec3 baseRGB = vec3(rC, gC, bC);
+
+    vec2 s1p = vec2(cos(ang), sin(ang)) * (rw*0.55);
+    vec2 s2p = vec2(cos(ang), sin(ang)) * (rw*1.10);
+    vec2 s3p = vec2(cos(ang), sin(ang)) * (rw*1.85);
+
+    vec3 sample1 = texture(textTexture, fract(s1p/ar + m)).rgb;
+    vec3 sample2 = texture(textTexture, fract(s2p/ar + m)).rgb;
+    vec3 sample3 = texture(textTexture, fract(s3p/ar + m)).rgb;
+
+    float wSmall  = starWeight(TexCoord, 38.0, time_f, aspect, 1.0);
+    float wMedium = starWeight(TexCoord, 22.0, time_f, aspect, 2.0);
+    float wLarge  = starWeight(TexCoord, 12.0, time_f, aspect, 3.0);
+    float wSum = max(1e-4, wSmall + wMedium + wLarge);
+
+    vec3 twinkleMix = (sample1*wSmall + sample2*wMedium + sample3*wLarge) / wSum;
+
+    vec3 kaleido = baseRGB * tint;
+    vec3 merged = mix(kaleido, originalTexture.rgb, blendFactor);
+
+    merged *= (0.75 + 0.25*ring) * (0.85 + 0.15*pulse) * vign;
+
+    vec3 bloom = merged * merged * 0.18 + pow(max(merged-0.6,0.0), vec3(2.0))*0.12;
+    vec3 outCol = merged + bloom;
+
+    outCol = mix(outCol, twinkleMix, 0.35 + 0.25*sin(time_f*0.6 + rD*7.0 + k*11.0));
+
+    float wob = 0.9 + 0.1*sin(time_f + rD*14.0 + k*9.0);
+    outCol *= wob;
+
+    vec3 grad = movingGradient(TexCoord, m, time_f, aspect);
+    float gradAmt = 0.25 + 0.25*sin(time_f*0.5 + rD*7.0 + k*9.0);
+    vec3 screenBlend = 1.0 - (1.0 - outCol) * (1.0 - grad);
+    outCol = mix(outCol, screenBlend, gradAmt);
+
+    vec4 t = texture(textTexture, TexCoord);
+    outCol = mix(outCol, outCol*t.rgb, 0.8);
+
+    outCol = sin(outCol * (0.5 + 0.5*pingPong(time_f, 12.0)));
+    outCol = clamp(outCol, vec3(0.08), vec3(0.96));
+
+    color = vec4(outCol, 1.0);
+}
+)SHD";
+inline const char *src_frac_shader03_wormhole = R"SHD(#version 300 es
+precision highp float;
+out vec4 color;
+in vec2 TexCoord;
+
+uniform sampler2D textTexture;
+uniform vec2 iResolution;
+uniform float time_f;
+uniform vec4 iMouse;
+)SHD" COMMON_UNIFORMS COLOR_HELPERS R"SHD(
+const float PI = 3.1415926535897932384626433832795;
+
+float pingPong(float x, float length) {
+    float m = mod(x, length * 2.0);
+    return m <= length ? m : length * 2.0 - m;
+}
+
+vec3 hsv2rgb(vec3 c) {
+    vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+
+vec2 rotateUV(vec2 uv, float angle, vec2 c, float aspect) {
+    float s = sin(angle), cc = cos(angle);
+    vec2 p = uv - c;
+    p.x *= aspect;
+    p = mat2(cc, -s, s, cc) * p;
+    p.x /= aspect;
+    return p + c;
+}
+
+vec2 reflectUV(vec2 uv, float segments, vec2 c, float aspect) {
+    vec2 p = uv - c;
+    p.x *= aspect;
+    float ang = atan(p.y, p.x);
+    float rad = length(p);
+    float stepA = 6.28318530718 / segments;
+    ang = mod(ang, stepA);
+    ang = abs(ang - stepA * 0.5);
+    vec2 r = vec2(cos(ang), sin(ang)) * rad;
+    r.x /= aspect;
+    return r + c;
+}
+
+vec2 fractalFold(vec2 uv, float zoom, float t, vec2 c, float aspect) {
+    vec2 p = uv;
+    for (int i = 0; i < 6; i++) {
+        p = abs((p - c) * (zoom + 0.15 * sin(t * 0.35 + float(i)))) - 0.5 + c;
+        p = rotateUV(p, t * 0.12 + float(i) * 0.07, c, aspect);
+    }
+    return p;
+}
+
+vec3 neonPalette(float t) {
+    vec3 pink = vec3(1.0, 0.15, 0.75);
+    vec3 blue = vec3(0.10, 0.55, 1.0);
+    vec3 green = vec3(0.10, 1.00, 0.45);
+    float ph = fract(t * 0.08);
+    vec3 k1 = mix(pink, blue, smoothstep(0.00, 0.33, ph));
+    vec3 k2 = mix(blue, green, smoothstep(0.33, 0.66, ph));
+    vec3 k3 = mix(green, pink, smoothstep(0.66, 1.00, ph));
+    float a = step(ph, 0.33);
+    float b = step(0.33, ph) * step(ph, 0.66);
+    float c = step(0.66, ph);
+    return normalize(a * k1 + b * k2 + c * k3) * 1.05;
+}
+
+vec3 softTone(vec3 c) {
+    c = pow(max(c, 0.0), vec3(0.95));
+    float l = dot(c, vec3(0.299, 0.587, 0.114));
+    c = mix(vec3(l), c, 0.9);
+    return clamp(c, 0.0, 1.0);
+}
+
+vec3 tentBlur3(sampler2D img, vec2 uv, vec2 res) {
+    vec2 ts = 1.0 / res;
+    vec3 s00 = textureGrad(img, uv + ts * vec2(-1.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s10 = textureGrad(img, uv + ts * vec2(0.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s20 = textureGrad(img, uv + ts * vec2(1.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s01 = textureGrad(img, uv + ts * vec2(-1.0, 0.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s11 = textureGrad(img, uv, dFdx(uv), dFdy(uv)).rgb;
+    vec3 s21 = textureGrad(img, uv + ts * vec2(1.0, 0.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s02 = textureGrad(img, uv + ts * vec2(-1.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s12 = textureGrad(img, uv + ts * vec2(0.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s22 = textureGrad(img, uv + ts * vec2(1.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    return (s00 + 2.0 * s10 + s20 + 2.0 * s01 + 4.0 * s11 + 2.0 * s21 + s02 + 2.0 * s12 + s22) / 16.0;
+}
+
+vec3 preBlendColor(vec2 uv) {
+    vec3 tex = tentBlur3(textTexture, uv, iResolution);
+    float aspect = iResolution.x / iResolution.y;
+    vec2 p = (uv - 0.5) * vec2(aspect, 1.0);
+    float r = length(p);
+    float t = time_f;
+    vec3 neon = neonPalette(t + r * 1.3);
+    float neonAmt = smoothstep(0.1, 0.8, r);
+    neonAmt = 0.3 + 0.4 * (1.0 - neonAmt);
+    vec3 grad = mix(tex, neon, neonAmt);
+    grad = mix(grad, tex, 0.2);
+    grad = softTone(grad);
+    return grad;
+}
+
+float diamondRadius(vec2 p) {
+    p = sin(abs(p));
+    return max(p.x, p.y);
+}
+
+vec2 diamondFold(vec2 uv, vec2 c, float aspect) {
+    vec2 p = (uv - c) * vec2(aspect, 1.0);
+    p = abs(p);
+    if (p.y > p.x) p = p.yx;
+    p.x /= aspect;
+    return p + c;
+}
+
+vec2 wormholeUV(vec2 uv, vec2 c, float aspect, float t) {
+    vec2 ar = vec2(aspect, 1.0);
+    vec2 p = (uv - c) * ar;
+    float r = length(p) + 1e-6;
+    float a = atan(p.y, p.x);
+    float swirl = 0.22 / r;
+    a += t * 0.35 + swirl;
+    float z = 0.65 + 0.35 * sin(t * 0.6) + 0.15 * sin(r * 12.0 - t * 3.0);
+    float rr = 1.0 / (r * 3.5 + 0.06) + 0.08 * z;
+    vec2 q = vec2(cos(a), sin(a)) * rr;
+    q /= ar;
+    return fract(q + c);
+}
+
+void main(void) {
+    vec4 baseTex = texture(textTexture, TexCoord);
+    vec2 uv = TexCoord * 2.0 - 1.0;
+    float aspect = iResolution.x / iResolution.y;
+    uv.x *= aspect;
+    float r = pingPong(sin(length(uv) * time_f), 5.0);
+    float radius = sqrt(aspect * aspect + 1.0) + 0.5;
+    float glow = smoothstep(radius, radius - 0.25, r);
+    vec2 m = (iMouse.z > 0.5) ? (iMouse.xy / iResolution) : vec2(0.5);
+    vec2 ar = vec2(aspect, 1.0);
+    vec3 baseCol = preBlendColor(TexCoord);
+    float seg = 4.0 + 2.0 * sin(time_f * 0.33);
+    vec2 kUV = reflectUV(TexCoord, seg, m, aspect);
+    kUV = diamondFold(kUV, m, aspect);
+    float foldZoom = 1.45 + 0.55 * sin(time_f * 0.42);
+    kUV = fractalFold(kUV, foldZoom, time_f, m, aspect);
+    kUV = rotateUV(kUV, time_f * 0.23, m, aspect);
+    kUV = diamondFold(kUV, m, aspect);
+    vec2 p = (kUV - m) * ar;
+    vec2 q = abs(p);
+    if (q.y > q.x) q = q.yx;
+    float base = 1.82 + 0.18 * pingPong(sin(time_f * 0.2) * (PI * time_f), 5.0);
+    float period = log(base) * pingPong(time_f * PI, 5.0);
+    float tz = time_f * 0.65;
+    float rD = diamondRadius(p) + 1e-6;
+    float ang = atan(q.y, q.x) + tz * 0.35 + 0.35 * sin(rD * 18.0 + time_f * 0.6);
+    float k = fract((log(rD) - tz) / period);
+    float rw = exp(k * period);
+    vec2 pwrap = vec2(cos(ang), sin(ang)) * rw;
+    vec2 u0 = fract(pwrap / ar + m);
+    vec2 u1 = fract((pwrap * 1.045) / ar + m);
+    vec2 u2 = fract((pwrap * 0.955) / ar + m);
+    vec2 dir = normalize(pwrap + 1e-6);
+    vec2 off = dir * (0.0015 + 0.001 * sin(time_f * 1.3)) * vec2(1.0, 1.0 / aspect);
+    float vign = 1.0 - smoothstep(0.75, 1.2, length((TexCoord - m) * ar));
+    vign = mix(0.9, 1.15, vign);
+    vec3 rC = preBlendColor(u0 + off);
+    vec3 gC = preBlendColor(u1);
+    vec3 bC = preBlendColor(u2 - off);
+    vec3 kaleidoRGB = vec3(rC.r, gC.g, bC.b);
+    float ring = smoothstep(0.0, 0.7, sin(log(rD + 1e-3) * 9.5 + time_f * 1.2));
+    ring = ring * pingPong((time_f * PI), 5.0);
+    float pulse = 0.5 + 0.5 * sin(time_f * 2.0 + rD * 28.0 + k * 12.0);
+    vec3 outCol = kaleidoRGB;
+    outCol *= (0.75 + 0.25 * ring) * (0.85 + 0.15 * pulse) * vign;
+    vec3 bloom = outCol * outCol * 0.18 + pow(max(outCol - 0.6, 0.0), vec3(2.0)) * 0.12;
+
+    vec2 wh0 = wormholeUV(TexCoord, m, aspect, time_f);
+    vec2 wh1 = wormholeUV(TexCoord + vec2(0.0009, 0.0), m, aspect, time_f + 0.03);
+    vec2 wh2 = wormholeUV(TexCoord - vec2(0.0009, 0.0), m, aspect, time_f - 0.03);
+    vec3 whR = preBlendColor(wh0 + off);
+    vec3 whG = preBlendColor(wh1);
+    vec3 whB = preBlendColor(wh2 - off);
+    vec3 wormRGB = vec3(whR.r, whG.g, whB.b);
+
+    float rCenter = length((TexCoord - m) * ar);
+    float throat = smoothstep(0.38, 0.06, rCenter);
+    float swirlGate = smoothstep(0.9, 1.6, time_f * 0.25 + 0.35 * sin(time_f * 0.7));
+    float gate = clamp(throat * (0.65 + 0.35 * pingPong(time_f * PI, 5.0)) + swirlGate * 0.15, 0.0, 1.0);
+
+    outCol += bloom;
+    outCol = mix(outCol, baseCol, pingPong(pulse * PI, 5.0) * 0.18);
+    outCol = mix(outCol, wormRGB, gate * 0.85);
+    outCol = clamp(outCol, vec3(0.05), vec3(0.97));
+    vec3 finalRGB = mix(baseTex.rgb, outCol, pingPong(glow * PI, 5.0) * 0.8);
+    color = vec4(finalRGB, baseTex.a);
+}
+)SHD";
+inline const char *src_frac_shader03_wormhole_amp = R"SHD(#version 300 es
+precision highp float;
+out vec4 color;
+in vec2 TexCoord;
+
+uniform sampler2D textTexture;
+uniform vec2 iResolution;
+uniform float time_f;
+uniform vec4 iMouse;
+)SHD" COMMON_UNIFORMS COLOR_HELPERS R"SHD(
+uniform float amp;
+uniform float uamp;
+
+const float PI = 3.1415926535897932384626433832795;
+
+float gAmp01;
+float gSlow;
+float gFast;
+float gDetail;
+float gInstAmp;
+
+float pingPong(float x, float length) {
+    float m = mod(x, length * 2.0);
+    return m <= length ? m : length * 2.0 - m;
+}
+
+vec3 hsv2rgb(vec3 c) {
+    vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+
+vec2 rotateUV(vec2 uv, float angle, vec2 c, float aspect) {
+    float s = sin(angle), cc = cos(angle);
+    vec2 p = uv - c;
+    p.x *= aspect;
+    p = mat2(cc, -s, s, cc) * p;
+    p.x /= aspect;
+    return p + c;
+}
+
+vec2 reflectUV(vec2 uv, float segments, vec2 c, float aspect) {
+    vec2 p = uv - c;
+    p.x *= aspect;
+    float ang = atan(p.y, p.x);
+    float rad = length(p);
+    float stepA = 6.28318530718 / segments;
+    ang = mod(ang, stepA);
+    ang = abs(ang - stepA * 0.5);
+    vec2 r = vec2(cos(ang), sin(ang)) * rad;
+    r.x /= aspect;
+    return r + c;
+}
+
+vec2 fractalFold(vec2 uv, float zoom, float t, vec2 c, float aspect) {
+    vec2 p = uv;
+    for (int i = 0; i < 6; i++) {
+        p = abs((p - c) * (zoom + 0.15 * sin(t * 0.35 + float(i)))) - 0.5 + c;
+        p = rotateUV(p, t * 0.12 + float(i) * 0.07, c, aspect);
+    }
+    return p;
+}
+
+vec3 neonPalette(float t) {
+    vec3 pink = vec3(1.0, 0.15, 0.75);
+    vec3 blue = vec3(0.10, 0.55, 1.0);
+    vec3 green = vec3(0.10, 1.00, 0.45);
+    float ph = fract(t * 0.08);
+    vec3 k1 = mix(pink, blue, smoothstep(0.00, 0.33, ph));
+    vec3 k2 = mix(blue, green, smoothstep(0.33, 0.66, ph));
+    vec3 k3 = mix(green, pink, smoothstep(0.66, 1.00, ph));
+    float a = step(ph, 0.33);
+    float b = step(0.33, ph) * step(ph, 0.66);
+    float c = step(0.66, ph);
+    return normalize(a * k1 + b * k2 + c * k3) * 1.05;
+}
+
+vec3 softTone(vec3 c) {
+    c = pow(max(c, 0.0), vec3(0.95));
+    float l = dot(c, vec3(0.299, 0.587, 0.114));
+    c = mix(vec3(l), c, 0.9);
+    return clamp(c, 0.0, 1.0);
+}
+
+vec3 tentBlur3(sampler2D img, vec2 uv, vec2 res) {
+    vec2 ts = 1.0 / res;
+    vec3 s00 = textureGrad(img, uv + ts * vec2(-1.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s10 = textureGrad(img, uv + ts * vec2(0.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s20 = textureGrad(img, uv + ts * vec2(1.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s01 = textureGrad(img, uv + ts * vec2(-1.0, 0.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s11 = textureGrad(img, uv, dFdx(uv), dFdy(uv)).rgb;
+    vec3 s21 = textureGrad(img, uv + ts * vec2(1.0, 0.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s02 = textureGrad(img, uv + ts * vec2(-1.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s12 = textureGrad(img, uv + ts * vec2(0.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s22 = textureGrad(img, uv + ts * vec2(1.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    return (s00 + 2.0 * s10 + s20 + 2.0 * s01 + 4.0 * s11 + 2.0 * s21 + s02 + 2.0 * s12 + s22) / 16.0;
+}
+
+vec3 preBlendColor(vec2 uv) {
+    vec3 tex = tentBlur3(textTexture, uv, iResolution);
+    float aspect = iResolution.x / iResolution.y;
+    vec2 p = (uv - 0.5) * vec2(aspect, 1.0);
+    float r = length(p);
+    float t = time_f;
+    vec3 neon = neonPalette(t + r * 1.3);
+    float neonAmt = smoothstep(0.1, 0.8, r);
+    neonAmt = 0.3 + 0.4 * (1.0 - neonAmt);
+    vec3 grad = mix(tex, neon, neonAmt);
+    grad = mix(grad, tex, 0.2);
+    grad = softTone(grad);
+    return grad;
+}
+
+float diamondRadius(vec2 p) {
+    float f = mix(0.5, 2.0, gAmp01);
+    p = sin(abs(p * f));
+    return max(p.x, p.y);
+}
+
+vec2 diamondFold(vec2 uv, vec2 c, float aspect) {
+    vec2 p = (uv - c) * vec2(aspect, 1.0);
+    p = abs(p);
+    if (p.y > p.x) p = p.yx;
+    p.x /= aspect;
+    return p + c;
+}
+
+vec2 wormholeUV(vec2 uv, vec2 c, float aspect, float t) {
+    vec2 ar = vec2(aspect, 1.0);
+    vec2 p = (uv - c) * ar;
+    float r = length(p) + 1e-6;
+    float a = atan(p.y, p.x);
+
+    float swirl = 0.22 / r;
+
+    float spinBase = 0.15 + 0.35 * gAmp01;
+    float spinHit  = 0.2 + 2.2 * gInstAmp;
+
+    a += t * (spinBase + spinHit) + swirl;
+
+    float z = 0.65 + 0.35 * sin(t * 0.6)
+              + 0.15 * sin(r * 12.0 - t * (2.5 + 1.5 * gAmp01 + 2.0 * gInstAmp));
+    float rr = 1.0 / (r * 3.5 + 0.06) + 0.08 * z;
+
+    vec2 q = vec2(cos(a), sin(a)) * rr;
+    q /= ar;
+    return fract(q + c);
+}
+
+vec3 limitHighlights(vec3 c) {
+    float m = max(c.r, max(c.g, c.b));
+    if (m > 0.9) c *= 0.9 / m;
+    return c;
+}
+
+void main(void) {
+    float aAcc = clamp(amp, 0.0, 4.0);
+    float aInst = clamp(uamp, 0.0, 4.0);
+    float ampMix = clamp(aAcc * 0.6 + aInst * 1.4, 0.0, 4.0);
+    gAmp01 = clamp(ampMix / 2.5, 0.0, 1.0);
+    gInstAmp = clamp(aInst / 2.5, 0.0, 1.0);
+
+    gSlow   = time_f * mix(0.15, 0.7, gAmp01);
+    gFast   = time_f * mix(0.6,  3.5, gAmp01);
+    gDetail = time_f * mix(0.3,  2.0, gAmp01);
+
+    vec4 baseTex = texture(textTexture, TexCoord);
+
+    float aspect = iResolution.x / iResolution.y;
+    vec2 uv = TexCoord * 2.0 - 1.0;
+    uv.x *= aspect;
+    float r = pingPong(sin(length(uv) * gSlow), 5.0);
+    float radius = sqrt(aspect * aspect + 1.0) + 0.5;
+    float glow = smoothstep(radius, radius - 0.25, r);
+
+    vec2 m = (iMouse.z > 0.5) ? (iMouse.xy / iResolution) : vec2(0.5);
+    vec2 ar = vec2(aspect, 1.0);
+
+    vec3 baseCol = preBlendColor(TexCoord);
+
+    float seg = 4.0 + 2.0 * sin(gSlow * 0.33 + gAmp01 * 2.0);
+    vec2 kUV = reflectUV(TexCoord, seg, m, aspect);
+    kUV = diamondFold(kUV, m, aspect);
+
+    float foldZoom = 1.45 + 0.55 * sin(gSlow * 0.42 + gAmp01 * 3.0);
+    kUV = fractalFold(kUV, foldZoom, gDetail, m, aspect);
+    kUV = rotateUV(kUV, gSlow * 0.23 + gAmp01 * 1.1, m, aspect);
+    kUV = diamondFold(kUV, m, aspect);
+
+    vec2 p = (kUV - m) * ar;
+    vec2 q = abs(p);
+    if (q.y > q.x) q = q.yx;
+
+    float base = 1.82 + 0.18 * pingPong(sin(gSlow * 0.2) * (PI * gSlow), 5.0);
+    float period = log(base) * pingPong(gSlow * PI, 5.0);
+    float tz = gSlow * 0.65;
+    float rD = diamondRadius(p) + 1e-6;
+
+    float ang = atan(q.y, q.x) + tz * 0.35
+              + 0.35 * sin(rD * 18.0 + gFast * 0.6);
+    float k = fract((log(rD) - tz) / period);
+    float rw = exp(k * period);
+    vec2 pwrap = vec2(cos(ang), sin(ang)) * rw;
+
+    vec2 u0 = fract(pwrap / ar + m);
+    vec2 u1 = fract((pwrap * 1.045) / ar + m);
+    vec2 u2 = fract((pwrap * 0.955) / ar + m);
+    vec2 dir = normalize(pwrap + 1e-6);
+    vec2 off = dir * (0.0015 + 0.001 * sin(gFast * 1.3))
+              * vec2(1.0, 1.0 / aspect);
+
+    float vign = 1.0 - smoothstep(0.75, 1.2, length((TexCoord - m) * ar));
+    vign = mix(0.9, 1.15, vign);
+
+    vec3 rC = preBlendColor(u0 + off);
+    vec3 gC = preBlendColor(u1);
+    vec3 bC = preBlendColor(u2 - off);
+    vec3 kaleidoRGB = vec3(rC.r, gC.g, bC.b);
+
+    float ring = smoothstep(0.0, 0.7, sin(log(rD + 1e-3) * 9.5 + gFast * 1.2));
+    ring = ring * pingPong(gSlow * PI, 5.0);
+
+    float pulse = 0.5 + 0.5 * sin(gFast * 2.0 + rD * 28.0 + k * 12.0);
+    pulse *= mix(0.4, 1.4, gAmp01);
+
+    vec3 outCol = kaleidoRGB;
+    outCol *= (0.75 + 0.25 * ring) * (0.85 + 0.15 * pulse) * vign;
+
+    vec3 bloom = outCol * outCol * 0.10
+               + pow(max(outCol - 0.6, 0.0), vec3(2.0)) * 0.07;
+
+    vec2 wh0 = wormholeUV(TexCoord,                    m, aspect, gSlow);
+    vec2 wh1 = wormholeUV(TexCoord + vec2(0.0009, 0.0), m, aspect, gSlow + 0.03);
+    vec2 wh2 = wormholeUV(TexCoord - vec2(0.0009, 0.0), m, aspect, gSlow - 0.03);
+
+    vec3 whR = preBlendColor(wh0 + off);
+    vec3 whG = preBlendColor(wh1);
+    vec3 whB = preBlendColor(wh2 - off);
+    vec3 wormRGB = vec3(whR.r, whG.g, whB.b);
+
+    float rCenter = length((TexCoord - m) * ar);
+    float throat = smoothstep(0.38, 0.06, rCenter);
+
+    float swirlGate = smoothstep(0.9, 1.6,
+        gSlow * 0.25 + 0.35 * sin(gSlow * 0.7));
+
+    float gateBase = clamp(throat * (0.55 + 0.45 * pingPong(gSlow * PI, 5.0))
+                           + swirlGate * 0.15, 0.0, 1.0);
+
+    float hitBoost = clamp(aInst * 0.6, 0.0, 1.2);
+    float gate = clamp(gateBase * (0.6 + 0.9 * gAmp01) + hitBoost, 0.0, 1.0);
+
+    outCol += bloom;
+    outCol = mix(outCol, baseCol, pingPong(pulse * PI, 5.0) * 0.18);
+    outCol = mix(outCol, wormRGB, gate * 0.85);
+    outCol = clamp(outCol, vec3(0.05), vec3(0.97));
+    outCol *= mix(0.85, 1.20, gAmp01);
+
+    vec3 finalRGB = mix(baseTex.rgb, outCol, pingPong(glow * PI, 5.0) * 0.8);
+    finalRGB = limitHighlights(finalRGB);
+    finalRGB = clamp(finalRGB, 0.0, 1.0);
+
+    color = vec4(finalRGB, baseTex.a);
+}
+)SHD";
+inline const char *src_frac_shader03_wormhole2 = R"SHD(#version 300 es
+precision highp float;
+out vec4 color;
+in vec2 TexCoord;
+
+uniform sampler2D textTexture;
+uniform vec2 iResolution;
+uniform float time_f;
+uniform vec4 iMouse;
+)SHD" COMMON_UNIFORMS COLOR_HELPERS R"SHD(
+const float PI = 3.1415926535897932384626433832795;
+
+float pingPong(float x, float length) {
+    float m = mod(x, length * 2.0);
+    return m <= length ? m : length * 2.0 - m;
+}
+
+vec3 hsv2rgb(vec3 c) {
+    vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+
+vec2 rotateUV(vec2 uv, float angle, vec2 c, float aspect) {
+    float s = sin(angle), cc = cos(angle);
+    vec2 p = uv - c;
+    p.x *= aspect;
+    p = mat2(cc, -s, s, cc) * p;
+    p.x /= aspect;
+    return p + c;
+}
+
+vec2 reflectUV(vec2 uv, float segments, vec2 c, float aspect) {
+    vec2 p = uv - c;
+    p.x *= aspect;
+    float ang = atan(p.y, p.x);
+    float rad = length(p);
+    float stepA = 6.28318530718 / segments;
+    ang = mod(ang, stepA);
+    ang = abs(ang - stepA * 0.5);
+    vec2 r = vec2(cos(ang), sin(ang)) * rad;
+    r.x /= aspect;
+    return r + c;
+}
+
+vec2 fractalFold(vec2 uv, float zoom, float t, vec2 c, float aspect) {
+    vec2 p = uv;
+    for (int i = 0; i < 6; i++) {
+        p = abs((p - c) * (zoom + 0.15 * sin(t * 0.35 + float(i)))) - 0.5 + c;
+        p = rotateUV(p, t * 0.12 + float(i) * 0.07, c, aspect);
+    }
+    return p;
+}
+
+vec3 neonPalette(float t) {
+    vec3 pink = vec3(1.0, 0.15, 0.75);
+    vec3 blue = vec3(0.10, 0.55, 1.0);
+    vec3 green = vec3(0.10, 1.00, 0.45);
+    float ph = fract(t * 0.08);
+    vec3 k1 = mix(pink, blue, smoothstep(0.00, 0.33, ph));
+    vec3 k2 = mix(blue, green, smoothstep(0.33, 0.66, ph));
+    vec3 k3 = mix(green, pink, smoothstep(0.66, 1.00, ph));
+    float a = step(ph, 0.33);
+    float b = step(0.33, ph) * step(ph, 0.66);
+    float c = step(0.66, ph);
+    return normalize(a * k1 + b * k2 + c * k3) * 1.05;
+}
+
+vec3 softTone(vec3 c) {
+    c = pow(max(c, 0.0), vec3(0.95));
+    float l = dot(c, vec3(0.299, 0.587, 0.114));
+    c = mix(vec3(l), c, 0.9);
+    return clamp(c, 0.0, 1.0);
+}
+
+vec3 tentBlur3(sampler2D img, vec2 uv, vec2 res) {
+    vec2 ts = 1.0 / res;
+    vec3 s00 = textureGrad(img, uv + ts * vec2(-1.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s10 = textureGrad(img, uv + ts * vec2(0.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s20 = textureGrad(img, uv + ts * vec2(1.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s01 = textureGrad(img, uv + ts * vec2(-1.0, 0.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s11 = textureGrad(img, uv, dFdx(uv), dFdy(uv)).rgb;
+    vec3 s21 = textureGrad(img, uv + ts * vec2(1.0, 0.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s02 = textureGrad(img, uv + ts * vec2(-1.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s12 = textureGrad(img, uv + ts * vec2(0.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s22 = textureGrad(img, uv + ts * vec2(1.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    return (s00 + 2.0 * s10 + s20 + 2.0 * s01 + 4.0 * s11 + 2.0 * s21 + s02 + 2.0 * s12 + s22) / 16.0;
+}
+
+vec3 preBlendColor(vec2 uv) {
+    vec3 tex = tentBlur3(textTexture, uv, iResolution);
+    float aspect = iResolution.x / iResolution.y;
+    vec2 p = (uv - 0.5) * vec2(aspect, 1.0);
+    float r = length(p);
+    float t = time_f;
+    vec3 neon = neonPalette(t + r * 1.3);
+    float neonAmt = smoothstep(0.1, 0.8, r);
+    neonAmt = 0.3 + 0.4 * (1.0 - neonAmt);
+    vec3 grad = mix(tex, neon, neonAmt);
+    grad = mix(grad, tex, 0.2);
+    grad = softTone(grad);
+    return grad;
+}
+
+float diamondRadius(vec2 p) {
+    p = sin(abs(p));
+    return max(p.x, p.y);
+}
+
+vec2 diamondFold(vec2 uv, vec2 c, float aspect) {
+    vec2 p = (uv - c) * vec2(aspect, 1.0);
+    p = abs(p);
+    if (p.y > p.x) p = p.yx;
+    p.x /= aspect;
+    return p + c;
+}
+
+vec2 wormholeUV(vec2 uv, vec2 c, float aspect, float t) {
+    vec2 ar = vec2(aspect, 1.0);
+    vec2 p = (uv - c) * ar;
+    float r = length(p) + 1e-6;
+    float a = atan(p.y, p.x);
+    float swirl = 0.22 / r;
+    a += t * 0.35 + swirl;
+    float z = 0.65 + 0.35 * sin(t * 0.6) + 0.15 * sin(r * 12.0 - t * 3.0);
+    float rr = 1.0 / (r * 3.5 + 0.06) + 0.08 * z;
+    vec2 q = vec2(cos(a), sin(a)) * rr;
+    q /= ar;
+    return fract(q + c);
+}
+
+void main(void) {
+    vec4 baseTex = texture(textTexture, TexCoord);
+    vec2 uv = TexCoord * 2.0 - 1.0;
+    float aspect = iResolution.x / iResolution.y;
+    uv.x *= aspect;
+    float r = pingPong(sin(length(uv) * time_f), 5.0);
+    float radius = sqrt(aspect * aspect + 1.0) + 0.5;
+    float glow = smoothstep(radius, radius - 0.25, r);
+    vec2 m = (iMouse.z > 0.5) ? (iMouse.xy / iResolution) : vec2(0.5);
+    vec2 ar = vec2(aspect, 1.0);
+    vec3 baseCol = preBlendColor(TexCoord);
+    float seg = 4.0 + 2.0 * sin(time_f * 0.33);
+    vec2 kUV = reflectUV(TexCoord, seg, m, aspect);
+    kUV = diamondFold(kUV, m, aspect);
+    float foldZoom = 1.45 + 0.55 * sin(time_f * 0.42);
+    kUV = fractalFold(kUV, foldZoom, time_f, m, aspect);
+    kUV = rotateUV(kUV, time_f * 0.23, m, aspect);
+    kUV = diamondFold(kUV, m, aspect);
+    vec2 p = (kUV - m) * ar;
+    vec2 q = abs(p);
+    if (q.y > q.x) q = q.yx;
+    float base = 1.82 + 0.18 * pingPong(sin(time_f * 0.2) * (PI * time_f), 5.0);
+    float period = log(base) * pingPong(time_f * PI, 5.0);
+    float tz = time_f * 0.65;
+    float rD = diamondRadius(p) + 1e-6;
+    float ang = atan(q.y, q.x) + tz * 0.35 + 0.35 * sin(rD * 18.0 + time_f * 0.6);
+    float k = fract((log(rD) - tz) / period);
+    float rw = exp(k * period);
+    vec2 pwrap = vec2(cos(ang), sin(ang)) * rw;
+    vec2 u0 = fract(pwrap / ar + m);
+    vec2 u1 = fract((pwrap * 1.045) / ar + m);
+    vec2 u2 = fract((pwrap * 0.955) / ar + m);
+    vec2 dir = normalize(pwrap + 1e-6);
+    vec2 off = dir * (0.0015 + 0.001 * sin(time_f * 1.3)) * vec2(1.0, 1.0 / aspect);
+    float vign = 1.0 - smoothstep(0.75, 1.2, length((TexCoord - m) * ar));
+    vign = mix(0.9, 1.15, vign);
+    vec3 rC = preBlendColor(u0 + off);
+    vec3 gC = preBlendColor(u1);
+    vec3 bC = preBlendColor(u2 - off);
+    vec3 kaleidoRGB = vec3(rC.r, gC.g, bC.b);
+    float ring = smoothstep(0.0, 0.7, sin(log(rD + 1e-3) * 9.5 + time_f * 1.2));
+    ring = ring * pingPong((time_f * PI), 5.0);
+    float pulse = 0.5 + 0.5 * sin(time_f * 2.0 + rD * 28.0 + k * 12.0);
+    vec3 outCol = kaleidoRGB;
+    outCol *= (0.75 + 0.25 * ring) * (0.85 + 0.15 * pulse) * vign;
+    vec3 bloom = outCol * outCol * 0.18 + pow(max(outCol - 0.6, 0.0), vec3(2.0)) * 0.12;
+
+    vec2 wh0 = wormholeUV(TexCoord, m, aspect, pingPong((time_f * PI), 5.0));
+    vec2 wh1 = wormholeUV(TexCoord + vec2(0.0009, 0.0), m, aspect, time_f + 0.03);
+    vec2 wh2 = wormholeUV(TexCoord - vec2(0.0009, 0.0), m, aspect, time_f - 0.03);
+    vec3 whR = preBlendColor(wh0 + off);
+    vec3 whG = preBlendColor(wh1);
+    vec3 whB = preBlendColor(wh2 - off);
+    vec3 wormRGB = vec3(whR.r, whG.g, whB.b);
+
+    float rCenter = length((TexCoord - m) * ar);
+    float d00 = length(ar * (vec2(0.0, 0.0) - m));
+    float d10 = length(ar * (vec2(1.0, 0.0) - m));
+    float d01 = length(ar * (vec2(0.0, 1.0) - m));
+    float d11 = length(ar * (vec2(1.0, 1.0) - m));
+    float cornerR = max(max(d00, d10), max(d01, d11));
+    float phase = pingPong(time_f * 0.6, 1.0);
+    float holeR = mix(max(1.5 / max(iResolution.x, iResolution.y), 0.0008), cornerR, phase);
+    float rimW = mix(0.02, 0.12, smoothstep(0.0, 1.0, phase)) * cornerR;
+    float gate = smoothstep(holeR, holeR - rimW, rCenter);
+
+    outCol += bloom;
+    outCol = mix(outCol, baseCol, pingPong(pulse * PI, 5.0) * 0.18);
+    outCol = mix(outCol, wormRGB, gate * 0.95);
+    outCol = clamp(outCol, vec3(0.05), vec3(0.97));
+    vec3 finalRGB = mix(baseTex.rgb, outCol, pingPong(glow * PI, 5.0) * 0.8);
+    color = vec4(finalRGB, baseTex.a);
+}
+)SHD";
+inline const char *src_frac_shader03_wormhole3 = R"SHD(#version 300 es
+precision highp float;
+out vec4 color;
+in vec2 TexCoord;
+
+uniform sampler2D textTexture;
+uniform vec2 iResolution;
+uniform float time_f;
+uniform vec4 iMouse;
+)SHD" COMMON_UNIFORMS COLOR_HELPERS R"SHD(
+const float PI = 3.1415926535897932384626433832795;
+
+float pingPong(float x, float length) {
+    float m = mod(x, length * 2.0);
+    return m <= length ? m : length * 2.0 - m;
+}
+
+vec3 hsv2rgb(vec3 c) {
+    vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+
+vec2 rotateUV(vec2 uv, float angle, vec2 c, float aspect) {
+    float s = sin(angle), cc = cos(angle);
+    vec2 p = uv - c;
+    p.x *= aspect;
+    p = mat2(cc, -s, s, cc) * p;
+    p.x /= aspect;
+    return p + c;
+}
+
+vec2 reflectUV(vec2 uv, float segments, vec2 c, float aspect) {
+    vec2 p = uv - c;
+    p.x *= aspect;
+    float ang = atan(p.y, p.x);
+    float rad = length(p);
+    float stepA = 6.28318530718 / segments;
+    ang = mod(ang, stepA);
+    ang = abs(ang - stepA * 0.5);
+    vec2 r = vec2(cos(ang), sin(ang)) * rad;
+    r.x /= aspect;
+    return r + c;
+}
+
+vec2 fractalFold(vec2 uv, float zoom, float t, vec2 c, float aspect) {
+    vec2 p = uv;
+    for (int i = 0; i < 6; i++) {
+        p = abs((p - c) * (zoom + 0.15 * sin(t * 0.35 + float(i)))) - 0.5 + c;
+        p = rotateUV(p, t * 0.12 + float(i) * 0.07, c, aspect);
+    }
+    return p;
+}
+
+vec3 neonPalette(float t) {
+    vec3 pink = vec3(1.0, 0.15, 0.75);
+    vec3 blue = vec3(0.10, 0.55, 1.0);
+    vec3 green = vec3(0.10, 1.00, 0.45);
+    float ph = fract(t * 0.08);
+    vec3 k1 = mix(pink, blue, smoothstep(0.00, 0.33, ph));
+    vec3 k2 = mix(blue, green, smoothstep(0.33, 0.66, ph));
+    vec3 k3 = mix(green, pink, smoothstep(0.66, 1.00, ph));
+    float a = step(ph, 0.33);
+    float b = step(0.33, ph) * step(ph, 0.66);
+    float c = step(0.66, ph);
+    return normalize(a * k1 + b * k2 + c * k3) * 1.05;
+}
+
+vec3 softTone(vec3 c) {
+    c = pow(max(c, 0.0), vec3(0.95));
+    float l = dot(c, vec3(0.299, 0.587, 0.114));
+    c = mix(vec3(l), c, 0.9);
+    return clamp(c, 0.0, 1.0);
+}
+
+vec3 tentBlur3(sampler2D img, vec2 uv, vec2 res) {
+    vec2 ts = 1.0 / res;
+    vec3 s00 = textureGrad(img, uv + ts * vec2(-1.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s10 = textureGrad(img, uv + ts * vec2(0.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s20 = textureGrad(img, uv + ts * vec2(1.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s01 = textureGrad(img, uv + ts * vec2(-1.0, 0.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s11 = textureGrad(img, uv, dFdx(uv), dFdy(uv)).rgb;
+    vec3 s21 = textureGrad(img, uv + ts * vec2(1.0, 0.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s02 = textureGrad(img, uv + ts * vec2(-1.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s12 = textureGrad(img, uv + ts * vec2(0.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s22 = textureGrad(img, uv + ts * vec2(1.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    return (s00 + 2.0 * s10 + s20 + 2.0 * s01 + 4.0 * s11 + 2.0 * s21 + s02 + 2.0 * s12 + s22) / 16.0;
+}
+
+vec3 preBlendColor(vec2 uv) {
+    vec3 tex = tentBlur3(textTexture, uv, iResolution);
+    float aspect = iResolution.x / iResolution.y;
+    vec2 p = (uv - 0.5) * vec2(aspect, 1.0);
+    float r = length(p);
+    float t = time_f;
+    vec3 neon = neonPalette(t + r * 1.3);
+    float neonAmt = smoothstep(0.1, 0.8, r);
+    neonAmt = 0.3 + 0.4 * (1.0 - neonAmt);
+    vec3 grad = mix(tex, neon, neonAmt);
+    grad = mix(grad, tex, 0.2);
+    grad = softTone(grad);
+    return grad;
+}
+
+float diamondRadius(vec2 p) {
+    p = sin(abs(p));
+    return max(p.x, p.y);
+}
+
+vec2 diamondFold(vec2 uv, vec2 c, float aspect) {
+    vec2 p = (uv - c) * vec2(aspect, 1.0);
+    p = abs(p);
+    if (p.y > p.x) p = p.yx;
+    p.x /= aspect;
+    return p + c;
+}
+
+vec2 wormholeUV(vec2 uv, vec2 c, float aspect, float t) {
+    vec2 ar = vec2(aspect, 1.0);
+    vec2 p = (uv - c) * ar;
+    float r = length(p) + 1e-6;
+    float a = atan(p.y, p.x);
+    float swirl = 0.22 / r;
+    a += t * 0.35 + swirl;
+    float z = 0.65 + 0.35 * sin(t * 0.6) + 0.15 * sin(r * 12.0 - t * 3.0);
+    float rr = 1.0 / (r * 3.5 + 0.06) + 0.08 * z;
+    vec2 q = vec2(cos(a), sin(a)) * rr;
+    q /= ar;
+    return fract(q + c);
+}
+
+void main(void) {
+    vec4 baseTex = texture(textTexture, TexCoord);
+    vec2 uv = TexCoord * 2.0 - 1.0;
+    float aspect = iResolution.x / iResolution.y;
+    uv.x *= aspect;
+    float r = pingPong(sin(length(uv) * time_f), 5.0);
+    float radius = sqrt(aspect * aspect + 1.0) + 0.5;
+    float glow = smoothstep(radius, radius - 0.25, r);
+    vec2 m = (iMouse.z > 0.5) ? (iMouse.xy / iResolution) : vec2(0.5);
+    vec2 ar = vec2(aspect, 1.0);
+    vec3 baseCol = preBlendColor(TexCoord);
+    float seg = 4.0 + 2.0 * sin(time_f * 0.33);
+    vec2 kUV = reflectUV(TexCoord, seg, m, aspect);
+    kUV = diamondFold(kUV, m, aspect);
+    float foldZoom = 1.45 + 0.55 * sin(time_f * 0.42);
+    kUV = fractalFold(kUV, foldZoom, time_f, m, aspect);
+    kUV = rotateUV(kUV, time_f * 0.23, m, aspect);
+    kUV = diamondFold(kUV, m, aspect);
+    vec2 p = (kUV - m) * ar;
+    vec2 q = abs(p);
+    if (q.y > q.x) q = q.yx;
+    float base = 1.82 + 0.18 * pingPong(sin(time_f * 0.2) * (PI * time_f), 5.0);
+    float period = log(base) * pingPong(time_f * PI, 5.0);
+    float tz = time_f * 0.65;
+    float rD = diamondRadius(p) + 1e-6;
+    float ang = atan(q.y, q.x) + tz * 0.35 + 0.35 * sin(rD * 18.0 + time_f * 0.6);
+    float k = fract((log(rD) - tz) / period);
+    float rw = exp(k * period);
+    vec2 pwrap = vec2(cos(ang), sin(ang)) * rw;
+    vec2 u0 = fract(pwrap / ar + m);
+    vec2 u1 = fract((pwrap * 1.045) / ar + m);
+    vec2 u2 = fract((pwrap * 0.955) / ar + m);
+    vec2 dir = normalize(pwrap + 1e-6);
+    vec2 off = dir * (0.0015 + 0.001 * sin(time_f * 1.3)) * vec2(1.0, 1.0 / aspect);
+    float vign = 1.0 - smoothstep(0.75, 1.2, length((TexCoord - m) * ar));
+    vign = mix(0.9, 1.15, vign);
+    vec3 rC = preBlendColor(u0 + off);
+    vec3 gC = preBlendColor(u1);
+    vec3 bC = preBlendColor(u2 - off);
+    vec3 kaleidoRGB = vec3(rC.r, gC.g, bC.b);
+    float ring = smoothstep(0.0, 0.7, sin(log(rD + 1e-3) * 9.5 + time_f * 1.2));
+    ring = ring * pingPong((time_f * PI), 5.0);
+    float pulse = 0.5 + 0.5 * sin(time_f * 2.0 + rD * 28.0 + k * 12.0);
+    vec3 outCol = kaleidoRGB;
+    outCol *= (0.75 + 0.25 * ring) * (0.85 + 0.15 * pulse) * vign;
+    vec3 bloom = outCol * outCol * 0.18 + pow(max(outCol - 0.6, 0.0), vec3(2.0)) * 0.12;
+
+    vec2 wh0 = wormholeUV(TexCoord, m, aspect, pingPong((time_f * PI), 5.0));
+    vec2 wh1 = wormholeUV(TexCoord + vec2(0.0009, 0.0), m, aspect, time_f + 0.03);
+    vec2 wh2 = wormholeUV(TexCoord - vec2(0.0009, 0.0), m, aspect, time_f - 0.03);
+    vec3 whR = preBlendColor(wh0 + off);
+    vec3 whG = preBlendColor(wh1);
+    vec3 whB = preBlendColor(wh2 - off);
+    vec3 wormRGB = vec3(whR.r, whG.g, whB.b);
+
+    outCol += bloom;
+    outCol = wormRGB;
+
+    vec3 finalRGB = outCol;
+    color = vec4(finalRGB, baseTex.a);
+}
+)SHD";
+inline const char *src_frac_shader03_wormhole4 = R"SHD(#version 300 es
+precision highp float;
+out vec4 color;
+in vec2 TexCoord;
+
+uniform sampler2D textTexture;
+uniform vec2 iResolution;
+uniform float time_f;
+uniform vec4 iMouse;
+)SHD" COMMON_UNIFORMS COLOR_HELPERS R"SHD(
+const float PI = 3.1415926535897932384626433832795;
+
+float pingPong(float x, float length) {
+    float m = mod(x, length * 2.0);
+    return m <= length ? m : length * 2.0 - m;
+}
+
+vec3 hsv2rgb(vec3 c) {
+    vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+
+vec2 rotateUV(vec2 uv, float angle, vec2 c, float aspect) {
+    float s = sin(angle), cc = cos(angle);
+    vec2 p = uv - c;
+    p.x *= aspect;
+    p = mat2(cc, -s, s, cc) * p;
+    p.x /= aspect;
+    return p + c;
+}
+
+vec2 reflectUV(vec2 uv, float segments, vec2 c, float aspect) {
+    vec2 p = uv - c;
+    p.x *= aspect;
+    float ang = atan(p.y, p.x);
+    float rad = length(p);
+    float stepA = 6.28318530718 / segments;
+    ang = mod(ang, stepA);
+    ang = abs(ang - stepA * 0.5);
+    vec2 r = vec2(cos(ang), sin(ang)) * rad;
+    r.x /= aspect;
+    return r + c;
+}
+
+vec2 fractalFold(vec2 uv, float zoom, float t, vec2 c, float aspect) {
+    vec2 p = uv;
+    for (int i = 0; i < 6; i++) {
+        p = abs((p - c) * (zoom + 0.15 * sin(t * 0.35 + float(i)))) - 0.5 + c;
+        p = rotateUV(p, t * 0.12 + float(i) * 0.07, c, aspect);
+    }
+    return p;
+}
+
+vec3 neonPalette(float t) {
+    vec3 pink = vec3(1.0, 0.15, 0.75);
+    vec3 blue = vec3(0.10, 0.55, 1.0);
+    vec3 green = vec3(0.10, 1.00, 0.45);
+    float ph = fract(t * 0.08);
+    vec3 k1 = mix(pink, blue, smoothstep(0.00, 0.33, ph));
+    vec3 k2 = mix(blue, green, smoothstep(0.33, 0.66, ph));
+    vec3 k3 = mix(green, pink, smoothstep(0.66, 1.00, ph));
+    float a = step(ph, 0.33);
+    float b = step(0.33, ph) * step(ph, 0.66);
+    float c = step(0.66, ph);
+    return normalize(a * k1 + b * k2 + c * k3) * 1.05;
+}
+
+vec3 softTone(vec3 c) {
+    c = pow(max(c, 0.0), vec3(0.95));
+    float l = dot(c, vec3(0.299, 0.587, 0.114));
+    c = mix(vec3(l), c, 0.9);
+    return clamp(c, 0.0, 1.0);
+}
+
+vec3 tentBlur3(sampler2D img, vec2 uv, vec2 res) {
+    vec2 ts = 1.0 / res;
+    vec3 s00 = textureGrad(img, uv + ts * vec2(-1.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s10 = textureGrad(img, uv + ts * vec2(0.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s20 = textureGrad(img, uv + ts * vec2(1.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s01 = textureGrad(img, uv + ts * vec2(-1.0, 0.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s11 = textureGrad(img, uv, dFdx(uv), dFdy(uv)).rgb;
+    vec3 s21 = textureGrad(img, uv + ts * vec2(1.0, 0.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s02 = textureGrad(img, uv + ts * vec2(-1.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s12 = textureGrad(img, uv + ts * vec2(0.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s22 = textureGrad(img, uv + ts * vec2(1.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    return (s00 + 2.0 * s10 + s20 + 2.0 * s01 + 4.0 * s11 + 2.0 * s21 + s02 + 2.0 * s12 + s22) / 16.0;
+}
+
+vec3 preBlendColor(vec2 uv) {
+    vec3 tex = tentBlur3(textTexture, uv, iResolution);
+    float aspect = iResolution.x / iResolution.y;
+    vec2 p = (uv - 0.5) * vec2(aspect, 1.0);
+    float r = length(p);
+    float t = time_f;
+    vec3 neon = neonPalette(t + r * 1.3);
+    float neonAmt = smoothstep(0.1, 0.8, r);
+    neonAmt = 0.3 + 0.4 * (1.0 - neonAmt);
+    vec3 grad = mix(tex, neon, neonAmt);
+    grad = mix(grad, tex, 0.2);
+    grad = softTone(grad);
+    return grad;
+}
+
+float diamondRadius(vec2 p) {
+    p = sin(abs(p));
+    return max(p.x, p.y);
+}
+
+vec2 diamondFold(vec2 uv, vec2 c, float aspect) {
+    vec2 p = (uv - c) * vec2(aspect, 1.0);
+    p = abs(p);
+    if (p.y > p.x) p = p.yx;
+    p.x /= aspect;
+    return p + c;
+}
+
+vec2 wormholeUV(vec2 uv, vec2 c, float aspect, float t) {
+    vec2 ar = vec2(aspect, 1.0);
+    vec2 p = (uv - c) * ar;
+    float r = length(p) + 1e-6;
+    float a = atan(p.y, p.x);
+    float swirl = 0.22 / r;
+    a += t * 0.35 + swirl;
+    float z = 0.65 + 0.35 * sin(t * 0.6) + 0.15 * sin(r * 12.0 - t * 3.0);
+    float rr = 1.0 / (r * 3.5 + 0.06) + 0.08 * z;
+    vec2 q = vec2(cos(a), sin(a)) * rr;
+    q /= ar;
+    return fract(q + c);
+}
+
+void main(void) {
+    vec4 baseTex = texture(textTexture, TexCoord);
+    vec2 uv = TexCoord * 2.0 - 1.0;
+    float aspect = iResolution.x / iResolution.y;
+    uv.x *= aspect;
+    float r = pingPong(sin(length(uv) * time_f), 5.0);
+    float radius = sqrt(aspect * aspect + 1.0) + 0.5;
+    float glow = smoothstep(radius, radius - 0.25, r);
+    vec2 m = (iMouse.z > 0.5) ? (iMouse.xy / iResolution) : vec2(0.5);
+    vec2 ar = vec2(aspect, 1.0);
+    vec3 baseCol = preBlendColor(TexCoord);
+    float seg = 4.0 + 2.0 * sin(time_f * 0.33);
+    vec2 kUV = reflectUV(TexCoord, seg, m, aspect);
+    kUV = diamondFold(kUV, m, aspect);
+    float foldZoom = 1.45 + 0.55 * sin(time_f * 0.42);
+    kUV = fractalFold(kUV, foldZoom, time_f, m, aspect);
+    kUV = rotateUV(kUV, time_f * 0.23, m, aspect);
+    kUV = diamondFold(kUV, m, aspect);
+    vec2 p = (kUV - m) * ar;
+    vec2 q = abs(p);
+    if (q.y > q.x) q = q.yx;
+    float base = 1.82 + 0.18 * pingPong(sin(time_f * 0.2) * (PI * time_f), 5.0);
+    float period = log(base) * pingPong(time_f * PI, 5.0);
+    float tz = time_f * 0.65;
+    float rD = diamondRadius(p) + 1e-6;
+    float ang = atan(q.y, q.x) + tz * 0.35 + 0.35 * sin(rD * 18.0 + time_f * 0.6);
+    float k = fract((log(rD) - tz) / period);
+    float rw = exp(k * period);
+    vec2 pwrap = vec2(cos(ang), sin(ang)) * rw;
+    vec2 u0 = fract(pwrap / ar + m);
+    vec2 u1 = fract((pwrap * 1.045) / ar + m);
+    vec2 u2 = fract((pwrap * 0.955) / ar + m);
+    vec2 dir = normalize(pwrap + 1e-6);
+    vec2 off = dir * (0.0015 + 0.001 * sin(time_f * 1.3)) * vec2(1.0, 1.0 / aspect);
+    float vign = 1.0 - smoothstep(0.75, 1.2, length((TexCoord - m) * ar));
+    vign = mix(0.9, 1.15, vign);
+    vec3 rC = preBlendColor(u0 + off);
+    vec3 gC = preBlendColor(u1);
+    vec3 bC = preBlendColor(u2 - off);
+
+    
+
+    vec3 kaleidoRGB = vec3(sin(rC.r * pingPong(time_f * PI, 3.0)), sin(gC.g * pingPong(time_f * PI, 3.0)), sin(bC.b * pingPong(time_f * PI, 3.0)));
+    float ring = smoothstep(0.0, 0.7, sin(log(rD + 1e-3) * 9.5 + time_f * 1.2));
+    ring = ring * pingPong((time_f * PI), 5.0);
+    float pulse = 0.5 + 0.5 * sin(time_f * 2.0 + rD * 28.0 + k * 12.0);
+    vec3 outCol = kaleidoRGB;
+    outCol *= (0.75 + 0.25 * ring) * (0.85 + 0.15 * pulse) * vign;
+    vec3 bloom = outCol * outCol * 0.18 + pow(max(outCol - 0.6, 0.0), vec3(2.0)) * 0.12;
+
+    vec2 wh0 = wormholeUV(TexCoord, m, aspect, time_f);
+    vec2 wh1 = wormholeUV(TexCoord + vec2(0.0009, 0.0), m, aspect, time_f + 0.03);
+    vec2 wh2 = wormholeUV(TexCoord - vec2(0.0009, 0.0), m, aspect, time_f - 0.03);
+    vec3 whR = preBlendColor(wh0 + off);
+    vec3 whG = preBlendColor(wh1);
+    vec3 whB = preBlendColor(wh2 - off);
+    vec3 wormRGB = vec3(sin(whR.r * pingPong(time_f * PI, 1.3)), sin(whG.g * pingPong(time_f * PI, 1.4)), sin(whB.b * pingPong(time_f * PI, 1.5)));
+
+    float rCenter = length((TexCoord - m) * ar);
+    float throat = sin(smoothstep(0.38, 0.06, rCenter) * pingPong(time_f * PI, 5.0));
+    float swirlGate = smoothstep(0.9, 1.6, time_f * 0.25 + 0.35 * sin(time_f * 0.7)) * pingPong(time_f * PI, 4.0);
+    float gate = clamp(throat * (0.65 + 0.35 * pingPong(time_f * PI, 5.0)) + pingPong(swirlGate * PI, 8.0) * 0.15, 0.0, 1.0);
+
+    outCol += bloom;
+    outCol = mix(outCol, baseCol, pingPong(pulse * PI, 5.0) * 0.18);
+    outCol = mix(outCol, wormRGB, gate * 0.85);
+    outCol = clamp(outCol, vec3(0.05), vec3(0.97));
+    vec3 finalRGB = mix(baseTex.rgb, outCol, pingPong(glow * PI, 5.0) * 0.8);
+    color = vec4(finalRGB, baseTex.a);
+}
+)SHD";
+inline const char *src_frac_shader04_echo = R"SHD(#version 300 es
+precision highp float;
+out vec4 color;
+in vec2 TexCoord;
+
+uniform sampler2D textTexture;
+uniform vec2 iResolution;
+uniform float time_f;
+uniform vec4 iMouse;
+)SHD" COMMON_UNIFORMS COLOR_HELPERS R"SHD(
+uniform float amp;
+uniform float uamp;
+uniform float iTime;
+uniform int iFrame; 
+uniform float iTimeDelta;
+uniform vec4 iDate;
+uniform vec2 iMouseClick;
+uniform float iFrameRate;
+uniform vec3 iChannelResolution[4];
+uniform float iChannelTime[4];
+uniform float iSampleRate;
+
+const float PI = 3.1415926535897932384626433832795;
+
+float pingPong(float x, float length){
+    float m = mod(x, length * 2.0);
+    return m <= length ? m : length * 2.0 - m;
+}
+
+vec3 hsv2rgb(vec3 c){
+    vec4 K = vec4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
+    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+
+vec2 rotateUV(vec2 uv, float angle, vec2 c, float aspect){
+    float s = sin(angle), cc = cos(angle);
+    vec2 p = uv - c;
+    p.x *= aspect;
+    p = mat2(cc, -s, s, cc) * p;
+    p.x /= aspect;
+    return p + c;
+}
+
+vec2 reflectUV(vec2 uv, float segments, vec2 c, float aspect){
+    vec2 p = uv - c;
+    p.x *= aspect;
+    float ang = atan(p.y, p.x);
+    float rad = length(p);
+    float stepA = 6.28318530718 / segments;
+    ang = mod(ang, stepA);
+    ang = abs(ang - stepA * 0.5);
+    vec2 r = vec2(cos(ang), sin(ang)) * rad;
+    r.x /= aspect;
+    return r + c;
+}
+
+vec2 fractalFold(vec2 uv, float zoom, float t, vec2 c, float aspect){
+    vec2 p = uv;
+    for(int i = 0; i < 6; i++){
+        p = abs((p - c) * (zoom + 0.15 * sin(t * 0.35 + float(i)))) - 0.5 + c;
+        p = rotateUV(p, t * 0.12 + float(i) * 0.07, c, aspect);
+    }
+    return p;
+}
+
+vec3 neonPalette(float t){
+    vec3 pink = vec3(1.0, 0.15, 0.75);
+    vec3 blue = vec3(0.10, 0.55, 1.0);
+    vec3 green = vec3(0.10, 1.00, 0.45);
+    float ph = fract(t * 0.05);
+    vec3 k1 = mix(pink, blue, smoothstep(0.00, 0.33, ph));
+    vec3 k2 = mix(blue, green, smoothstep(0.33, 0.66, ph));
+    vec3 k3 = mix(green, pink, smoothstep(0.66, 1.00, ph));
+    float a = step(ph, 0.33);
+    float b = step(0.33, ph) * step(ph, 0.66);
+    float c = step(0.66, ph);
+    return normalize(a * k1 + b * k2 + c * k3) * 1.05;
+}
+
+void main(void){
+    vec2 ar = vec2(iResolution.x / iResolution.y, 1.0);
+    vec2 m = (iMouse.z > 0.5 ? (iMouse.xy / iResolution) : vec2(0.5));
+
+    float t = time_f + iTime;
+    float sr = clamp(iSampleRate / 48000.0, 0.25, 4.0);
+    float aMix = clamp(amp * 0.7 + uamp * 0.3, 0.0, 20.0);
+
+    float seg = 4.0 + 2.0 * sin(t * 0.25);
+    float zoom = 1.45 + 0.45 * sin(t * 0.35 + 0.2 * sr);
+
+    vec2 kUV = reflectUV(TexCoord, seg, m, ar.x);
+    kUV = fractalFold(kUV, zoom, t, m, ar.x);
+    kUV = rotateUV(kUV, t * 0.22, m, ar.x);
+
+    vec2 dir = (kUV - m) * ar;
+    float r = length(dir);
+    float ripple = sin(20.0 * r - t * 9.0) * 0.012 / (1.0 + 18.0 * r);
+    ripple *= 1.0 / (1.0 + 12.0 * (abs(dFdx(r)) + abs(dFdy(r))));
+
+    vec2 uA = kUV + normalize(dir + 1e-5) * ripple;
+    vec2 uB = mix(TexCoord, kUV, 0.88);
+    vec2 uC = mix(TexCoord, kUV, 0.94) + vec2(0.002 * sin(t), 0.002 * cos(t));
+
+    vec4 t1 = textureGrad(textTexture, fract(uA), dFdx(uA), dFdy(uA));
+    vec4 t2 = textureGrad(textTexture, fract(uB), dFdx(uB), dFdy(uB));
+    vec4 t3 = textureGrad(textTexture, fract(uC), dFdx(uC), dFdy(uC));
+
+    float hueBase = fract(t * 0.06);
+    float sat = 0.7 + 0.25 * sin(t * 0.4 + sr);
+    float val = 0.6 + 0.35 * sin(t * 0.5 + dot(TexCoord, vec2(2.3, 1.9)));
+    vec3 tint = hsv2rgb(vec3(hueBase + r * 0.25, sat, val));
+
+    float slowBeat = 0.5 + 0.5 * sin(t * 0.8 + aMix * 0.05);
+    float mix1 = 0.5 + 0.5 * sin(t * 0.6);
+    float mix2 = 0.5 + 0.5 * cos(t * 0.45);
+
+    vec3 warpCol = mix(sin(t1.rgb * pingPong(time_f * PI, 10.0)), sin(t2.rgb * pingPong(time_f * PI / 2.0, 8.0)), mix1);
+    warpCol = mix(warpCol, t3.rgb, mix2 * 0.5);
+    warpCol *= tint * (0.92 + 0.08 * slowBeat);
+
+    vec2 dtx = dFdx(TexCoord);
+    vec2 dty = dFdy(TexCoord);
+
+    vec3 base = textureGrad(textTexture, TexCoord, dtx, dty).rgb;
+
+    vec4 s1 = textureGrad(textTexture, TexCoord, dtx, dty);
+    vec4 s2 = textureGrad(textTexture, TexCoord * 0.5, dtx * 0.5, dty * 0.5);
+    vec4 s3 = textureGrad(textTexture, TexCoord * 0.25, dtx * 0.25, dty * 0.25);
+    vec4 s4 = textureGrad(textTexture, TexCoord * 0.125, dtx * 0.125, dty * 0.125);
+    vec3 multi = (s1.rgb + s2.rgb + s3.rgb + s4.rgb) * 0.25;
+
+    vec3 combined = mix(base, warpCol * 3.0, 0.6);
+
+    float multiMix = 0.45 + 0.35 * sin(t * 0.25 + aMix * 0.02);
+    vec3 multiBlend = mix(base, multi, 0.7);
+    combined = mix(combined, multiBlend, multiMix);
+
+    vec3 bloom = combined * combined * 0.18 + pow(max(combined - 0.6, 0.0), vec3(2.0)) * 0.10;
+    combined += bloom;
+
+    combined = clamp(combined, vec3(0.0), vec3(1.0));
+    color = vec4(combined, 1.0);
+}
+)SHD";
+inline const char *src_frac_shader04_echo2 = R"SHD(#version 300 es
+precision highp float;
+out vec4 color;
+in vec2 TexCoord;
+
+uniform sampler2D textTexture;
+uniform vec2 iResolution;
+uniform float time_f;
+uniform vec4 iMouse;
+)SHD" COMMON_UNIFORMS COLOR_HELPERS R"SHD(
+uniform float amp;
+uniform float uamp;
+uniform float iTime;
+uniform int iFrame; 
+uniform float iTimeDelta;
+uniform vec4 iDate;
+uniform vec2 iMouseClick;
+uniform float iFrameRate;
+uniform vec3 iChannelResolution[4];
+uniform float iChannelTime[4];
+uniform float iSampleRate;
+
+const float PI = 3.1415926535897932384626433832795;
+
+float pingPong(float x, float length){
+    float m = mod(x, length * 2.0);
+    return m <= length ? m : length * 2.0 - m;
+}
+
+vec3 hsv2rgb(vec3 c){
+    vec4 K = vec4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
+    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+
+vec2 rotateUV(vec2 uv, float angle, vec2 c, float aspect){
+    float s = sin(angle), cc = cos(angle);
+    vec2 p = uv - c;
+    p.x *= aspect;
+    p = mat2(cc, -s, s, cc) * p;
+    p.x /= aspect;
+    return p + c;
+}
+
+vec2 reflectUV(vec2 uv, float segments, vec2 c, float aspect, float spin){
+    vec2 p = uv - c;
+    p.x *= aspect;
+    float ang = atan(p.y, p.x) + spin;
+    float rad = length(p);
+    float stepA = 6.28318530718 / segments;
+    ang = mod(ang, stepA);
+    ang = abs(ang - stepA * 0.5);
+    vec2 r = vec2(cos(ang), sin(ang)) * rad;
+    r.x /= aspect;
+    return r + c;
+}
+
+vec2 fractalFold(vec2 uv, float zoom, float t, vec2 c, float aspect){
+    vec2 p = uv;
+    for(int i = 0; i < 6; i++){
+        p = abs((p - c) * (zoom + 0.15 * sin(t * 0.35 + float(i)))) - 0.5 + c;
+        p = rotateUV(p, t * 0.12 + float(i) * 0.07, c, aspect);
+    }
+    return p;
+}
+
+vec3 neonPalette(float t){
+    vec3 pink = vec3(1.0, 0.15, 0.75);
+    vec3 blue = vec3(0.10, 0.55, 1.0);
+    vec3 green = vec3(0.10, 1.00, 0.45);
+    float ph = fract(t * 0.05);
+    vec3 k1 = mix(pink, blue, smoothstep(0.00, 0.33, ph));
+    vec3 k2 = mix(blue, green, smoothstep(0.33, 0.66, ph));
+    vec3 k3 = mix(green, pink, smoothstep(0.66, 1.00, ph));
+    float a = step(ph, 0.33);
+    float b = step(0.33, ph) * step(ph, 0.66);
+    float c = step(0.66, ph);
+    return normalize(a * k1 + b * k2 + c * k3) * 1.05;
+}
+
+void main(void){
+    vec2 ar = vec2(iResolution.x / iResolution.y, 1.0);
+    vec2 m = (iMouse.z > 0.5 ? (iMouse.xy / iResolution) : vec2(0.5));
+
+    float t = time_f + iTime;
+    float sr = clamp(iSampleRate / 48000.0, 0.25, 4.0);
+    float aMix = clamp(amp * 0.7 + uamp * 0.3, 0.0, 20.0);
+
+    float seg = 4.0 + 2.0 * sin(t * 0.25);
+    float zoom = 1.45 + 0.45 * sin(t * 0.35 + 0.2 * sr);
+    float kaleidoSpin = t * 0.5 + aMix * 0.05;
+
+    vec2 kUV = reflectUV(TexCoord, seg, m, ar.x, kaleidoSpin);
+    kUV = fractalFold(kUV, zoom, t, m, ar.x);
+
+    float radial = length((kUV - m) * ar);
+    float globalSpin = t * 0.6;
+    kUV = rotateUV(kUV, globalSpin + radial * 4.0, m, ar.x);
+
+    vec2 dir = (kUV - m) * ar;
+    float r = length(dir);
+    float ripple = sin(20.0 * r - t * 9.0) * 0.012 / (1.0 + 18.0 * r);
+    ripple *= 1.0 / (1.0 + 12.0 * (abs(dFdx(r)) + abs(dFdy(r))));
+
+    vec2 uA = kUV + normalize(dir + 1e-5) * ripple;
+    vec2 uB = mix(TexCoord, kUV, 0.88);
+    vec2 uC = mix(TexCoord, kUV, 0.94) + vec2(0.002 * sin(t), 0.002 * cos(t));
+
+    vec4 t1 = textureGrad(textTexture, fract(uA), dFdx(uA), dFdy(uA));
+    vec4 t2 = textureGrad(textTexture, fract(uB), dFdx(uB), dFdy(uB));
+    vec4 t3 = textureGrad(textTexture, fract(uC), dFdx(uC), dFdy(uC));
+
+    float hueBase = fract(t * 0.06);
+    float sat = 0.7 + 0.25 * sin(t * 0.4 + sr);
+    float val = 0.6 + 0.35 * sin(t * 0.5 + dot(TexCoord, vec2(2.3, 1.9)));
+    vec3 tint = hsv2rgb(vec3(hueBase + r * 0.25, sat, val));
+
+    float slowBeat = 0.5 + 0.5 * sin(t * 0.8 + aMix * 0.05);
+    float mix1 = 0.5 + 0.5 * sin(t * 0.6);
+    float mix2 = 0.5 + 0.5 * cos(t * 0.45);
+
+    vec3 warpCol = mix(sin(t1.rgb * pingPong(time_f * PI, 10.0)), sin(t2.rgb * pingPong(time_f * PI / 2.0, 8.0)), mix1);
+    warpCol = mix(warpCol, t3.rgb, mix2 * 0.5);
+    warpCol *= tint * (0.92 + 0.08 * slowBeat);
+
+    vec2 dtx = dFdx(TexCoord);
+    vec2 dty = dFdy(TexCoord);
+
+    vec3 base = textureGrad(textTexture, TexCoord, dtx, dty).rgb;
+
+    vec4 s1 = textureGrad(textTexture, TexCoord, dtx, dty);
+    vec4 s2 = textureGrad(textTexture, TexCoord * 0.5, dtx * 0.5, dty * 0.5);
+    vec4 s3 = textureGrad(textTexture, TexCoord * 0.25, dtx * 0.25, dty * 0.25);
+    vec4 s4 = textureGrad(textTexture, TexCoord * 0.125, dtx * 0.125, dty * 0.125);
+    vec3 multi = (s1.rgb + s2.rgb + s3.rgb + s4.rgb) * 0.25;
+
+    vec3 combined = mix(base, warpCol * 3.0, 0.6);
+
+    float multiMix = 0.45 + 0.35 * sin(t * 0.25 + aMix * 0.02);
+    vec3 multiBlend = mix(base, multi, 0.7);
+    combined = mix(combined, multiBlend, multiMix);
+
+    vec3 bloom = combined * combined * 0.18 + pow(max(combined - 0.6, 0.0), vec3(2.0)) * 0.10;
+    combined += bloom;
+
+    combined = clamp(combined, vec3(0.0), vec3(1.0));
+    color = vec4(combined, 1.0);
+}
+)SHD";
+inline const char *src_frac_shader04_echo3_spin = R"SHD(#version 300 es
+precision highp float;
+out vec4 color;
+in vec2 TexCoord;
+
+uniform sampler2D textTexture;
+uniform vec2 iResolution;
+uniform float time_f;
+uniform vec4 iMouse;
+)SHD" COMMON_UNIFORMS COLOR_HELPERS R"SHD(
+uniform float amp;
+uniform float uamp;
+uniform float iTime;
+uniform int iFrame; 
+uniform float iTimeDelta;
+uniform vec4 iDate;
+uniform vec2 iMouseClick;
+uniform float iFrameRate;
+uniform vec3 iChannelResolution[4];
+uniform float iChannelTime[4];
+uniform float iSampleRate;
+
+const float PI = 3.1415926535897932384626433832795;
+
+float pingPong(float x, float length){
+    float m = mod(x, length * 2.0);
+    return m <= length ? m : length * 2.0 - m;
+}
+
+vec3 hsv2rgb(vec3 c){
+    vec4 K = vec4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
+    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+
+vec2 rotateUV(vec2 uv, float angle, vec2 c, float aspect){
+    float s = sin(angle), cc = cos(angle);
+    vec2 p = uv - c;
+    p.x *= aspect;
+    p = mat2(cc, -s, s, cc) * p;
+    p.x /= aspect;
+    return p + c;
+}
+
+vec2 reflectUV(vec2 uv, float segments, vec2 c, float aspect, float spin){
+    vec2 p = uv - c;
+    p.x *= aspect;
+    float ang = atan(p.y, p.x) + spin;
+    float rad = length(p);
+    float stepA = 6.28318530718 / segments;
+    ang = mod(ang, stepA);
+    ang = abs(ang - stepA * 0.5);
+    vec2 r = vec2(cos(ang), sin(ang)) * rad;
+    r.x /= aspect;
+    return r + c;
+}
+
+vec2 fractalFold(vec2 uv, float zoom, float t, vec2 c, float aspect){
+    vec2 p = uv;
+    for(int i = 0; i < 6; i++){
+        p = abs((p - c) * (zoom + 0.15 * sin(t * 0.35 + float(i)))) - 0.5 + c;
+        p = rotateUV(p, t * 0.12 + float(i) * 0.07, c, aspect);
+    }
+    return p;
+}
+
+vec3 neonPalette(float t){
+    vec3 pink = vec3(1.0, 0.15, 0.75);
+    vec3 blue = vec3(0.10, 0.55, 1.0);
+    vec3 green = vec3(0.10, 1.00, 0.45);
+    float ph = fract(t * 0.05);
+    vec3 k1 = mix(pink, blue, smoothstep(0.00, 0.33, ph));
+    vec3 k2 = mix(blue, green, smoothstep(0.33, 0.66, ph));
+    vec3 k3 = mix(green, pink, smoothstep(0.66, 1.00, ph));
+    float a = step(ph, 0.33);
+    float b = step(0.33, ph) * step(ph, 0.66);
+    float c = step(0.66, ph);
+    return normalize(a * k1 + b * k2 + c * k3) * 1.05;
+}
+
+void main(void){
+    vec2 ar = vec2(iResolution.x / iResolution.y, 1.0);
+    vec2 m = (iMouse.z > 0.5 ? (iMouse.xy / iResolution) : vec2(0.5));
+
+    float t = time_f + iTime;
+    float sr = clamp(iSampleRate / 48000.0, 0.25, 4.0);
+    float aMix = clamp(amp * 0.7 + uamp * 0.3, 0.0, 20.0);
+
+    float seg = 4.0 + 2.0 * sin(t * 0.25);
+    float zoom = 1.45 + 0.45 * sin(t * 0.35 + 0.2 * sr);
+    float kaleidoSpin = t * 0.5 + aMix * 0.05;
+
+    vec2 kUV = reflectUV(TexCoord, seg, m, ar.x, kaleidoSpin);
+    kUV = fractalFold(kUV, zoom, t, m, ar.x);
+
+    float radial = length((kUV - m) * ar);
+    float globalSpin = t * 0.6;
+    kUV = rotateUV(kUV, globalSpin + radial * 4.0, m, ar.x);
+
+    vec2 dir = (kUV - m) * ar;
+    float r = length(dir);
+    float ripple = sin(20.0 * r - t * 9.0) * 0.012 / (1.0 + 18.0 * r);
+    ripple *= 1.0 / (1.0 + 12.0 * (abs(dFdx(r)) + abs(dFdy(r))));
+
+    vec2 uA = kUV + normalize(dir + 1e-5) * ripple;
+    vec2 uB = mix(TexCoord, kUV, 0.88);
+    vec2 uC = mix(TexCoord, kUV, 0.94) + vec2(0.002 * sin(t), 0.002 * cos(t));
+
+    vec4 t1 = textureGrad(textTexture, fract(uA), dFdx(uA), dFdy(uA));
+    vec4 t2 = textureGrad(textTexture, fract(uB), dFdx(uB), dFdy(uB));
+    vec4 t3 = textureGrad(textTexture, fract(uC), dFdx(uC), dFdy(uC));
+
+    float hueBase = fract(t * 0.06);
+    float sat = 0.7 + 0.25 * sin(t * 0.4 + sr);
+    float val = 0.6 + 0.35 * sin(t * 0.5 + dot(TexCoord, vec2(2.3, 1.9)));
+
+    vec3 tint = hsv2rgb(vec3(hueBase + r * 0.25, sat, val));
+
+    float mix1 = 0.5 + 0.5 * sin(t * 0.6);
+    float mix2 = 0.5 + 0.5 * cos(t * 0.45);
+
+    vec3 warpCol = mix(sin(t1.rgb * pingPong(time_f * PI, 10.0)), sin(t2.rgb * pingPong(time_f * PI / 2.0, 8.0)), mix1);
+    warpCol = mix(warpCol, t3.rgb, mix2 * 0.5);
+    warpCol *= tint;
+
+    vec2 dtx = dFdx(TexCoord);
+    vec2 dty = dFdy(TexCoord);
+
+    vec3 base = textureGrad(textTexture, TexCoord, dtx, dty).rgb;
+
+    vec4 s1 = textureGrad(textTexture, TexCoord, dtx, dty);
+    vec4 s2 = textureGrad(textTexture, TexCoord * 0.5, dtx * 0.5, dty * 0.5);
+    vec4 s3 = textureGrad(textTexture, TexCoord * 0.25, dtx * 0.25, dty * 0.25);
+    vec4 s4 = textureGrad(textTexture, TexCoord * 0.125, dtx * 0.125, dty * 0.125);
+    vec3 multi = (s1.rgb + s2.rgb + s3.rgb + s4.rgb) * 0.25;
+
+    vec3 multiBlend = mix(base, multi, 0.7);
+
+    vec3 pattern = mix(warpCol, multiBlend, 0.4);
+
+    float PATTERN_ALPHA = 0.85;
+    float BASE_ALPHA = 0.15;
+
+    vec3 combined = base * BASE_ALPHA + pattern * PATTERN_ALPHA;
+
+    vec3 bloom = combined * combined * 0.18 + pow(max(combined - 0.6, 0.0), vec3(2.0)) * 0.10;
+    combined += bloom;
+
+    combined = clamp(combined, vec3(0.0), vec3(1.0));
+    color = vec4(combined, 1.0);
+}
+)SHD";
+inline const char *src_frac_shader04_grid = R"SHD(#version 300 es
+precision highp float;
+out vec4 color;
+in vec2 TexCoord;
+
+uniform sampler2D textTexture;
+uniform vec2 iResolution;
+uniform float time_f;
+uniform vec4 iMouse;
+)SHD" COMMON_UNIFORMS COLOR_HELPERS R"SHD(
+float pingPong(float x, float length){
+    float m = mod(x, length*2.0);
+    return m <= length ? m : length*2.0 - m;
+}
+
+vec2 rotateUV(vec2 uv, float angle, vec2 c, float aspect){
+    float s = sin(angle), cc = cos(angle);
+    vec2 p = uv - c;
+    p.x *= aspect;
+    p = mat2(cc, -s, s, cc) * p;
+    p.x /= aspect;
+    return p + c;
+}
+
+vec2 reflectUV(vec2 uv, float segments, vec2 c, float aspect){
+    vec2 p = uv - c;
+    p.x *= aspect;
+    float ang = atan(p.y, p.x);
+    float rad = length(p);
+    float stepA = 6.28318530718 / segments;
+    ang = mod(ang, stepA);
+    ang = abs(ang - stepA * 0.5);
+    vec2 r = vec2(cos(ang), sin(ang)) * rad;
+    r.x /= aspect;
+    return r + c;
+}
+
+vec2 fractalFold(vec2 uv, float zoom, float t, vec2 c, float aspect){
+    vec2 p = uv;
+    for(int i=0;i<6;i++){
+        p = abs((p - c) * (zoom + 0.15*sin(t*0.35+float(i)))) - 0.5 + c;
+        p = rotateUV(p, t*0.12 + float(i)*0.07, c, aspect);
+    }
+    return p;
+}
+
+vec3 hsv2rgb(vec3 c){
+    vec4 K = vec4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
+    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+
+vec3 movingGradient(vec2 uv, vec2 c, float t, float aspect){
+    vec2 ar = vec2(aspect, 1.0);
+    vec2 p = (uv - c) * ar;
+    vec2 d = normalize(vec2(cos(t*0.27), sin(t*0.31)));
+    float s = dot(p, d);
+    float band = 0.5 + 0.5*sin(s*6.28318530718*0.35 + t*0.9);
+    float h = fract(s*0.22 + t*0.07 + 0.15*sin(t*0.33));
+    float S = 0.75 + 0.25*sin(t*0.21 + s*2.0);
+    float V = 0.75 + 0.25*band;
+    vec3 base = hsv2rgb(vec3(h, S, V));
+    float edge = smoothstep(0.2, 0.8, band);
+    return mix(base*0.6, base, edge);
+}
+
+void main(){
+    float aspect = iResolution.x / iResolution.y;
+    vec2 ar = vec2(aspect, 1.0);
+    vec2 m = (iMouse.z > 0.5) ? (iMouse.xy / iResolution) : vec2(0.5);
+    vec2 uv = TexCoord;
+
+    vec4 originalTexture = texture(textTexture, TexCoord);
+
+    float seg = 6.0 + 2.0*sin(time_f*0.33);
+    vec2 kUV = reflectUV(uv, seg, m, aspect);
+    float foldZoom = 1.45 + 0.55 * sin(time_f * 0.42);
+    kUV = fractalFold(kUV, foldZoom, time_f, m, aspect);
+    kUV = rotateUV(kUV, time_f * 0.23, m, aspect);
+
+    vec2 p = (kUV - m) * ar;
+    float base = 1.82 + 0.18*sin(time_f*0.2);
+    float period = log(base);
+    float tz = time_f * 0.65;
+    float r = length(p) + 1e-6;
+    float ang = atan(p.y, p.x) + tz * 0.35 + 0.35*sin(r*9.0 + time_f*0.8);
+    float k = fract((log(r) - tz) / period);
+    float rw = exp(k * period);
+    vec2 pwrap = vec2(cos(ang), sin(ang)) * rw;
+
+    vec2 u0 = fract(pwrap / ar + m);
+    vec2 u1 = fract((pwrap*1.045) / ar + m);
+    vec2 u2 = fract((pwrap*0.955) / ar + m);
+
+    vec2 dir = normalize(pwrap + 1e-6);
+    vec2 off = dir * (0.0015 + 0.001 * sin(time_f*1.3)) * vec2(1.0, 1.0/aspect);
+
+    float hue = fract(ang*0.15 + time_f*0.08 + k*0.5);
+    float sat = 0.8 - 0.2*cos(time_f*0.7 + r*6.0);
+    float val = 0.8 + 0.2*sin(time_f*0.9 + k*6.28318530718);
+    vec3 tint = hsv2rgb(vec3(hue, sat, val));
+
+    float ring = smoothstep(0.0, 0.7, sin(log(r+1e-3)*8.0 + time_f*1.2));
+    float pulse = 0.5 + 0.5*sin(time_f*2.0 + r*18.0 + k*12.0);
+
+    float vign = 1.0 - smoothstep(0.75, 1.2, length((TexCoord - m)*ar));
+    vign = mix(0.85, 1.2, vign);
+
+    float blendFactor = 0.58;
+
+    float rC = texture(textTexture, u0 + off).r;
+    float gC = texture(textTexture, u1).g;
+    float bC = texture(textTexture, u2 - off).b;
+    vec3 kaleidoRGB = vec3(rC, gC, bC);
+
+    vec4 kaleidoColor = vec4(kaleidoRGB, 1.0) * vec4(tint, 1.0);
+    vec4 merged = mix(kaleidoColor, originalTexture, blendFactor);
+
+    merged.rgb *= (0.75 + 0.25*ring) * (0.85 + 0.15*pulse) * vign;
+
+    vec3 bloom = merged.rgb * merged.rgb * 0.18 + pow(max(merged.rgb-0.6,0.0), vec3(2.0))*0.12;
+    vec3 outFractal = merged.rgb + bloom;
+
+    float wob = 0.9 + 0.1*sin(time_f + r*12.0 + k*9.0);
+    outFractal *= wob;
+
+    vec3 grad = movingGradient(TexCoord, m, time_f, aspect);
+    float gradAmt = 0.35 + 0.25*sin(time_f*0.5 + r*5.0 + k*9.0);
+    vec3 screenBlend = 1.0 - (1.0 - outFractal) * (1.0 - grad);
+    outFractal = mix(outFractal, screenBlend, gradAmt);
+
+    outFractal = mix(outFractal, outFractal * originalTexture.rgb, 0.8);
+
+    float sparkle = abs(sin(time_f * 10.0 + TexCoord.x * 100.0) * cos(time_f * 15.0 + TexCoord.y * 100.0));
+
+    vec3 gridMixed = mix(originalTexture.rgb, outFractal, sparkle);
+
+    vec3 outCol = sin(gridMixed * (0.5 + 0.5*pingPong(time_f, 12.0)));
+    outCol = clamp(outCol, vec3(0.08), vec3(0.96));
+
+    color = vec4(outCol, 1.0);
+}
+)SHD";
+inline const char *src_frac_shader04_julia = R"SHD(#version 300 es
+precision highp float;
+out vec4 color;
+in vec2 TexCoord;
+
+uniform sampler2D textTexture;
+uniform vec2 iResolution;
+uniform float time_f;
+uniform vec4 iMouse;
+)SHD" COMMON_UNIFORMS COLOR_HELPERS R"SHD(
+float pingPong(float x, float length){
+    float m = mod(x, length*2.0);
+    return m <= length ? m : length*2.0 - m;
+}
+
+vec2 rotateUV(vec2 uv, float angle, vec2 c, float aspect){
+    float s = sin(angle), cc = cos(angle);
+    vec2 p = uv - c;
+    p.x *= aspect;
+    p = mat2(cc, -s, s, cc) * p;
+    p.x /= aspect;
+    return p + c;
+}
+
+vec3 hsv2rgb(vec3 c){
+    vec4 K = vec4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
+    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+
+vec3 movingGradient(vec2 uv, vec2 c, float t, float aspect){
+    vec2 ar = vec2(aspect, 1.0);
+    vec2 p = (uv - c) * ar;
+    vec2 d = normalize(vec2(cos(t*0.27), sin(t*0.31)));
+    float s = dot(p, d);
+    float band = 0.5 + 0.5*sin(s*6.28318530718*0.35 + t*0.9);
+    float h = fract(s*0.22 + t*0.07 + 0.15*sin(t*0.33));
+    float S = 0.75 + 0.25*sin(t*0.21 + s*2.0);
+    float V = 0.75 + 0.25*band;
+    vec3 base = hsv2rgb(vec3(h, S, V));
+    float edge = smoothstep(0.2, 0.8, band);
+    return mix(base*0.6, base, edge);
+}
+
+mat2 rot2(float a){ float s=sin(a), c=cos(a); return mat2(c,-s,s,c); }
+
+void juliaEval(vec2 z0, vec2 cJ, out float iterCount, out float smoothIter, out float orbitTrapVal){
+    vec2 z = z0;
+    float i = 0.0;
+    orbitTrapVal = 1e9;
+    const int MAX_IT = 120;
+    for(int k=0;k<MAX_IT;k++){
+        orbitTrapVal = min(orbitTrapVal, length(z));
+        vec2 z2 = vec2(z.x*z.x - z.y*z.y, 2.0*z.x*z.y) + cJ;
+        z = z2;
+        i += 1.0;
+        if(dot(z,z) > 256.0) break;
+    }
+    float rl = length(z);
+    smoothIter = i - log2(max(0.000001, log(max(rl, 1e-6))));
+    iterCount = i;
+}
+
+float juliaScore(vec2 z0, vec2 cJ){
+    vec2 z = z0;
+    const int MAX_S = 28;
+    float i = 0.0;
+    for(int k=0;k<MAX_S;k++){
+        vec2 z2 = vec2(z.x*z.x - z.y*z.y, 2.0*z.x*z.y) + cJ;
+        z = z2;
+        i += 1.0;
+        if(dot(z,z) > 256.0) break;
+    }
+    float rl = length(z);
+    float sI = i - log2(max(0.000001, log(max(rl, 1e-6))));
+    float tgt = 18.0;
+    float score = 1.0/(1.0 + abs(sI - tgt));
+    return score;
+}
+
+vec2 findAnchor(vec2 base, vec2 cJ, float rad){
+    float best = -1.0;
+    vec2 bestOff = vec2(0.0);
+    for(int k=0;k<8;k++){
+        float a = (6.28318530718/8.0)*float(k) + time_f*0.11;
+        vec2 off = vec2(cos(a), sin(a)) * rad;
+        float s = juliaScore(base + off, cJ);
+        if(s > best){ best = s; bestOff = off; }
+    }
+    return bestOff;
+}
+
+void main(){
+    float aspect = iResolution.x / iResolution.y;
+    vec2 ar = vec2(aspect, 1.0);
+    vec2 m = (iMouse.z > 0.5) ? (iMouse.xy / iResolution) : vec2(0.5);
+    vec2 uv = TexCoord;
+    vec4 originalTexture = texture(textTexture, TexCoord);
+
+    float t = time_f;
+    float zoomSpeed = 0.28;
+    float spin = 0.23;
+    float scale = exp(-t * zoomSpeed);
+    vec2 p = (uv - m) * ar;
+    p = rot2(t*spin) * p;
+
+    vec2 cJ = (iMouse.z > 0.5)
+        ? ((iMouse.xy/iResolution)*2.0-1.0) * vec2(aspect,1.0) * 0.6
+        : vec2(0.285 + 0.15*sin(t*0.17), 0.01 + 0.15*cos(t*0.21));
+
+    float probeRad = 0.75 * scale;
+    vec2 anchor = findAnchor(vec2(0.0), cJ, probeRad);
+    vec2 z0 = (p + anchor) * scale * 2.0;
+
+    float iterCount, smoothIter, orbitTrapVal;
+    juliaEval(z0, cJ, iterCount, smoothIter, orbitTrapVal);
+
+    float rD = length(p);
+    float hue = fract(0.12*smoothIter + 0.07*t + 0.15*sin(orbitTrapVal*3.0));
+    float sat = 0.65 + 0.25*sin(0.7*t + orbitTrapVal*5.0);
+    float val = 0.80 + 0.20*sin(0.9*t + smoothIter*0.35);
+    vec3 tint = hsv2rgb(vec3(hue, sat, val));
+
+    float ring = smoothstep(0.0, 0.7, sin(log(rD*scale+1e-3)*9.5 + t*1.2));
+    float pulse = 0.5 + 0.5*sin(t*2.0 + rD*28.0 + smoothIter*0.6);
+
+    float vign = 1.0 - smoothstep(0.75, 1.2, length((TexCoord - m)*ar));
+    vign = mix(0.85, 1.2, vign);
+
+    vec2 pr = z0;
+    vec2 dir = normalize(pr + 1e-6);
+    vec2 off = dir * (0.0015 + 0.001 * sin(t*1.3)) * vec2(1.0, 1.0/aspect);
+
+    vec2 u0 = fract(pr/ar + m);
+    vec2 u1 = fract((pr*1.045)/ar + m);
+    vec2 u2 = fract((pr*0.955)/ar + m);
+
+    float rC = texture(textTexture, u0 + off).r;
+    float gC = texture(textTexture, u1).g;
+    float bC = texture(textTexture, u2 - off).b;
+    vec3 texRGB = vec3(rC, gC, bC);
+
+    float shade = smoothstep(0.0, 1.0, 1.0 - clamp(orbitTrapVal*0.5, 0.0, 1.0));
+    vec3 fractRGB = mix(texRGB, texRGB*tint, 0.65) * mix(0.7, 1.25, shade);
+    vec4 fractalColor = vec4(fractRGB * tint, 1.0);
+
+    float blendFactor = 0.58;
+    vec4 merged = mix(fractalColor, originalTexture, blendFactor);
+    merged.rgb *= (0.75 + 0.25*ring) * (0.85 + 0.15*pulse) * vign;
+
+    vec3 bloom = merged.rgb * merged.rgb * 0.18 + pow(max(merged.rgb-0.6,0.0), vec3(2.0))*0.12;
+    vec3 outCol = merged.rgb + bloom;
+
+    float wob = 0.9 + 0.1*sin(t + rD*14.0 + smoothIter*0.5);
+    outCol *= wob;
+
+    vec3 grad = movingGradient(TexCoord, m, t, aspect);
+    float gradAmt = 0.35 + 0.25*sin(t*0.5 + rD*7.0 + smoothIter*0.35);
+    vec3 screenBlend = 1.0 - (1.0 - outCol) * (1.0 - grad);
+    outCol = mix(outCol, screenBlend, gradAmt);
+
+    vec4 tcol = texture(textTexture, TexCoord);
+    outCol = mix(outCol, outCol*tcol.rgb, 0.8);
+
+    outCol = sin(outCol * (0.5 + 0.5*pingPong(t, 12.0)));
+    outCol = clamp(outCol, vec3(0.08), vec3(0.96));
+
+    color = vec4(outCol, 1.0);
+}
+)SHD";
+inline const char *src_frac_shader05 = R"SHD(#version 300 es
+precision highp float;
+out vec4 color;
+in vec2 TexCoord;
+
+uniform sampler2D textTexture;
+uniform vec2 iResolution;
+uniform float time_f;
+uniform vec4 iMouse;
+)SHD" COMMON_UNIFORMS COLOR_HELPERS R"SHD(
+float pingPong(float x, float length){
+    float m = mod(x, length*2.0);
+    return m <= length ? m : length*2.0 - m;
+}
+
+vec3 hsv2rgb(vec3 c){
+    vec4 K=vec4(1.0,2.0/3.0,1.0/3.0,3.0);
+    vec3 p=abs(fract(c.xxx+K.xyz)*6.0-K.www);
+    return c.z*mix(K.xxx,clamp(p-K.xxx,0.0,1.0),c.y);
+}
+
+vec3 movingGradient(vec2 uv, vec2 c, float t, float aspect){
+    vec2 ar=vec2(aspect,1.0);
+    vec2 p=(uv-c)*ar;
+    vec2 d=normalize(vec2(cos(t*0.27),sin(t*0.31)));
+    float s=dot(p,d);
+    float band=0.5+0.5*sin(s*6.28318530718*0.35+t*0.9);
+    float h=fract(s*0.22+t*0.07+0.15*sin(t*0.33));
+    float S=0.75+0.25*sin(t*0.21+s*2.0);
+    float V=0.75+0.25*band;
+    vec3 base=hsv2rgb(vec3(h,S,V));
+    float edge=smoothstep(0.2,0.8,band);
+    return mix(base*0.6,base,edge);
+}
+
+mat2 rot2(float a){float s=sin(a),c=cos(a);return mat2(c,-s,s,c);}
+
+void main(){
+    float aspect=iResolution.x/iResolution.y;
+    vec2 ar=vec2(aspect,1.0);
+    vec2 m=(iMouse.z>0.5)?(iMouse.xy/iResolution):vec2(0.5);
+    vec2 p=(TexCoord-m)*ar;
+
+    float T=8.0;
+    float s=pingPong(time_f,T)/T;
+    float e=s*s*(3.0-2.0*s);
+    float z=min(1.0,mix(0.55,2.8,e));
+    float spin=0.35*(e-0.5);
+    p=rot2(spin)*p;
+    vec2 uvTex=p/z/ar+m;
+
+    vec4 baseTex=texture(textTexture,uvTex);
+    vec3 grad=movingGradient(TexCoord,m,time_f,aspect);
+
+    float vign=1.0-smoothstep(0.78,1.15,length((TexCoord-m)*ar));
+    vign=mix(0.86,1.18,vign);
+
+    float chroma=0.0025*(0.2+abs(e-0.5)*1.8);
+    vec3 texRGB;
+    texRGB.r=texture(textTexture,uvTex+vec2(chroma,0.0)).r;
+    texRGB.g=texture(textTexture,uvTex).g;
+    texRGB.b=texture(textTexture,uvTex-vec2(chroma,0.0)).b;
+
+    float growMask=smoothstep(0.0,0.6,e)*smoothstep(1.0,0.6,e);
+    float pulse=0.5+0.5*sin(time_f*2.0+length(p)*24.0);
+    float mixTex=0.55+0.35*growMask;
+    float mixGrad=0.35+0.25*(1.0-growMask);
+
+    vec3 screenBlend=1.0-(1.0-texRGB)*(1.0-grad);
+    vec3 col=mix(texRGB,screenBlend,mixGrad);
+    col=mix(col,baseTex.rgb,mixTex);
+    col*=vign*(0.85+0.15*pulse);
+
+    vec3 bloom=col*col*0.18+pow(max(col-0.6,0.0),vec3(2.0))*0.12;
+    col+=bloom;
+
+    col=sin(col*(0.5+0.5*pingPong(time_f,12.0)));
+    col=clamp(col,vec3(0.08),vec3(0.96));
+
+    color=vec4(col,1.0);
+}
+)SHD";
+inline const char *src_frac_star1 = R"SHD(#version 300 es
+precision highp float;
+out vec4 color;
+in vec2 TexCoord;
+
+uniform sampler2D textTexture;
+uniform vec2 iResolution;
+uniform float time_f;
+uniform vec4 iMouse;
+)SHD" COMMON_UNIFORMS COLOR_HELPERS R"SHD(
+const float PI = 3.1415926535897932384626433832795;
+
+float hash1(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453); }
+vec2 hash2(vec2 p){ return fract(sin(vec2(dot(p, vec2(127.1,311.7)), dot(p, vec2(269.5,183.3)))) * 43758.5453); }
+float pingPong(float x,float l){ float m=mod(x,l*2.0); return m<=l?m:l*2.0-m; }
+
+vec3 hsv2rgb(vec3 c){
+    vec4 K=vec4(1.0,2.0/3.0,1.0/3.0,3.0);
+    vec3 p=abs(fract(c.xxx+K.xyz)*6.0-K.www);
+    return c.z*mix(K.xxx,clamp(p-K.xxx,0.0,1.0),c.y);
+}
+vec3 neonPalette(float t){
+    vec3 a=vec3(1.0,0.15,0.75), b=vec3(0.10,0.55,1.0), c=vec3(0.10,1.0,0.45);
+    float ph=fract(t*0.08);
+    vec3 k1=mix(a,b,smoothstep(0.00,0.33,ph));
+    vec3 k2=mix(b,c,smoothstep(0.33,0.66,ph));
+    vec3 k3=mix(c,a,smoothstep(0.66,1.00,ph));
+    float A=step(ph,0.33), B=step(0.33,ph)*step(ph,0.66), C=step(0.66,ph);
+    return normalize(A*k1+B*k2+C*k3)*1.05;
+}
+
+vec3 tentBlur3(sampler2D img, vec2 uv, vec2 res){
+    vec2 ts=1.0/res;
+    vec3 s00=textureGrad(img, uv+ts*vec2(-1,-1), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s10=textureGrad(img, uv+ts*vec2( 0,-1), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s20=textureGrad(img, uv+ts*vec2( 1,-1), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s01=textureGrad(img, uv+ts*vec2(-1, 0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s11=textureGrad(img, uv,                 dFdx(uv), dFdy(uv)).rgb;
+    vec3 s21=textureGrad(img, uv+ts*vec2( 1, 0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s02=textureGrad(img, uv+ts*vec2(-1, 1), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s12=textureGrad(img, uv+ts*vec2( 0, 1), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s22=textureGrad(img, uv+ts*vec2( 1, 1), dFdx(uv), dFdy(uv)).rgb;
+    return (s00+2.0*s10+s20+2.0*s01+4.0*s11+2.0*s21+s02+2.0*s12+s22)/16.0;
+}
+vec3 softTone(vec3 c){
+    c=pow(max(c,0.0), vec3(0.95));
+    float l=dot(c, vec3(0.299,0.587,0.114));
+    c=mix(vec3(l), c, 0.9);
+    return clamp(c,0.0,1.0);
+}
+
+vec2 sitePos(vec2 id, float grid){
+    vec2 j=(hash2(id)*2.0-1.0)*(0.33+0.10*sin(time_f*0.37+6.2831*hash1(id+3.71)));
+    return (id+0.5+j)/grid;
+}
+
+float starMetric(vec2 d, float n, float amp){
+    float ang=atan(d.y,d.x);
+    float r=length(d);
+    float mod=1.0+amp*cos(n*ang);
+    return r/max(0.001,mod);
+}
+
+void main(){
+    vec2 res=iResolution;
+    float aspect=res.x/res.y;
+    vec2 focus=(iMouse.z>0.5)?(iMouse.xy/res):vec2(0.5);
+
+    float t=pingPong(time_f*0.35,1.0);
+    float zoom=mix(0.7,2.6,t);
+    vec2 uvZ=(TexCoord-focus)*zoom+focus;
+
+    float grid=mix(18.0,28.0,0.5+0.5*sin(time_f*0.11));
+
+    vec2 gtc=uvZ*grid;
+    vec2 gid0=floor(gtc);
+
+    float best1=1e9,best2=1e9;
+    vec2 bestId=vec2(0.0), bestSite=vec2(0.0);
+    float bestN=7.0, bestA=0.3;
+
+    for(int j=-1;j<=1;j++){
+        for(int i=-1;i<=1;i++){
+            vec2 nid=gid0+vec2(i,j);
+            vec2 s=sitePos(nid,grid);
+            vec2 d=uvZ-s; d.x*=aspect;
+            float nPts=floor(7.0+5.0*hash1(nid+7.7));
+            float amp=0.28+0.22*hash1(nid+4.2);
+            float dist=starMetric(d,nPts,amp);
+            if(dist<best1){
+                best2=best1;
+                best1=dist;
+                bestId=nid;
+                bestSite=s;
+                bestN=nPts;
+                bestA=amp;
+            }else if(dist<best2){
+                best2=dist;
+            }
+        }
+    }
+
+    float edge=0.5*(best2-best1);
+    float px=1.0/min(res.x,res.y);
+    float border=1.0-smoothstep(px*0.75, px*0.75+fwidth(edge), edge);
+
+    vec2 rel=uvZ-bestSite; rel.x*=aspect;
+
+    float rot=6.2831853*hash1(bestId+11.9)+time_f*(0.10+0.08*hash1(bestId+2.2));
+    float cs=cos(rot), sn=sin(rot);
+    vec2 rrel=mat2(cs,-sn,sn,cs)*rel;
+
+    vec2 pieceUV=rrel; pieceUV.x/=aspect; pieceUV+=bestSite;
+
+    vec4 texCol=texture(textTexture,pieceUV);
+
+    float ang=atan(rrel.y,rrel.x);
+    float flare=pow(0.5+0.5*cos(bestN*ang+time_f*0.7+6.2831*hash1(bestId+3.4)),3.0);
+    vec3 glow=hsv2rgb(vec3(fract(hash1(bestId+9.3)+time_f*0.05),0.85,1.0));
+    vec3 neon=neonPalette(time_f+hash1(bestId+1.1)*8.0);
+    vec3 tint=mix(neon,glow,0.45)*(0.55+0.45*flare);
+    float rad=length(rrel);
+    float vign=smoothstep(0.9,0.2,rad/(0.55+0.05*sin(time_f*0.5+hash1(bestId+5.5))));
+    vec3 pieceCol=mix(texCol.rgb, texCol.rgb*tint, 0.25*vign);
+
+    vec3 pre=tentBlur3(textTexture, TexCoord, res);
+    vec3 inside=mix(pre, pieceCol, 0.85);
+
+    vec3 borderCol=mix(vec3(0.02,0.02,0.03), neonPalette(time_f*0.5), 0.15);
+    vec3 outRGB=mix(inside, sin(borderCol *  (time_f * PI)), border);
+    outRGB=softTone(outRGB);
+
+    color=vec4(outRGB, texCol.a);
+}
+)SHD";
+inline const char *src_frac_zoom1 = R"SHD(#version 300 es
+precision highp float;
+out vec4 color;
+in vec2 TexCoord;
+
+uniform sampler2D textTexture;
+uniform vec2 iResolution;
+uniform float time_f;
+uniform vec4 iMouse;
+)SHD" COMMON_UNIFORMS COLOR_HELPERS R"SHD(
+uniform float amp;
+uniform float uamp;
+
+const float PI = 3.1415926535897932384626433832795;
+
+float pingPong(float x, float length) {
+    float m = mod(x, length * 2.0);
+    return m <= length ? m : length * 2.0 - m;
+}
+
+vec3 hsv2rgb(vec3 c) {
+    vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+
+vec2 rotateUV(vec2 uv, float angle, vec2 c, float aspect) {
+    float s = sin(angle), cc = cos(angle);
+    vec2 p = uv - c;
+    p.x *= aspect;
+    p = mat2(cc, -s, s, cc) * p;
+    p.x /= aspect;
+    return p + c;
+}
+
+vec2 reflectUV(vec2 uv, float segments, vec2 c, float aspect) {
+    vec2 p = uv - c;
+    p.x *= aspect;
+    float ang = atan(p.y, p.x);
+    float rad = length(p);
+    float stepA = 6.28318530718 / segments;
+    ang = mod(ang, stepA);
+    ang = abs(ang - stepA * 0.5);
+    vec2 r = vec2(cos(ang), sin(ang)) * rad;
+    r.x /= aspect;
+    return r + c;
+}
+
+vec2 fractalFold(vec2 uv, float zoom, float t, vec2 c, float aspect) {
+    vec2 p = uv;
+    for (int i = 0; i < 6; i++) {
+        p = abs((p - c) * (zoom + 0.15 * sin(t * 0.35 + float(i)))) - 0.5 + c;
+        p = rotateUV(p, t * 0.12 + float(i) * 0.07, c, aspect);
+    }
+    return p;
+}
+
+vec3 neonPalette(float t) {
+    vec3 pink = vec3(1.0, 0.15, 0.75);
+    vec3 blue = vec3(0.10, 0.55, 1.0);
+    vec3 green = vec3(0.10, 1.00, 0.45);
+    float ph = fract(t * 0.08);
+    vec3 k1 = mix(pink, blue, smoothstep(0.00, 0.33, ph));
+    vec3 k2 = mix(blue, green, smoothstep(0.33, 0.66, ph));
+    vec3 k3 = mix(green, pink, smoothstep(0.66, 1.00, ph));
+    float a = step(ph, 0.33);
+    float b = step(0.33, ph) * step(ph, 0.66);
+    float c = step(0.66, ph);
+    return normalize(a * k1 + b * k2 + c * k3) * 1.05;
+}
+
+vec3 softTone(vec3 c) {
+    c = pow(max(c, 0.0), vec3(0.95));
+    float l = dot(c, vec3(0.299, 0.587, 0.114));
+    c = mix(vec3(l), c, 0.9);
+    return clamp(c, 0.0, 1.0);
+}
+
+vec3 tentBlur3(sampler2D img, vec2 uv, vec2 res) {
+    vec2 ts = 1.0 / res;
+    vec3 s00 = textureGrad(img, uv + ts * vec2(-1.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s10 = textureGrad(img, uv + ts * vec2(0.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s20 = textureGrad(img, uv + ts * vec2(1.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s01 = textureGrad(img, uv + ts * vec2(-1.0, 0.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s11 = textureGrad(img, uv, dFdx(uv), dFdy(uv)).rgb;
+    vec3 s21 = textureGrad(img, uv + ts * vec2(1.0, 0.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s02 = textureGrad(img, uv + ts * vec2(-1.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s12 = textureGrad(img, uv + ts * vec2(0.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s22 = textureGrad(img, uv + ts * vec2(1.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    return (s00 + 2.0 * s10 + s20 + 2.0 * s01 + 4.0 * s11 + 2.0 * s21 + s02 + 2.0 * s12 + s22) / 16.0;
+}
+
+vec3 preBlendColor(vec2 uv) {
+    vec3 tex = tentBlur3(textTexture, uv, iResolution);
+    float aspect = iResolution.x / iResolution.y;
+    vec2 p = (uv - 0.5) * vec2(aspect, 1.0);
+    float r = length(p);
+    float t = time_f;
+    vec3 neon = neonPalette(t + r * 1.3);
+    float neonAmt = smoothstep(0.1, 0.8, r);
+    neonAmt = 0.3 + 0.4 * (1.0 - neonAmt);
+    vec3 grad = mix(tex, neon, neonAmt);
+    grad = mix(grad, tex, 0.2);
+    grad = softTone(grad);
+    return grad;
+}
+
+float diamondRadius(vec2 p) {
+    vec2 pa = abs(p);
+    vec2 ps = sin(abs(p));
+    float mixAmt = 0.5 + 0.5 * sin(time_f * 0.2);
+    vec2 pm = mix(pa, ps, mixAmt);
+    return max(pm.x, pm.y);
+}
+
+vec2 diamondFold(vec2 uv, vec2 c, float aspect) {
+    vec2 p = (uv - c) * vec2(aspect, 1.0);
+    p = abs(p);
+    if (p.y > p.x) p = p.yx;
+    p.x /= aspect;
+    return p + c;
+}
+
+void main(void) {
+    vec4 baseTex = texture(textTexture, TexCoord);
+    float aspect = iResolution.x / iResolution.y;
+    vec2 m = (iMouse.z > 0.5) ? (iMouse.xy / iResolution) : vec2(0.5);
+    vec2 ar = vec2(aspect, 1.0);
+
+    vec2 uv = TexCoord * 2.0 - 1.0;
+    uv.x *= aspect;
+    float rLen = length(uv);
+    float radialWave = pingPong(sin(rLen * time_f), 5.0);
+    float radius = sqrt(aspect * aspect + 1.0) + 0.5;
+    float glow = smoothstep(radius, radius - 0.25, radialWave);
+
+    vec3 baseCol = preBlendColor(TexCoord);
+
+    float audioLevel = clamp(amp * 0.75 + uamp * 0.40, 0.0, 2.0);
+    float tZoom = pingPong(time_f * 0.12 + audioLevel * 0.35, 1.0);
+    float zoomBase = mix(0.90, 2.40, tZoom);
+    float zoomAudio = 1.0 + audioLevel * 0.75;
+    float foldZoom = zoomBase * zoomAudio;
+
+    float seg = 4.0 + 2.0 * sin(time_f * 0.33 + audioLevel * 0.25);
+    vec2 kUV = reflectUV(TexCoord, seg, m, aspect);
+    kUV = diamondFold(kUV, m, aspect);
+    kUV = fractalFold(kUV, foldZoom, time_f, m, aspect);
+    kUV = rotateUV(kUV, time_f * (0.23 + audioLevel * 0.05), m, aspect);
+    kUV = diamondFold(kUV, m, aspect);
+
+    vec2 p = (kUV - m) * ar;
+    vec2 q = abs(p);
+    if (q.y > q.x) q = q.yx;
+
+    float base = 1.82 + 0.18 * pingPong(sin(time_f * 0.2) * (PI * time_f), 5.0);
+    float period = log(base) * pingPong(time_f * PI, 5.0 + audioLevel);
+    float tz = time_f * 0.65 + audioLevel * 0.35;
+
+    float rD = diamondRadius(p) + 1e-6;
+    float ang = atan(q.y, q.x) + tz * 0.35 + 0.35 * sin(rD * 18.0 + time_f * 0.6 + audioLevel * 3.0);
+    float k = fract((log(rD) - tz) / period);
+    float rw = exp(k * period);
+
+    float zoomShell = 1.0 + audioLevel * 0.8;
+    vec2 pwrap = vec2(cos(ang), sin(ang)) * (rw * zoomShell);
+
+    vec2 u0 = fract(pwrap / ar + m);
+    vec2 u1 = fract((pwrap * 1.045) / ar + m);
+    vec2 u2 = fract((pwrap * 0.955) / ar + m);
+
+    vec2 dir = normalize(pwrap + 1e-6);
+    vec2 off = dir * (0.0015 + 0.001 * sin(time_f * 1.3 + audioLevel)) * vec2(1.0, 1.0 / aspect);
+
+    float vign = 1.0 - smoothstep(0.75, 1.2, length((TexCoord - m) * ar));
+    vign = mix(0.9, 1.15, vign);
+
+    vec3 rC = preBlendColor(u0 + off);
+    vec3 gC = preBlendColor(u1);
+    vec3 bC = preBlendColor(u2 - off);
+    vec3 kaleidoRGB = vec3(rC.r, gC.g, bC.b);
+
+    float ring = smoothstep(0.0, 0.7, sin(log(rD + 1e-3) * 9.5 + time_f * 1.2 + audioLevel * 2.0));
+    ring *= pingPong(time_f * PI, 5.0);
+
+    float pulse = 0.5 + 0.5 * sin(time_f * 2.0 + rD * 28.0 + k * 12.0 + audioLevel * 6.0);
+
+    vec3 outCol = kaleidoRGB;
+    outCol *= (0.75 + 0.25 * ring) * (0.85 + 0.15 * pulse) * vign;
+
+    vec3 bloom = outCol * outCol * 0.18 + pow(max(outCol - 0.6, 0.0), vec3(2.0)) * 0.12;
+    outCol += bloom;
+
+    outCol = mix(outCol, baseCol, 0.18);
+    outCol = clamp(outCol, vec3(0.05), vec3(0.97));
+
+    float mixGlow = pingPong(glow * PI, 5.0) * (0.4 + 0.4 * clamp(audioLevel, 0.0, 1.0));
+    vec3 finalRGB = mix(baseTex.rgb, outCol, mixGlow);
+    color = vec4(finalRGB, baseTex.a);
+}
+)SHD";
+inline const char *src_frac_zoom2 = R"SHD(#version 300 es
+precision highp float;
+out vec4 color;
+in vec2 TexCoord;
+
+uniform sampler2D textTexture;
+uniform vec2 iResolution;
+uniform float time_f;
+uniform vec4 iMouse;
+)SHD" COMMON_UNIFORMS COLOR_HELPERS R"SHD(
+uniform float amp;
+uniform float uamp;
+
+const float PI = 3.1415926535897932384626433832795;
+
+float pingPong(float x, float length) {
+    float m = mod(x, length * 2.0);
+    return m <= length ? m : length * 2.0 - m;
+}
+
+vec3 hsv2rgb(vec3 c) {
+    vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+
+vec2 rotateUV(vec2 uv, float angle, vec2 c, float aspect) {
+    float s = sin(angle), cc = cos(angle);
+    vec2 p = uv - c;
+    p.x *= aspect;
+    p = mat2(cc, -s, s, cc) * p;
+    p.x /= aspect;
+    return p + c;
+}
+
+vec2 reflectUV(vec2 uv, float segments, vec2 c, float aspect) {
+    vec2 p = uv - c;
+    p.x *= aspect;
+    float ang = atan(p.y, p.x);
+    float rad = length(p);
+    float stepA = 6.28318530718 / segments;
+    ang = mod(ang, stepA);
+    ang = abs(ang - stepA * 0.5);
+    vec2 r = vec2(cos(ang), sin(ang)) * rad;
+    r.x /= aspect;
+    return r + c;
+}
+
+vec2 fractalFold(vec2 uv, float zoom, float t, vec2 c, float aspect) {
+    vec2 p = uv;
+    for (int i = 0; i < 6; i++) {
+        p = abs((p - c) * (zoom + 0.15 * sin(t * 0.35 + float(i)))) - 0.5 + c;
+        p = rotateUV(p, t * 0.12 + float(i) * 0.07, c, aspect);
+    }
+    return p;
+}
+
+vec3 neonPalette(float t) {
+    vec3 pink = vec3(1.0, 0.15, 0.75);
+    vec3 blue = vec3(0.10, 0.55, 1.0);
+    vec3 green = vec3(0.10, 1.00, 0.45);
+    float ph = fract(t * 0.08);
+    vec3 k1 = mix(pink, blue, smoothstep(0.00, 0.33, ph));
+    vec3 k2 = mix(blue, green, smoothstep(0.33, 0.66, ph));
+    vec3 k3 = mix(green, pink, smoothstep(0.66, 1.00, ph));
+    float a = step(ph, 0.33);
+    float b = step(0.33, ph) * step(ph, 0.66);
+    float c = step(0.66, ph);
+    return normalize(a * k1 + b * k2 + c * k3) * 1.05;
+}
+
+vec3 softTone(vec3 c) {
+    c = pow(max(c, 0.0), vec3(0.95));
+    float l = dot(c, vec3(0.299, 0.587, 0.114));
+    c = mix(vec3(l), c, 0.9);
+    return clamp(c, 0.0, 1.0);
+}
+
+vec3 tentBlur3(sampler2D img, vec2 uv, vec2 res) {
+    vec2 ts = 1.0 / res;
+    vec3 s00 = textureGrad(img, uv + ts * vec2(-1.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s10 = textureGrad(img, uv + ts * vec2(0.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s20 = textureGrad(img, uv + ts * vec2(1.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s01 = textureGrad(img, uv + ts * vec2(-1.0, 0.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s11 = textureGrad(img, uv, dFdx(uv), dFdy(uv)).rgb;
+    vec3 s21 = textureGrad(img, uv + ts * vec2(1.0, 0.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s02 = textureGrad(img, uv + ts * vec2(-1.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s12 = textureGrad(img, uv + ts * vec2(0.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s22 = textureGrad(img, uv + ts * vec2(1.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    return (s00 + 2.0 * s10 + s20 + 2.0 * s01 + 4.0 * s11 + 2.0 * s21 + s02 + 2.0 * s12 + s22) / 16.0;
+}
+
+vec3 preBlendColor(vec2 uv) {
+    vec3 tex = tentBlur3(textTexture, uv, iResolution);
+    float aspect = iResolution.x / iResolution.y;
+    vec2 p = (uv - 0.5) * vec2(aspect, 1.0);
+    float r = length(p);
+    float t = time_f;
+    vec3 neon = neonPalette(t + r * 1.3);
+    float neonAmt = smoothstep(0.1, 0.8, r);
+    neonAmt = 0.3 + 0.4 * (1.0 - neonAmt);
+    vec3 grad = mix(tex, neon, neonAmt);
+    grad = mix(grad, tex, 0.2);
+    grad = softTone(grad);
+    return grad;
+}
+
+float diamondRadius(vec2 p) {
+    vec2 pa = abs(p);
+    vec2 ps = sin(abs(p));
+    float mixAmt = 0.5 + 0.5 * sin(time_f * 0.2);
+    vec2 pm = mix(pa, ps, mixAmt);
+    return max(pm.x, pm.y);
+}
+
+vec2 diamondFold(vec2 uv, vec2 c, float aspect) {
+    vec2 p = (uv - c) * vec2(aspect, 1.0);
+    p = abs(p);
+    if (p.y > p.x) p = p.yx;
+    p.x /= aspect;
+    return p + c;
+}
+
+vec2 triUV(vec2 uv, float scale) {
+    vec2 p = uv * scale;
+    vec2 g = floor(p);
+    vec2 f = fract(p);
+    if (f.x + f.y > 1.0) {
+        g += 1.0;
+        f = 1.0 - f.yx;
+    }
+    return (g + f) / scale;
+}
+
+void main(void) {
+    vec4 baseTex = texture(textTexture, TexCoord);
+    float aspect = iResolution.x / iResolution.y;
+    vec2 m = (iMouse.z > 0.5) ? (iMouse.xy / iResolution) : vec2(0.5);
+    vec2 ar = vec2(aspect, 1.0);
+
+    vec2 uv = TexCoord * 2.0 - 1.0;
+    uv.x *= aspect;
+    float rLen = length(uv);
+    float radialWave = pingPong(sin(rLen * time_f), 5.0);
+    float radius = sqrt(aspect * aspect + 1.0) + 0.5;
+    float glow = smoothstep(radius, radius - 0.25, radialWave);
+
+    vec3 baseCol = preBlendColor(TexCoord);
+
+    float audioLevel = clamp(amp * 0.75 + uamp * 0.40, 0.0, 2.0);
+    float tZoom = pingPong(time_f * 0.12 + audioLevel * 0.35, 1.0);
+    float zoomBase = mix(0.95, 1.85, tZoom);
+    float zoomAudio = 1.0 + audioLevel * 0.45;
+    float foldZoom = zoomBase * zoomAudio;
+
+    float seg = 4.0 + 2.0 * sin(time_f * 0.33 + audioLevel * 0.25);
+    vec2 kUV = reflectUV(TexCoord, seg, m, aspect);
+    kUV = diamondFold(kUV, m, aspect);
+    kUV = fractalFold(kUV, foldZoom, time_f, m, aspect);
+    kUV = rotateUV(kUV, time_f * (0.23 + audioLevel * 0.05), m, aspect);
+    kUV = diamondFold(kUV, m, aspect);
+
+    vec2 p = (kUV - m) * ar;
+    vec2 q = abs(p);
+    if (q.y > q.x) q = q.yx;
+
+    float base = 1.82 + 0.18 * pingPong(sin(time_f * 0.2) * (PI * time_f), 5.0);
+    float period = log(base) * pingPong(time_f * PI, 5.0 + audioLevel);
+    float tz = time_f * 0.65 + audioLevel * 0.35;
+
+    float rD = diamondRadius(p) + 1e-6;
+    float ang = atan(q.y, q.x) + tz * 0.35 + 0.35 * sin(rD * 18.0 + time_f * 0.6 + audioLevel * 3.0);
+    float k = fract((log(rD) - tz) / period);
+    float rw = exp(k * period);
+    rw = clamp(rw, 0.45, 2.5);
+
+    float zoomShell = 1.0 + audioLevel * 0.5;
+    vec2 pwrap = vec2(cos(ang), sin(ang)) * (rw * zoomShell);
+
+    float triScale = 80.0 * (1.0 + 0.3 * audioLevel);
+    vec2 baseTri = triUV(fract(pwrap / ar + m), triScale);
+    vec2 tri0 = baseTri;
+    vec2 tri1 = triUV(fract(pwrap * 1.045 / ar + m), triScale);
+    vec2 tri2 = triUV(fract(pwrap * 0.955 / ar + m), triScale);
+
+    vec2 dir = normalize(pwrap + 1e-6);
+    vec2 off = dir * (0.0015 + 0.001 * sin(time_f * 1.3 + audioLevel)) * vec2(1.0, 1.0 / aspect);
+
+    float vign = 1.0 - smoothstep(0.75, 1.2, length((TexCoord - m) * ar));
+    vign = mix(0.9, 1.15, vign);
+
+    vec3 rC = preBlendColor(tri0 + off);
+    vec3 gC = preBlendColor(tri1);
+    vec3 bC = preBlendColor(tri2 - off);
+    vec3 kaleidoRGB = vec3(rC.r, gC.g, bC.b);
+
+    float ring = smoothstep(0.0, 0.7, sin(log(rD + 1e-3) * 9.5 + time_f * 1.2 + audioLevel * 2.0));
+    ring *= pingPong(time_f * PI, 5.0);
+
+    float pulse = 0.5 + 0.5 * sin(time_f * 2.0 + rD * 28.0 + k * 12.0 + audioLevel * 6.0);
+
+    vec3 outCol = kaleidoRGB;
+    outCol *= (0.75 + 0.25 * ring) * (0.85 + 0.15 * pulse) * vign;
+
+    vec3 bloom = outCol * outCol * 0.18 + pow(max(outCol - 0.6, 0.0), vec3(2.0)) * 0.12;
+    outCol += bloom;
+
+    outCol = mix(outCol, baseCol, 0.18);
+    outCol = clamp(outCol, vec3(0.05), vec3(0.97));
+
+    float mixGlow = pingPong(glow * PI, 5.0) * (0.4 + 0.4 * clamp(audioLevel, 0.0, 1.0));
+    vec3 finalRGB = mix(baseTex.rgb, outCol, mixGlow);
+    color = vec4(finalRGB, baseTex.a);
+}
+)SHD";
+inline const char *src_frac_zoom3 = R"SHD(#version 300 es
+precision highp float;
+out vec4 color;
+in vec2 TexCoord;
+
+uniform sampler2D textTexture;
+uniform vec2 iResolution;
+uniform float time_f;
+uniform vec4 iMouse;
+)SHD" COMMON_UNIFORMS COLOR_HELPERS R"SHD(
+uniform float amp;
+uniform float uamp;
+
+const float PI = 3.1415926535897932384626433832795;
+
+float pingPong(float x, float length) {
+    float m = mod(x, length * 2.0);
+    return m <= length ? m : length * 2.0 - m;
+}
+
+vec3 hsv2rgb(vec3 c) {
+    vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+
+vec2 rotateUV(vec2 uv, float angle, vec2 c, float aspect) {
+    float s = sin(angle), cc = cos(angle);
+    vec2 p = uv - c;
+    p.x *= aspect;
+    p = mat2(cc, -s, s, cc) * p;
+    p.x /= aspect;
+    return p + c;
+}
+
+vec2 reflectUV(vec2 uv, float segments, vec2 c, float aspect) {
+    vec2 p = uv - c;
+    p.x *= aspect;
+    float ang = atan(p.y, p.x);
+    float rad = length(p);
+    float stepA = 6.28318530718 / segments;
+    ang = mod(ang, stepA);
+    ang = abs(ang - stepA * 0.5);
+    vec2 r = vec2(cos(ang), sin(ang)) * rad;
+    r.x /= aspect;
+    return r + c;
+}
+
+vec2 fractalFold(vec2 uv, float zoom, float t, vec2 c, float aspect) {
+    vec2 p = uv;
+    for (int i = 0; i < 6; i++) {
+        p = abs((p - c) * (zoom + 0.15 * sin(t * 0.35 + float(i)))) - 0.5 + c;
+        p = rotateUV(p, t * 0.12 + float(i) * 0.07, c, aspect);
+    }
+    return p;
+}
+
+vec3 neonPalette(float t) {
+    vec3 pink = vec3(1.0, 0.15, 0.75);
+    vec3 blue = vec3(0.10, 0.55, 1.0);
+    vec3 green = vec3(0.10, 1.00, 0.45);
+    float ph = fract(t * 0.08);
+    vec3 k1 = mix(pink, blue, smoothstep(0.00, 0.33, ph));
+    vec3 k2 = mix(blue, green, smoothstep(0.33, 0.66, ph));
+    vec3 k3 = mix(green, pink, smoothstep(0.66, 1.00, ph));
+    float a = step(ph, 0.33);
+    float b = step(0.33, ph) * step(ph, 0.66);
+    float c = step(0.66, ph);
+    return normalize(a * k1 + b * k2 + c * k3) * 1.05;
+}
+
+vec3 softTone(vec3 c) {
+    c = pow(max(c, 0.0), vec3(0.95));
+    float l = dot(c, vec3(0.299, 0.587, 0.114));
+    c = mix(vec3(l), c, 0.9);
+    return clamp(c, 0.0, 1.0);
+}
+
+vec3 tentBlur3(sampler2D img, vec2 uv, vec2 res) {
+    vec2 ts = 1.0 / res;
+    vec3 s00 = textureGrad(img, uv + ts * vec2(-1.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s10 = textureGrad(img, uv + ts * vec2(0.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s20 = textureGrad(img, uv + ts * vec2(1.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s01 = textureGrad(img, uv + ts * vec2(-1.0, 0.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s11 = textureGrad(img, uv, dFdx(uv), dFdy(uv)).rgb;
+    vec3 s21 = textureGrad(img, uv + ts * vec2(1.0, 0.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s02 = textureGrad(img, uv + ts * vec2(-1.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s12 = textureGrad(img, uv + ts * vec2(0.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s22 = textureGrad(img, uv + ts * vec2(1.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    return (s00 + 2.0 * s10 + s20 + 2.0 * s01 + 4.0 * s11 + 2.0 * s21 + s02 + 2.0 * s12 + s22) / 16.0;
+}
+
+vec3 preBlendColor(vec2 uv) {
+    vec3 tex = tentBlur3(textTexture, uv, iResolution);
+    float aspect = iResolution.x / iResolution.y;
+    vec2 p = (uv - 0.5) * vec2(aspect, 1.0);
+    float r = length(p);
+    float t = time_f;
+    vec3 neon = neonPalette(t + r * 1.3);
+    float neonAmt = smoothstep(0.1, 0.8, r);
+    neonAmt = 0.3 + 0.4 * (1.0 - neonAmt);
+    vec3 grad = mix(tex, neon, neonAmt);
+    grad = mix(grad, tex, 0.2);
+    grad = softTone(grad);
+    return grad;
+}
+
+float diamondRadius(vec2 p) {
+    vec2 pa = abs(p);
+    vec2 ps = sin(abs(p));
+    float mixAmt = 0.5 + 0.5 * sin(time_f * 0.2);
+    vec2 pm = mix(pa, ps, mixAmt);
+    return max(pm.x, pm.y);
+}
+
+vec2 diamondFold(vec2 uv, vec2 c, float aspect) {
+    vec2 p = (uv - c) * vec2(aspect, 1.0);
+    p = abs(p);
+    if (p.y > p.x) p = p.yx;
+    p.x /= aspect;
+    return p + c;
+}
+
+vec2 triUV(vec2 uv, float scale) {
+    vec2 p = uv * scale;
+    vec2 g = floor(p);
+    vec2 f = fract(p);
+    if (f.x + f.y > 1.0) {
+        g += 1.0;
+        f = 1.0 - f.yx;
+    }
+    return (g + f) / scale;
+}
+
+void main(void) {
+    vec4 baseTex = texture(textTexture, TexCoord);
+    float aspect = iResolution.x / iResolution.y;
+    vec2 m = (iMouse.z > 0.5) ? (iMouse.xy / iResolution) : vec2(0.5);
+    vec2 ar = vec2(aspect, 1.0);
+
+    vec2 uv = TexCoord * 2.0 - 1.0;
+    uv.x *= aspect;
+    float rLen = length(uv);
+    float radialWave = pingPong(sin(rLen * time_f), 5.0);
+    float radius = sqrt(aspect * aspect + 1.0) + 0.5;
+    float glow = smoothstep(radius, radius - 0.25, radialWave);
+
+    vec3 baseCol = preBlendColor(TexCoord);
+
+    float audioLevel = clamp(amp * 0.75 + uamp * 0.40, 0.0, 2.0);
+    float tZoom = pingPong(time_f * 0.12 + audioLevel * 0.35, 1.0);
+    float zoomBase = mix(0.98, 1.35, tZoom);
+    float zoomAudio = 1.0 + audioLevel * 0.30;
+    float foldZoom = zoomBase * zoomAudio;
+
+    float seg = 4.0 + 2.0 * sin(time_f * 0.33 + audioLevel * 0.25);
+    vec2 kUV = reflectUV(TexCoord, seg, m, aspect);
+    kUV = diamondFold(kUV, m, aspect);
+    kUV = fractalFold(kUV, foldZoom, time_f, m, aspect);
+    kUV = rotateUV(kUV, time_f * (0.23 + audioLevel * 0.05), m, aspect);
+    kUV = diamondFold(kUV, m, aspect);
+
+    vec2 p = (kUV - m) * ar;
+    vec2 q = abs(p);
+    if (q.y > q.x) q = q.yx;
+
+    float base = 1.82 + 0.18 * pingPong(sin(time_f * 0.2) * (PI * time_f), 5.0);
+    float period = log(base) * pingPong(time_f * PI, 5.0 + audioLevel);
+    float tz = time_f * 0.65 + audioLevel * 0.35;
+
+    float rD = diamondRadius(p) + 1e-6;
+    float ang = atan(q.y, q.x) + tz * 0.35 + 0.35 * sin(rD * 18.0 + time_f * 0.6 + audioLevel * 3.0);
+    float k = fract((log(rD) - tz) / period);
+    float rw = exp(k * period);
+    rw = clamp(rw, 0.7, 1.6);
+
+    float zoomShell = 1.0 + audioLevel * 0.35;
+    vec2 pwrap = vec2(cos(ang), sin(ang)) * (rw * zoomShell * 0.85);
+
+    float triScale = 24.0 * (1.0 + 0.15 * audioLevel);
+    vec2 baseTri = triUV(fract(pwrap / ar + m), triScale);
+    vec2 tri0 = baseTri;
+    vec2 tri1 = triUV(fract(pwrap * 1.045 / ar + m), triScale);
+    vec2 tri2 = triUV(fract(pwrap * 0.955 / ar + m), triScale);
+
+    vec2 dir = normalize(pwrap + 1e-6);
+    vec2 off = dir * (0.0015 + 0.001 * sin(time_f * 1.3 + audioLevel)) * vec2(1.0, 1.0 / aspect);
+
+    float vign = 1.0 - smoothstep(0.75, 1.2, length((TexCoord - m) * ar));
+    vign = mix(0.9, 1.15, vign);
+
+    vec3 rC = preBlendColor(tri0 + off);
+    vec3 gC = preBlendColor(tri1);
+    vec3 bC = preBlendColor(tri2 - off);
+    vec3 kaleidoRGB = vec3(rC.r, gC.g, bC.b);
+
+    float ring = smoothstep(0.0, 0.7, sin(log(rD + 1e-3) * 9.5 + time_f * 1.2 + audioLevel * 2.0));
+    ring *= pingPong(time_f * PI, 5.0);
+
+    float pulse = 0.5 + 0.5 * sin(time_f * 2.0 + rD * 28.0 + k * 12.0 + audioLevel * 6.0);
+
+    vec3 outCol = kaleidoRGB;
+    outCol *= (0.75 + 0.25 * ring) * (0.85 + 0.15 * pulse) * vign;
+
+    vec3 bloom = outCol * outCol * 0.18 + pow(max(outCol - 0.6, 0.0), vec3(2.0)) * 0.12;
+    outCol += bloom;
+
+    outCol = mix(outCol, baseCol, 0.18);
+    outCol = clamp(outCol, vec3(0.05), vec3(0.97));
+
+    float mixGlow = pingPong(glow * PI, 5.0) * (0.4 + 0.4 * clamp(audioLevel, 0.0, 1.0));
+    vec3 finalRGB = mix(baseTex.rgb, outCol, mixGlow);
+    color = vec4(finalRGB, baseTex.a);
+}
+)SHD";
+inline const char *src_frac_zoom4 = R"SHD(#version 300 es
+precision highp float;
+out vec4 color;
+in vec2 TexCoord;
+
+uniform sampler2D textTexture;
+uniform vec2 iResolution;
+uniform float time_f;
+uniform vec4 iMouse;
+)SHD" COMMON_UNIFORMS COLOR_HELPERS R"SHD(
+const float PI = 3.1415926535897932384626433832795;
+
+float pingPong(float x, float length) {
+    float m = mod(x, length * 2.0);
+    return m <= length ? m : length * 2.0 - m;
+}
+
+vec3 hsv2rgb(vec3 c) {
+    vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+
+vec2 rotateUV(vec2 uv, float angle, vec2 c, float aspect) {
+    float s = sin(angle), cc = cos(angle);
+    vec2 p = uv - c;
+    p.x *= aspect;
+    p = mat2(cc, -s, s, cc) * p;
+    p.x /= aspect;
+    return p + c;
+}
+
+vec2 reflectUV(vec2 uv, float segments, vec2 c, float aspect) {
+    vec2 p = uv - c;
+    p.x *= aspect;
+    float ang = atan(p.y, p.x);
+    float rad = length(p);
+    float stepA = 6.28318530718 / segments;
+    ang = mod(ang, stepA);
+    ang = abs(ang - stepA * 0.5);
+    vec2 r = vec2(cos(ang), sin(ang)) * rad;
+    r.x /= aspect;
+    return r + c;
+}
+
+vec2 fractalFold(vec2 uv, float zoom, float t, vec2 c, float aspect) {
+    vec2 p = uv;
+    for (int i = 0; i < 6; i++) {
+        p = abs((p - c) * (zoom + 0.15 * sin(t * 0.35 + float(i)))) - 0.5 + c;
+        p = rotateUV(p, t * 0.12 + float(i) * 0.07, c, aspect);
+    }
+    return p;
+}
+
+vec3 neonPalette(float t) {
+    vec3 pink = vec3(1.0, 0.15, 0.75);
+    vec3 blue = vec3(0.10, 0.55, 1.0);
+    vec3 green = vec3(0.10, 1.00, 0.45);
+    float ph = fract(t * 0.08);
+    vec3 k1 = mix(pink, blue, smoothstep(0.00, 0.33, ph));
+    vec3 k2 = mix(blue, green, smoothstep(0.33, 0.66, ph));
+    vec3 k3 = mix(green, pink, smoothstep(0.66, 1.00, ph));
+    float a = step(ph, 0.33);
+    float b = step(0.33, ph) * step(ph, 0.66);
+    float c = step(0.66, ph);
+    return normalize(a * k1 + b * k2 + c * k3) * 1.05;
+}
+
+vec3 softTone(vec3 c) {
+    c = pow(max(c, 0.0), vec3(0.95));
+    float l = dot(c, vec3(0.299, 0.587, 0.114));
+    c = mix(vec3(l), c, 0.9);
+    return clamp(c, 0.0, 1.0);
+}
+
+vec3 tentBlur3(sampler2D img, vec2 uv, vec2 res) {
+    vec2 ts = 1.0 / res;
+    vec3 s00 = textureGrad(img, uv + ts * vec2(-1.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s10 = textureGrad(img, uv + ts * vec2(0.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s20 = textureGrad(img, uv + ts * vec2(1.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s01 = textureGrad(img, uv + ts * vec2(-1.0, 0.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s11 = textureGrad(img, uv, dFdx(uv), dFdy(uv)).rgb;
+    vec3 s21 = textureGrad(img, uv + ts * vec2(1.0, 0.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s02 = textureGrad(img, uv + ts * vec2(-1.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s12 = textureGrad(img, uv + ts * vec2(0.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s22 = textureGrad(img, uv + ts * vec2(1.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    return (s00 + 2.0 * s10 + s20 + 2.0 * s01 + 4.0 * s11 + 2.0 * s21 + s02 + 2.0 * s12 + s22) / 16.0;
+}
+
+vec3 preBlendColor(vec2 uv) {
+    vec3 tex = tentBlur3(textTexture, uv, iResolution);
+    float aspect = iResolution.x / iResolution.y;
+    vec2 p = (uv - 0.5) * vec2(aspect, 1.0);
+    float r = length(p);
+    float t = time_f;
+    vec3 neon = neonPalette(t + r * 1.3);
+    float neonAmt = smoothstep(0.1, 0.8, r);
+    neonAmt = 0.3 + 0.4 * (1.0 - neonAmt);
+    vec3 grad = mix(tex, neon, neonAmt);
+    grad = mix(grad, tex, 0.2);
+    grad = softTone(grad);
+    return grad;
+}
+
+float diamondRadius(vec2 p) {
+    p = sin(abs(p));
+    return max(p.x, p.y);
+}
+
+vec2 diamondFold(vec2 uv, vec2 c, float aspect) {
+    vec2 p = (uv - c) * vec2(aspect, 1.0);
+    p = abs(p);
+    if (p.y > p.x) p = p.yx;
+    p.x /= aspect;
+    return p + c;
+}
+
+vec2 complexIter(vec2 z, vec2 c) {
+    return vec2(z.x * z.x - z.y * z.y, 2.0 * z.x * z.y) + c;
+}
+
+vec2 fractalZoomUV(vec2 uv, vec2 center, float aspect, float t) {
+    vec2 p = (uv - center) * vec2(aspect, 1.0);
+
+    float tZoom = t * 0.23;
+    float level = floor(tZoom);
+    float local = pingPong(fract(tZoom), 1.0);
+
+    float zoom = pow(2.15, level + local * 0.98);
+    zoom = min(zoom, 50000.0);
+
+    p *= zoom;
+
+    vec2 z = p * 0.42;
+    vec2 c = vec2(0.32 + 0.02 * sin(t * 0.17),
+                  0.043 + 0.015 * cos(t * 0.21));
+
+    for (int i = 0; i < 7; i++) {
+        z = complexIter(z, c);
+    }
+
+    float warp = 0.30 + 0.15 * sin(t * 0.5);
+    float lenZ = max(1.0, length(z));
+    p += warp * (z / lenZ);
+
+    p /= zoom;
+    p.x /= aspect;
+    return p + center;
+}
+void main(void) {
+    vec4 baseTex = texture(textTexture, TexCoord);
+    vec2 uv = TexCoord * 2.0 - 1.0;
+    float aspect = iResolution.x / iResolution.y;
+    uv.x *= aspect;
+    float r = pingPong(sin(length(uv) * time_f), 5.0);
+    float radius = sqrt(aspect * aspect + 1.0) + 0.5;
+    float glow = smoothstep(radius, radius - 0.25, r);
+    vec2 m = (iMouse.z > 0.5) ? (iMouse.xy / iResolution) : vec2(0.5);
+    vec2 ar = vec2(aspect, 1.0);
+    vec3 baseCol = preBlendColor(TexCoord);
+    float seg = 4.0 + 2.0 * sin(time_f * 0.33);
+    vec2 kUV = reflectUV(TexCoord, seg, m, aspect);
+    kUV = diamondFold(kUV, m, aspect);
+    float foldZoom = 1.45 + 0.55 * sin(time_f * 0.42);
+    kUV = fractalFold(kUV, foldZoom, time_f, m, aspect);
+    kUV = rotateUV(kUV, time_f * 0.23, m, aspect);
+    kUV = diamondFold(kUV, m, aspect);
+    vec2 p = (kUV - m) * ar;
+    vec2 q = abs(p);
+    if (q.y > q.x) q = q.yx;
+    float base = 1.82 + 0.18 * pingPong(sin(time_f * 0.2) * (PI * time_f), 5.0);
+    float period = log(base) * pingPong(time_f * PI, 5.0);
+    float tz = time_f * 0.65;
+    float rD = diamondRadius(p) + 1e-6;
+    float ang = atan(q.y, q.x) + tz * 0.35 + 0.35 * sin(rD * 18.0 + time_f * 0.6);
+    float k = fract((log(rD) - tz) / period);
+    float rw = exp(k * period);
+    vec2 pwrap = vec2(cos(ang), sin(ang)) * rw;
+
+    vec2 baseUV0 = pwrap / ar + m;
+    vec2 baseUV1 = (pwrap * 1.045) / ar + m;
+    vec2 baseUV2 = (pwrap * 0.955) / ar + m;
+
+    vec2 u0 = fract(fractalZoomUV(baseUV0, m, aspect, time_f));
+    vec2 u1 = fract(fractalZoomUV(baseUV1, m, aspect, time_f + 0.7));
+    vec2 u2 = fract(fractalZoomUV(baseUV2, m, aspect, time_f + 1.4));
+
+    vec2 dir = normalize(pwrap + 1e-6);
+    vec2 off = dir * (0.0015 + 0.001 * sin(time_f * 1.3)) * vec2(1.0, 1.0 / aspect);
+    float vign = 1.0 - smoothstep(0.75, 1.2, length((TexCoord - m) * ar));
+    vign = mix(0.9, 1.15, vign);
+
+    vec3 rC = preBlendColor(u0 + off);
+    vec3 gC = preBlendColor(u1);
+    vec3 bC = preBlendColor(u2 - off);
+    vec3 kaleidoRGB = vec3(rC.r, gC.g, bC.b);
+
+    float ring = smoothstep(0.0, 0.7, sin(log(rD + 1e-3) * 9.5 + time_f * 1.2));
+    ring = ring * pingPong((time_f * PI), 5.0);
+    float pulse = 0.5 + 0.5 * sin(time_f * 2.0 + rD * 28.0 + k * 12.0);
+
+    vec3 outCol = kaleidoRGB;
+    outCol *= (0.75 + 0.25 * ring) * (0.85 + 0.15 * pulse) * vign;
+    vec3 bloom = outCol * outCol * 0.18 + pow(max(outCol - 0.6, 0.0), vec3(2.0)) * 0.12;
+
+    outCol += bloom;
+    outCol = mix(outCol, baseCol, pingPong(pulse * PI, 5.0) * 0.18);
+    outCol = clamp(outCol, vec3(0.05), vec3(0.97));
+
+    vec3 finalRGB = mix(baseTex.rgb, outCol, pingPong(glow * PI, 5.0) * 0.8);
+    color = vec4(finalRGB, baseTex.a);
+}
+)SHD";
+inline const char *src_frac_zoom5 = R"SHD(#version 300 es
+precision highp float;
+out vec4 color;
+in vec2 TexCoord;
+
+uniform sampler2D textTexture;
+uniform vec2 iResolution;
+uniform float time_f;
+uniform vec4 iMouse;
+)SHD" COMMON_UNIFORMS COLOR_HELPERS R"SHD(
+const float PI = 3.1415926535897932384626433832795;
+
+float pingPong(float x, float length) {
+    float m = mod(x, length * 2.0);
+    return m <= length ? m : length * 2.0 - m;
+}
+
+vec3 hsv2rgb(vec3 c) {
+    vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+
+vec2 rotateUV(vec2 uv, float angle, vec2 c, float aspect) {
+    float s = sin(angle), cc = cos(angle);
+    vec2 p = uv - c;
+    p.x *= aspect;
+    p = mat2(cc, -s, s, cc) * p;
+    p.x /= aspect;
+    return p + c;
+}
+
+vec2 reflectUV(vec2 uv, float segments, vec2 c, float aspect) {
+    vec2 p = uv - c;
+    p.x *= aspect;
+    float ang = atan(p.y, p.x);
+    float rad = length(p);
+    float stepA = 6.28318530718 / segments;
+    ang = mod(ang, stepA);
+    ang = abs(ang - stepA * 0.5);
+    vec2 r = vec2(cos(ang), sin(ang)) * rad;
+    r.x /= aspect;
+    return r + c;
+}
+
+vec2 fractalFold(vec2 uv, float zoom, float t, vec2 c, float aspect) {
+    vec2 p = uv;
+    for (int i = 0; i < 6; i++) {
+        p = abs((p - c) * (zoom + 0.15 * sin(t * 0.35 + float(i)))) - 0.5 + c;
+        p = rotateUV(p, t * 0.12 + float(i) * 0.07, c, aspect);
+    }
+    return p;
+}
+
+vec3 neonPalette(float t) {
+    vec3 pink = vec3(1.0, 0.15, 0.75);
+    vec3 blue = vec3(0.10, 0.55, 1.0);
+    vec3 green = vec3(0.10, 1.00, 0.45);
+    float ph = fract(t * 0.08);
+    vec3 k1 = mix(pink, blue, smoothstep(0.00, 0.33, ph));
+    vec3 k2 = mix(blue, green, smoothstep(0.33, 0.66, ph));
+    vec3 k3 = mix(green, pink, smoothstep(0.66, 1.00, ph));
+    float a = step(ph, 0.33);
+    float b = step(0.33, ph) * step(ph, 0.66);
+    float c = step(0.66, ph);
+    return normalize(a * k1 + b * k2 + c * k3) * 1.05;
+}
+
+vec3 softTone(vec3 c) {
+    c = pow(max(c, 0.0), vec3(0.95));
+    float l = dot(c, vec3(0.299, 0.587, 0.114));
+    c = mix(vec3(l), c, 0.9);
+    return clamp(c, 0.0, 1.0);
+}
+
+vec3 tentBlur3(sampler2D img, vec2 uv, vec2 res) {
+    vec2 ts = 1.0 / res;
+    vec3 s00 = textureGrad(img, uv + ts * vec2(-1.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s10 = textureGrad(img, uv + ts * vec2(0.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s20 = textureGrad(img, uv + ts * vec2(1.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s01 = textureGrad(img, uv + ts * vec2(-1.0, 0.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s11 = textureGrad(img, uv, dFdx(uv), dFdy(uv)).rgb;
+    vec3 s21 = textureGrad(img, uv + ts * vec2(1.0, 0.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s02 = textureGrad(img, uv + ts * vec2(-1.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s12 = textureGrad(img, uv + ts * vec2(0.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s22 = textureGrad(img, uv + ts * vec2(1.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    return (s00 + 2.0 * s10 + s20 + 2.0 * s01 + 4.0 * s11 + 2.0 * s21 + s02 + 2.0 * s12 + s22) / 16.0;
+}
+
+vec3 preBlendColor(vec2 uv) {
+    vec3 tex = tentBlur3(textTexture, uv, iResolution);
+    float aspect = iResolution.x / iResolution.y;
+    vec2 p = (uv - 0.5) * vec2(aspect, 1.0);
+    float r = length(p);
+    float t = time_f;
+    vec3 neon = neonPalette(t + r * 1.3);
+    float neonAmt = smoothstep(0.1, 0.8, r);
+    neonAmt = 0.3 + 0.4 * (1.0 - neonAmt);
+    vec3 grad = mix(tex, neon, neonAmt);
+    grad = mix(grad, tex, 0.2);
+    grad = softTone(grad);
+    return grad;
+}
+
+float diamondRadius(vec2 p) {
+    p = sin(abs(p));
+    return max(p.x, p.y);
+}
+
+vec2 diamondFold(vec2 uv, vec2 c, float aspect) {
+    vec2 p = (uv - c) * vec2(aspect, 1.0);
+    p = abs(p);
+    if (p.y > p.x) p = p.yx;
+    p.x /= aspect;
+    return p + c;
+}
+
+vec2 complexIter(vec2 z, vec2 c) {
+    return vec2(z.x * z.x - z.y * z.y, 2.0 * z.x * z.y) + c;
+}
+
+vec2 fractalZoomUV(vec2 uv, vec2 center, float aspect, float t) {
+    vec2 p = (uv - center) * vec2(aspect, 1.0);
+    float tZoom = t * 0.23;
+    float level = floor(tZoom);
+    float local = pingPong(fract(tZoom), 1.0);
+    float zoom = pow(2.15, level + local * 0.98);
+    zoom = min(zoom, 50000.0);
+    p *= zoom;
+    vec2 z = p * 0.42;
+    vec2 c = vec2(0.32 + 0.02 * sin(t * 0.17),
+                  0.043 + 0.015 * cos(t * 0.21));
+    for (int i = 0; i < 7; i++) {
+        z = complexIter(z, c);
+    }
+    float warp = 0.30 + 0.15 * sin(t * 0.5);
+    float lenZ = max(1.0, length(z));
+    p += warp * (z / lenZ);
+    float ang = t * 0.45 * 6.28318530718;
+    float cs = cos(ang);
+    float sn = sin(ang);
+    p = mat2(cs, -sn, sn, cs) * p;
+    p /= zoom;
+    p.x /= aspect;
+    return p + center;
+}
+
+void main(void) {
+    vec4 baseTex = texture(textTexture, TexCoord);
+    vec2 uv = TexCoord * 2.0 - 1.0;
+    float aspect = iResolution.x / iResolution.y;
+    uv.x *= aspect;
+    float r = pingPong(sin(length(uv) * time_f), 5.0);
+    float radius = sqrt(aspect * aspect + 1.0) + 0.5;
+    float glow = smoothstep(radius, radius - 0.25, r);
+    vec2 m = (iMouse.z > 0.5) ? (iMouse.xy / iResolution) : vec2(0.5);
+    vec2 ar = vec2(aspect, 1.0);
+    vec3 baseCol = preBlendColor(TexCoord);
+    float seg = 4.0 + 2.0 * sin(time_f * 0.33);
+    vec2 kUV = reflectUV(TexCoord, seg, m, aspect);
+    kUV = diamondFold(kUV, m, aspect);
+    float foldZoom = 1.45 + 0.55 * sin(time_f * 0.42);
+    kUV = fractalFold(kUV, foldZoom, time_f, m, aspect);
+    kUV = rotateUV(kUV, time_f * 0.23, m, aspect);
+    kUV = diamondFold(kUV, m, aspect);
+    vec2 p = (kUV - m) * ar;
+    vec2 q = abs(p);
+    if (q.y > q.x) q = q.yx;
+    float base = 1.82 + 0.18 * pingPong(sin(time_f * 0.2) * (PI * time_f), 5.0);
+    float period = log(base) * pingPong(time_f * PI, 5.0);
+    float tz = time_f * 0.65;
+    float rD = diamondRadius(p) + 1e-6;
+    float ang = atan(q.y, q.x) + tz * 0.35 + 0.35 * sin(rD * 18.0 + time_f * 0.6);
+    float k = fract((log(rD) - tz) / period);
+    float rw = exp(k * period);
+    vec2 pwrap = vec2(cos(ang), sin(ang)) * rw;
+    vec2 baseUV0 = pwrap / ar + m;
+    vec2 baseUV1 = (pwrap * 1.045) / ar + m;
+    vec2 baseUV2 = (pwrap * 0.955) / ar + m;
+    vec2 u0 = fract(fractalZoomUV(baseUV0, m, aspect, time_f));
+    vec2 u1 = fract(fractalZoomUV(baseUV1, m, aspect, time_f + 0.7));
+    vec2 u2 = fract(fractalZoomUV(baseUV2, m, aspect, time_f + 1.4));
+    vec2 dir = normalize(pwrap + 1e-6);
+    vec2 off = dir * (0.0015 + 0.001 * sin(time_f * 1.3)) * vec2(1.0, 1.0 / aspect);
+    float vign = 1.0 - smoothstep(0.75, 1.2, length((TexCoord - m) * ar));
+    vign = mix(0.9, 1.15, vign);
+    vec3 rC = preBlendColor(u0 + off);
+    vec3 gC = preBlendColor(u1);
+    vec3 bC = preBlendColor(u2 - off);
+    vec3 kaleidoRGB = vec3(rC.r, gC.g, bC.b);
+    float ring = smoothstep(0.0, 0.7, sin(log(rD + 1e-3) * 9.5 + time_f * 1.2));
+    ring = ring * pingPong((time_f * PI), 5.0);
+    float pulse = 0.5 + 0.5 * sin(time_f * 2.0 + rD * 28.0 + k * 12.0);
+    vec3 outCol = kaleidoRGB;
+    outCol *= (0.75 + 0.25 * ring) * (0.85 + 0.15 * pulse) * vign;
+    vec3 bloom = outCol * outCol * 0.18 + pow(max(outCol - 0.6, 0.0), vec3(2.0)) * 0.12;
+    outCol += bloom;
+    outCol = mix(outCol, baseCol, pingPong(pulse * PI, 5.0) * 0.18);
+    outCol = clamp(outCol, vec3(0.05), vec3(0.97));
+    vec3 finalRGB = mix(baseTex.rgb, outCol, pingPong(glow * PI, 5.0) * 0.8);
+    color = vec4(finalRGB, baseTex.a);
+}
+)SHD";
+inline const char *src_frac_zoom6 = R"SHD(#version 300 es
+precision highp float;
+out vec4 color;
+in vec2 TexCoord;
+
+uniform sampler2D textTexture;
+uniform vec2 iResolution;
+uniform float time_f;
+uniform vec4 iMouse;
+)SHD" COMMON_UNIFORMS COLOR_HELPERS R"SHD(
+const float PI = 3.1415926535897932384626433832795;
+
+float pingPong(float x, float length) {
+    float m = mod(x, length * 2.0);
+    return m <= length ? m : length * 2.0 - m;
+}
+
+vec3 hsv2rgb(vec3 c) {
+    vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+
+vec2 rotateUV(vec2 uv, float angle, vec2 c, float aspect) {
+    float s = sin(angle), cc = cos(angle);
+    vec2 p = uv - c;
+    p.x *= aspect;
+    p = mat2(cc, -s, s, cc) * p;
+    p.x /= aspect;
+    return p + c;
+}
+
+vec2 reflectUV(vec2 uv, float segments, vec2 c, float aspect) {
+    vec2 p = uv - c;
+    p.x *= aspect;
+    float ang = atan(p.y, p.x);
+    float rad = length(p);
+    float stepA = 6.28318530718 / segments;
+    ang = mod(ang, stepA);
+    ang = abs(ang - stepA * 0.5);
+    vec2 r = vec2(cos(ang), sin(ang)) * rad;
+    r.x /= aspect;
+    return r + c;
+}
+
+vec2 fractalFold(vec2 uv, float zoom, float t, vec2 c, float aspect) {
+    vec2 p = uv;
+    for (int i = 0; i < 6; i++) {
+        p = abs((p - c) * (zoom + 0.15 * sin(t * 0.35 + float(i)))) - 0.5 + c;
+        p = rotateUV(p, t * 0.12 + float(i) * 0.07, c, aspect);
+    }
+    return p;
+}
+
+vec3 neonPalette(float t) {
+    vec3 pink = vec3(1.0, 0.10, 0.85);
+    vec3 blue = vec3(0.00, 0.60, 1.0);
+    vec3 green = vec3(0.05, 1.05, 0.50);
+    float ph = fract(t * 0.15);
+    vec3 k1 = mix(pink, blue, smoothstep(0.00, 0.33, ph));
+    vec3 k2 = mix(blue, green, smoothstep(0.33, 0.66, ph));
+    vec3 k3 = mix(green, pink, smoothstep(0.66, 1.00, ph));
+    float a = step(ph, 0.33);
+    float b = step(0.33, ph) * step(ph, 0.66);
+    float c = step(0.66, ph);
+    vec3 col = a * k1 + b * k2 + c * k3;
+    col = pow(col, vec3(0.85));
+    return normalize(col) * 1.4;
+}
+
+vec3 softTone(vec3 c) {
+    c = pow(max(c, 0.0), vec3(0.9));
+    float l = dot(c, vec3(0.299, 0.587, 0.114));
+    c = mix(vec3(l), c, 0.7);
+    return clamp(c, 0.0, 1.0);
+}
+
+vec3 tentBlur3(sampler2D img, vec2 uv, vec2 res) {
+    vec2 ts = 1.0 / res;
+    vec3 s00 = textureGrad(img, uv + ts * vec2(-1.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s10 = textureGrad(img, uv + ts * vec2(0.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s20 = textureGrad(img, uv + ts * vec2(1.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s01 = textureGrad(img, uv + ts * vec2(-1.0, 0.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s11 = textureGrad(img, uv, dFdx(uv), dFdy(uv)).rgb;
+    vec3 s21 = textureGrad(img, uv + ts * vec2(1.0, 0.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s02 = textureGrad(img, uv + ts * vec2(-1.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s12 = textureGrad(img, uv + ts * vec2(0.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s22 = textureGrad(img, uv + ts * vec2(1.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    return (s00 + 2.0 * s10 + s20 + 2.0 * s01 + 4.0 * s11 + 2.0 * s21 + s02 + 2.0 * s12 + s22) / 16.0;
+}
+
+vec3 preBlendColor(vec2 uv) {
+    vec3 tex = tentBlur3(textTexture, uv, iResolution);
+    float aspect = iResolution.x / iResolution.y;
+    vec2 p = (uv - 0.5) * vec2(aspect, 1.0);
+    float r = length(p);
+    float t = time_f;
+    vec3 neon = neonPalette(t + r * 1.3);
+    float neonAmt = smoothstep(0.1, 0.8, r);
+    neonAmt = 0.3 + 0.4 * (1.0 - neonAmt);
+    vec3 grad = mix(tex, neon, neonAmt);
+    grad = mix(grad, tex, 0.2);
+    grad = softTone(grad);
+    return grad;
+}
+
+float diamondRadius(vec2 p) {
+    p = sin(abs(p));
+    return max(p.x, p.y);
+}
+
+vec2 diamondFold(vec2 uv, vec2 c, float aspect) {
+    vec2 p = (uv - c) * vec2(aspect, 1.0);
+    p = abs(p);
+    if (p.y > p.x) p = p.yx;
+    p.x /= aspect;
+    return p + c;
+}
+
+vec2 complexIter(vec2 z, vec2 c) {
+    return vec2(z.x * z.x - z.y * z.y, 2.0 * z.x * z.y) + c;
+}
+
+vec2 fractalZoomUV(vec2 uv, vec2 center, float aspect, float t) {
+    vec2 p = (uv - center) * vec2(aspect, 1.0);
+    float tZoom = t * 0.23;
+    float level = floor(tZoom);
+    float local = pingPong(fract(tZoom), 1.0);
+    float zoom = pow(2.15, level + local * 0.98);
+    zoom = min(zoom, 50000.0);
+    p *= zoom;
+    vec2 z = p * 0.42;
+    vec2 c = vec2(0.32 + 0.02 * sin(t * 0.17),
+                  0.043 + 0.015 * cos(t * 0.21));
+    for (int i = 0; i < 7; i++) {
+        z = complexIter(z, c);
+    }
+    float warp = 0.30 + 0.15 * sin(t * 0.5);
+    float lenZ = max(1.0, length(z));
+    p += warp * (z / lenZ);
+    float ang = t * 0.45 * 6.28318530718;
+    float cs = cos(ang);
+    float sn = sin(ang);
+    p = mat2(cs, -sn, sn, cs) * p;
+    p /= zoom;
+    p.x /= aspect;
+    return p + center;
+}
+
+void main(void) {
+    vec4 baseTex = texture(textTexture, TexCoord);
+    vec2 uv = TexCoord * 2.0 - 1.0;
+    float aspect = iResolution.x / iResolution.y;
+    uv.x *= aspect;
+    float r = pingPong(sin(length(uv) * time_f), 5.0);
+    float radius = sqrt(aspect * aspect + 1.0) + 0.5;
+    float glow = smoothstep(radius, radius - 0.25, r);
+    vec2 m = (iMouse.z > 0.5) ? (iMouse.xy / iResolution) : vec2(0.5);
+    vec2 ar = vec2(aspect, 1.0);
+    vec3 baseCol = preBlendColor(TexCoord);
+    float seg = 4.0 + 2.0 * sin(time_f * 0.33);
+    vec2 kUV = reflectUV(TexCoord, seg, m, aspect);
+    kUV = diamondFold(kUV, m, aspect);
+    float foldZoom = 1.45 + 0.55 * sin(time_f * 0.42);
+    kUV = fractalFold(kUV, foldZoom, time_f, m, aspect);
+    kUV = rotateUV(kUV, time_f * 0.23, m, aspect);
+    kUV = diamondFold(kUV, m, aspect);
+    vec2 p = (kUV - m) * ar;
+    vec2 q = abs(p);
+    if (q.y > q.x) q = q.yx;
+    float base = 1.82 + 0.18 * pingPong(sin(time_f * 0.2) * (PI * time_f), 5.0);
+    float period = log(base) * pingPong(time_f * PI, 5.0);
+    float tz = time_f * 0.65;
+    float rD = diamondRadius(p) + 1e-6;
+    float ang = atan(q.y, q.x) + tz * 0.35 + 0.35 * sin(rD * 18.0 + time_f * 0.6);
+    float k = fract((log(rD) - tz) / period);
+    float rw = exp(k * period);
+    vec2 pwrap = vec2(cos(ang), sin(ang)) * rw;
+    vec2 baseUV0 = pwrap / ar + m;
+    vec2 baseUV1 = (pwrap * 1.045) / ar + m;
+    vec2 baseUV2 = (pwrap * 0.955) / ar + m;
+    vec2 u0 = fract(fractalZoomUV(baseUV0, m, aspect, time_f));
+    vec2 u1 = fract(fractalZoomUV(baseUV1, m, aspect, time_f + 0.7));
+    vec2 u2 = fract(fractalZoomUV(baseUV2, m, aspect, time_f + 1.4));
+    vec2 dir = normalize(pwrap + 1e-6);
+    vec2 off = dir * (0.0015 + 0.001 * sin(time_f * 1.3)) * vec2(1.0, 1.0 / aspect);
+    float vign = 1.0 - smoothstep(0.75, 1.2, length((TexCoord - m) * ar));
+    vign = mix(0.9, 1.18, vign);
+    vec3 rC = preBlendColor(u0 + off);
+    vec3 gC = preBlendColor(u1);
+    vec3 bC = preBlendColor(u2 - off);
+    vec3 kaleidoRGB = vec3(rC.r, gC.g, bC.b);
+    float ring = smoothstep(0.0, 0.7, sin(log(rD + 1e-3) * 9.5 + time_f * 1.2));
+    ring = ring * pingPong((time_f * PI), 5.0);
+    float pulse = 0.5 + 0.5 * sin(time_f * 2.3 + rD * 30.0 + k * 14.0);
+    vec3 neonGlobal = neonPalette(time_f + rD * 0.6 + k * 0.8);
+    vec3 outCol = kaleidoRGB;
+    outCol = mix(outCol, neonGlobal, 0.22 + 0.25 * ring);
+    outCol *= (0.78 + 0.28 * ring) * (0.85 + 0.18 * pulse) * vign;
+    vec3 bloom = outCol * outCol * 0.26 + pow(max(outCol - 0.55, 0.0), vec3(2.2)) * 0.22;
+    outCol += bloom;
+    outCol = mix(outCol, baseCol, pingPong(pulse * PI, 5.0) * 0.14);
+    outCol = clamp(outCol, vec3(0.03), vec3(1.15));
+    vec3 finalRGB = mix(baseTex.rgb, outCol, min(0.95, pingPong(glow * PI, 5.0) * 0.95));
+    finalRGB = clamp(finalRGB, 0.0, 1.0);
+    color = vec4(finalRGB, baseTex.a);
+}
+)SHD";
+inline const char *src_frac_zoom7 = R"SHD(#version 300 es
+precision highp float;
+out vec4 color;
+in vec2 TexCoord;
+
+uniform sampler2D textTexture;
+uniform vec2 iResolution;
+uniform float time_f;
+uniform vec4 iMouse;
+)SHD" COMMON_UNIFORMS COLOR_HELPERS R"SHD(
+const float PI = 3.1415926535897932384626433832795;
+
+float pingPong(float x, float length) {
+    float m = mod(x, length * 2.0);
+    return m <= length ? m : length * 2.0 - m;
+}
+
+vec3 hsv2rgb(vec3 c) {
+    vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+
+vec2 rotateUV(vec2 uv, float angle, vec2 c, float aspect) {
+    float s = sin(angle), cc = cos(angle);
+    vec2 p = uv - c;
+    p.x *= aspect;
+    p = mat2(cc, -s, s, cc) * p;
+    p.x /= aspect;
+    return p + c;
+}
+
+vec2 reflectUV(vec2 uv, float segments, vec2 c, float aspect) {
+    vec2 p = uv - c;
+    p.x *= aspect;
+    float ang = atan(p.y, p.x);
+    float rad = length(p);
+    float stepA = 6.28318530718 / segments;
+    ang = mod(ang, stepA);
+    ang = abs(ang - stepA * 0.5);
+    vec2 r = vec2(cos(ang), sin(ang)) * rad;
+    r.x /= aspect;
+    return r + c;
+}
+
+vec2 fractalFold(vec2 uv, float zoom, float t, vec2 c, float aspect) {
+    vec2 p = uv;
+    for (int i = 0; i < 6; i++) {
+        p = abs((p - c) * (zoom + 0.15 * sin(t * 0.35 + float(i)))) - 0.5 + c;
+        p = rotateUV(p, t * 0.12 + float(i) * 0.07, c, aspect);
+    }
+    return p;
+}
+
+vec3 neonPalette(float t) {
+    vec3 pink = vec3(1.0, 0.15, 0.75);
+    vec3 blue = vec3(0.10, 0.55, 1.0);
+    vec3 green = vec3(0.10, 1.00, 0.45);
+    float ph = fract(t * 0.08);
+    vec3 k1 = mix(pink, blue, smoothstep(0.00, 0.33, ph));
+    vec3 k2 = mix(blue, green, smoothstep(0.33, 0.66, ph));
+    vec3 k3 = mix(green, pink, smoothstep(0.66, 1.00, ph));
+    float a = step(ph, 0.33);
+    float b = step(0.33, ph) * step(ph, 0.66);
+    float c = step(0.66, ph);
+    return normalize(a * k1 + b * k2 + c * k3) * 1.05;
+}
+
+vec3 softTone(vec3 c) {
+    c = pow(max(c, 0.0), vec3(0.95));
+    float l = dot(c, vec3(0.299, 0.587, 0.114));
+    c = mix(vec3(l), c, 0.9);
+    return clamp(c, 0.0, 1.0);
+}
+
+vec3 tentBlur3(sampler2D img, vec2 uv, vec2 res) {
+    vec2 ts = 1.0 / res;
+    vec3 s00 = textureGrad(img, uv + ts * vec2(-1.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s10 = textureGrad(img, uv + ts * vec2(0.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s20 = textureGrad(img, uv + ts * vec2(1.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s01 = textureGrad(img, uv + ts * vec2(-1.0, 0.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s11 = textureGrad(img, uv, dFdx(uv), dFdy(uv)).rgb;
+    vec3 s21 = textureGrad(img, uv + ts * vec2(1.0, 0.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s02 = textureGrad(img, uv + ts * vec2(-1.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s12 = textureGrad(img, uv + ts * vec2(0.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s22 = textureGrad(img, uv + ts * vec2(1.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    return (s00 + 2.0 * s10 + s20 + 2.0 * s01 + 4.0 * s11 + 2.0 * s21 + s02 + 2.0 * s12 + s22) / 16.0;
+}
+
+vec3 preBlendColor(vec2 uv) {
+    vec3 tex = tentBlur3(textTexture, uv, iResolution);
+    float aspect = iResolution.x / iResolution.y;
+    vec2 p = (uv - 0.5) * vec2(aspect, 1.0);
+    float r = length(p);
+    float t = time_f;
+    vec3 neon = neonPalette(t + r * 1.3);
+    float neonAmt = smoothstep(0.1, 0.8, r);
+    neonAmt = 0.3 + 0.4 * (1.0 - neonAmt);
+    vec3 grad = mix(tex, neon, neonAmt);
+    grad = mix(grad, tex, 0.2);
+    grad = softTone(grad);
+    return grad;
+}
+
+float diamondRadius(vec2 p) {
+    p = sin(abs(p));
+    return max(p.x, p.y);
+}
+
+vec2 diamondFold(vec2 uv, vec2 c, float aspect) {
+    vec2 p = (uv - c) * vec2(aspect, 1.0);
+    p = abs(p);
+    if (p.y > p.x) p = p.yx;
+    p.x /= aspect;
+    return p + c;
+}
+
+void main(void) {
+    vec4 baseTex = texture(textTexture, TexCoord);
+    vec2 uv = TexCoord * 2.0 - 1.0;
+    float aspect = iResolution.x / iResolution.y;
+    uv.x *= aspect;
+    float r = pingPong(sin(length(uv) * time_f), 5.0);
+    float radius = sqrt(aspect * aspect + 1.0) + 0.5;
+    float glow = smoothstep(radius, radius - 0.25, r);
+    vec2 m = (iMouse.z > 0.5) ? (iMouse.xy / iResolution) : vec2(0.5);
+    vec2 ar = vec2(aspect, 1.0);
+    vec3 baseCol = preBlendColor(TexCoord);
+    float seg = 4.0 + 2.0 * sin(time_f * 0.33);
+    vec2 kUV = reflectUV(TexCoord, seg, m, aspect);
+    kUV = diamondFold(kUV, m, aspect);
+    float foldZoom = 1.45 + 0.55 * sin(time_f * 0.42);
+    kUV = fractalFold(kUV, foldZoom, time_f, m, aspect);
+    kUV = rotateUV(kUV, time_f * 0.23, m, aspect);
+    kUV = diamondFold(kUV, m, aspect);
+    vec2 p = (kUV - m) * ar;
+    vec2 q = abs(p);
+    if (q.y > q.x) q = q.yx;
+    float base = 1.82 + 0.18 * pingPong(sin(time_f * 0.2) * (PI * time_f), 5.0);
+    float period = log(base) * pingPong(time_f * PI, 5.0);
+    float tz = time_f * 0.65;
+    float rD = diamondRadius(p) + 1e-6;
+    float ang = atan(q.y, q.x) + tz * 0.35 + 0.35 * sin(rD * 18.0 + time_f * 0.6);
+    float k = fract((log(rD) - tz) / period);
+    float rw = exp(k * period);
+    vec2 pwrap = vec2(cos(ang), sin(ang)) * rw;
+    vec2 u0 = fract(pwrap / ar + m);
+    vec2 u1 = fract((pwrap * 1.045) / ar + m);
+    vec2 u2 = fract((pwrap * 0.955) / ar + m);
+    vec2 dir = normalize(pwrap + 1e-6);
+    vec2 off = dir * (0.0015 + 0.001 * sin(time_f * 1.3)) * vec2(1.0, 1.0 / aspect);
+    float vign = 1.0 - smoothstep(0.75, 1.2, length((TexCoord - m) * ar));
+    vign = mix(0.9, 1.15, vign);
+    vec3 rC = preBlendColor(u0 + off);
+    vec3 gC = preBlendColor(u1);
+    vec3 bC = preBlendColor(u2 - off);
+    vec3 kaleidoRGB = vec3(rC.r, gC.g, bC.b);
+    float ring = smoothstep(0.0, 0.7, sin(log(rD + 1e-3) * 9.5 + time_f * 1.2));
+    ring = ring * pingPong((time_f * PI), 5.0);
+    float pulse = 0.5 + 0.5 * sin(time_f * 2.0 + rD * 28.0 + k * 12.0);
+    vec3 outCol = kaleidoRGB;
+    outCol *= (0.75 + 0.25 * ring) * (0.85 + 0.15 * pulse) * vign;
+    vec3 bloom = outCol * outCol * 0.18 + pow(max(outCol - 0.6, 0.0), vec3(2.0)) * 0.12;
+    outCol += bloom;
+    outCol = mix(outCol, baseCol, pingPong(pulse * PI, 5.0) * 0.18);
+    outCol = clamp(outCol, vec3(0.05), vec3(0.97));
+    vec3 finalRGB = mix(baseTex.rgb, outCol, pingPong(glow * PI, 5.0) * 0.8);
+    color = vec4(finalRGB, baseTex.a);
+}
+)SHD";
+inline const char *src_frac_shader01 = R"SHD(#version 300 es
+precision highp float;
+out vec4 color;
+in vec2 TexCoord;
+
+uniform sampler2D textTexture;
+uniform vec2 iResolution;
+uniform float time_f;
+uniform vec4 iMouse;
+)SHD" COMMON_UNIFORMS COLOR_HELPERS R"SHD(
+float pingPong(float x, float length){
+    float m = mod(x, length*2.0);
+    return m <= length ? m : length*2.0 - m;
+}
+
+vec2 rotateUV(vec2 uv, float angle, vec2 c, float aspect){
+    float s = sin(angle), cc = cos(angle);
+    vec2 p = uv - c;
+    p.x *= aspect;
+    p = mat2(cc, -s, s, cc) * p;
+    p.x /= aspect;
+    return p + c;
+}
+
+vec2 reflectUV(vec2 uv, float segments, vec2 c, float aspect){
+    vec2 p = uv - c;
+    p.x *= aspect;
+    float ang = atan(p.y, p.x);
+    float rad = length(p);
+    float stepA = 6.28318530718 / segments;
+    ang = mod(ang, stepA);
+    ang = abs(ang - stepA * 0.5);
+    vec2 r = vec2(cos(ang), sin(ang)) * rad;
+    r.x /= aspect;
+    return r + c;
+}
+
+vec2 fractalFold(vec2 uv, float zoom, float t, vec2 c, float aspect){
+    vec2 p = uv;
+    for(int i=0;i<6;i++){
+        p = abs((p - c) * (zoom + 0.15*sin(t*0.35+float(i)))) - 0.5 + c;
+        p = rotateUV(p, t*0.12 + float(i)*0.07, c, aspect);
+    }
+    return p;
+}
+
+vec3 hsv2rgb(vec3 c){
+    vec4 K = vec4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
+    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+
+vec3 movingGradient(vec2 uv, vec2 c, float t, float aspect){
+    vec2 ar = vec2(aspect, 1.0);
+    vec2 p = (uv - c) * ar;
+    vec2 d = normalize(vec2(cos(t*0.27), sin(t*0.31)));
+    float s = dot(p, d);
+    float band = 0.5 + 0.5*sin(s*6.28318530718*0.35 + t*0.9);
+    float h = fract(s*0.22 + t*0.07 + 0.15*sin(t*0.33));
+    float S = 0.75 + 0.25*sin(t*0.21 + s*2.0);
+    float V = 0.75 + 0.25*band;
+    vec3 base = hsv2rgb(vec3(h, S, V));
+    float edge = smoothstep(0.2, 0.8, band);
+    return mix(base*0.6, base, edge);
+}
+
+void main(){
+    float aspect = iResolution.x / iResolution.y;
+    vec2 ar = vec2(aspect, 1.0);
+    vec2 m = (iMouse.z > 0.5) ? (iMouse.xy / iResolution) : vec2(0.5);
+    vec2 uv = TexCoord;
+    vec4 originalTexture = texture(textTexture, TexCoord);
+
+    float seg = 6.0 + 2.0*sin(time_f*0.33);
+    vec2 kUV = reflectUV(uv, seg, m, aspect);
+    float foldZoom = 1.45 + 0.55 * sin(time_f * 0.42);
+    kUV = fractalFold(kUV, foldZoom, time_f, m, aspect);
+    kUV = rotateUV(kUV, time_f * 0.23, m, aspect);
+
+    vec2 p = (kUV - m) * ar;
+    float base = 1.82 + 0.18*sin(time_f*0.2);
+    float period = log(base);
+    float tz = time_f * 0.65;
+    float r = length(p) + 1e-6;
+    float ang = atan(p.y, p.x) + tz * 0.35 + 0.35*sin(r*9.0 + time_f*0.8);
+    float k = fract((log(r) - tz) / period);
+    float rw = exp(k * period);
+    vec2 pwrap = vec2(cos(ang), sin(ang)) * rw;
+
+    vec2 u0 = fract(pwrap / ar + m);
+    vec2 u1 = fract((pwrap*1.045) / ar + m);
+    vec2 u2 = fract((pwrap*0.955) / ar + m);
+
+    vec2 dir = normalize(pwrap + 1e-6);
+    vec2 off = dir * (0.0015 + 0.001 * sin(time_f*1.3)) * vec2(1.0, 1.0/aspect);
+
+    float hue = fract(ang*0.15 + time_f*0.08 + k*0.5);
+    float sat = 0.8 - 0.2*cos(time_f*0.7 + r*6.0);
+    float val = 0.8 + 0.2*sin(time_f*0.9 + k*6.28318530718);
+    vec3 tint = hsv2rgb(vec3(hue, sat, val));
+
+    float ring = smoothstep(0.0, 0.7, sin(log(r+1e-3)*8.0 + time_f*1.2));
+    float pulse = 0.5 + 0.5*sin(time_f*2.0 + r*18.0 + k*12.0);
+
+    float vign = 1.0 - smoothstep(0.75, 1.2, length((TexCoord - m)*ar));
+    vign = mix(0.85, 1.2, vign);
+
+    float blendFactor = 0.58;
+
+    float rC = texture(textTexture, u0 + off).r;
+    float gC = texture(textTexture, u1).g;
+    float bC = texture(textTexture, u2 - off).b;
+    vec3 kaleidoRGB = vec3(rC, gC, bC);
+
+    vec4 kaleidoColor = vec4(kaleidoRGB, 1.0) * vec4(tint, 1.0);
+    vec4 merged = mix(kaleidoColor, originalTexture, blendFactor);
+
+    merged.rgb *= (0.75 + 0.25*ring) * (0.85 + 0.15*pulse) * vign;
+
+    vec3 bloom = merged.rgb * merged.rgb * 0.18 + pow(max(merged.rgb-0.6,0.0), vec3(2.0))*0.12;
+    vec3 outCol = merged.rgb + bloom;
+
+    float wob = 0.9 + 0.1*sin(time_f + r*12.0 + k*9.0);
+    outCol *= wob;
+
+    vec3 grad = movingGradient(TexCoord, m, time_f, aspect);
+    float gradAmt = 0.35 + 0.25*sin(time_f*0.5 + r*5.0 + k*9.0);
+    vec3 screenBlend = 1.0 - (1.0 - outCol) * (1.0 - grad);
+    outCol = mix(outCol, screenBlend, gradAmt);
+
+    vec4 t = texture(textTexture, TexCoord);
+    outCol = mix(outCol, outCol*t.rgb, 0.8);
+
+    outCol = sin(outCol * (0.5 + 0.5*pingPong(time_f, 12.0)));
+    outCol = clamp(outCol, vec3(0.08), vec3(0.96));
+
+    color = vec4(outCol, 1.0);
+}
+)SHD";
+inline const char *src_frac_shader01_dark = R"SHD(#version 300 es
+precision highp float;
+out vec4 color;
+in vec2 TexCoord;
+
+uniform sampler2D textTexture;
+uniform vec2 iResolution;
+uniform float time_f;
+uniform vec4 iMouse;
+)SHD" COMMON_UNIFORMS COLOR_HELPERS R"SHD(
+float pingPong(float x, float length){
+    float m = mod(x, length*2.0);
+    return m <= length ? m : length*2.0 - m;
+}
+
+vec2 rotateUV(vec2 uv, float angle, vec2 c, float aspect){
+    float s = sin(angle), cc = cos(angle);
+    vec2 p = uv - c;
+    p.x *= aspect;
+    p = mat2(cc, -s, s, cc) * p;
+    p.x /= aspect;
+    return p + c;
+}
+
+vec2 reflectUV(vec2 uv, float segments, vec2 c, float aspect){
+    vec2 p = uv - c;
+    p.x *= aspect;
+    float ang = atan(p.y, p.x);
+    float rad = length(p);
+    float stepA = 6.28318530718 / segments;
+    ang = mod(ang, stepA);
+    ang = abs(ang - stepA * 0.5);
+    vec2 r = vec2(cos(ang), sin(ang)) * rad;
+    r.x /= aspect;
+    return r + c;
+}
+
+vec2 fractalFold(vec2 uv, float zoom, float t, vec2 c, float aspect){
+    vec2 p = uv;
+    for(int i=0;i<6;i++){
+        p = abs((p - c) * (zoom + 0.15*sin(t*0.35+float(i)))) - 0.5 + c;
+        p = rotateUV(p, t*0.12 + float(i)*0.07, c, aspect);
+    }
+    return p;
+}
+
+vec3 hsv2rgb(vec3 c){
+    vec4 K = vec4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
+    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+
+vec3 movingGradient(vec2 uv, vec2 c, float t, float aspect){
+    vec2 ar = vec2(aspect, 1.0);
+    vec2 p = (uv - c) * ar;
+    vec2 d = normalize(vec2(cos(t*0.27), sin(t*0.31)));
+    float s = dot(p, d);
+    float band = 0.5 + 0.5*sin(s*6.28318530718*0.35 + t*0.9);
+    float h = fract(s*0.22 + t*0.07 + 0.15*sin(t*0.33));
+    float S = 0.75 + 0.25*sin(t*0.21 + s*2.0);
+    float V = 0.6 + 0.125*band;         // dimmer
+    vec3 base = hsv2rgb(vec3(h, S, V));
+    float edge = smoothstep(0.2, 0.8, band);
+    return mix(base*0.6, base, edge);
+}
+
+vec2 triFold(vec2 uv, vec2 c, float aspect){
+    vec2 p = (uv - c) * vec2(aspect, 1.0);
+    vec2 b1 = vec2(1.0, 0.0);
+    vec2 b2 = vec2(0.5, 0.86602540378);
+    float u = dot(p, b1);
+    float v = dot(p, b2);
+    vec2 f = fract(vec2(u, v));
+    if(f.x + f.y > 1.0) f = vec2(1.0) - f;
+    vec2 q = f.x*b1 + f.y*b2;
+    q.x /= aspect;
+    return q + c;
+}
+
+float diamondRadius(vec2 p){
+    p = abs(p);
+    return max(p.x, p.y);
+}
+
+float luma(vec3 c){ return dot(c, vec3(0.299,0.587,0.114)); }
+
+vec3 bilateral9(vec2 uv, float radiusScale, float sigma_r){
+    vec2 texel = 1.0 / iResolution;
+    vec2 o = texel * radiusScale;
+    vec3 c0 = texture(textTexture, uv).rgb;
+    float L0 = luma(c0);
+    vec2 offs[9] = vec2[](
+        vec2(0,0),
+        vec2( o.x, 0), vec2(-o.x, 0),
+        vec2(0,  o.y), vec2(0, -o.y),
+        vec2( o.x,  o.y), vec2(-o.x,  o.y),
+        vec2( o.x, -o.y), vec2(-o.x, -o.y)
+    );
+    float wsum = 0.0;
+    vec3 acc = vec3(0.0);
+    for(int i=0;i<9;i++){
+        vec3 c = texture(textTexture, uv + offs[i]).rgb;
+        float dl = luma(c) - L0;
+        float wr = exp(-(dl*dl)/(2.0*sigma_r*sigma_r));
+        float dsq = dot(offs[i]/texel, offs[i]/texel);
+        float ws = exp(-dsq/2.0);
+        float w = wr*ws;
+        acc += c*w;
+        wsum += w;
+    }
+    return acc / max(wsum, 1e-6);
+}
+
+float localVar9(vec2 uv, float radiusScale){
+    vec2 texel = 1.0 / iResolution;
+    vec2 o = texel * radiusScale;
+    float m = 0.0;
+    float s = 0.0;
+    int n = 0;
+    for(int y=-1;y<=1;y++){
+        for(int x=-1;x<=1;x++){
+            vec3 c = texture(textTexture, uv + vec2(x,y)*o).rgb;
+            float L = luma(c);
+            m += L;
+            s += L*L;
+            n++;
+        }
+    }
+    m /= float(n);
+    s /= float(n);
+    return max(s - m*m, 0.0);
+}
+
+void main(){
+    float aspect = iResolution.x / iResolution.y;
+    vec2 ar = vec2(aspect, 1.0);
+    vec2 m = (iMouse.z > 0.5) ? (iMouse.xy / iResolution) : vec2(0.5);
+    vec2 uv = TexCoord;
+    vec4 originalTexture = texture(textTexture, TexCoord);
+
+    float seg = 3.0;
+    vec2 kUV = reflectUV(uv, seg, m, aspect);
+    kUV = triFold(kUV, m, aspect);
+    float foldZoom = 1.45 + 0.55 * sin(time_f * 0.42);
+    kUV = fractalFold(kUV, foldZoom, time_f, m, aspect);
+    kUV = rotateUV(kUV, time_f * 0.23, m, aspect);
+    kUV = triFold(kUV, m, aspect);
+
+    vec2 p = (kUV - m) * ar;
+    vec2 q = abs(p);
+    if(q.y > q.x) q = q.yx;
+
+    float base = 1.82 + 0.18*sin(time_f*0.2);
+    float period = log(base);
+    float tz = time_f * 0.65;
+    float rD = diamondRadius(p) + 1e-6;
+    float ang = atan(q.y, q.x) + tz * 0.35 + 0.35*sin(rD*18.0 + time_f*0.6);
+    float k = fract((log(rD) - tz) / period);
+    float rw = exp(k * period);
+    vec2 pwrap = vec2(cos(ang), sin(ang)) * rw;
+
+    vec2 u0 = fract(pwrap / ar + m);
+    vec2 u1 = fract((pwrap*1.045) / ar + m);
+    vec2 u2 = fract((pwrap*0.955) / ar + m);
+
+    vec2 dir = normalize(pwrap + 1e-6);
+    vec2 off = dir * (0.0015 + 0.001 * sin(time_f*1.3)) * vec2(1.0, 1.0/aspect);
+
+    float hue = fract(ang*0.25 + time_f*0.08 + k*0.5);
+    float sat = 0.75 - 0.25*cos(time_f*0.7 + rD*10.0);
+    float val = 0.8 + 0.2*sin(time_f*0.9 + k*6.28318530718);
+    vec3 tint = hsv2rgb(vec3(hue, sat, val));
+
+    float ring = smoothstep(0.0, 0.7, sin(log(rD+1e-3)*9.5 + time_f*1.2));
+    float pulse = 0.5 + 0.5*sin(time_f*2.0 + rD*28.0 + k*12.0);
+
+    float vign = 1.0 - smoothstep(0.75, 1.2, length((TexCoord - m)*ar));
+    vign = mix(0.85, 1.2, vign);
+
+    float blendFactor = 0.58;
+
+    float v0 = localVar9(u0, 1.0);
+    float v1 = localVar9(u1, 1.0);
+    float v2 = localVar9(u2, 1.0);
+    float pix = (v0+v1+v2)/3.0;
+
+    float sStrong = smoothstep(0.02, 0.20, pix);
+    float radA = mix(0.75, 2.25, sStrong);
+    float sigma_r = mix(0.10, 0.22, sStrong);
+
+    vec3 bc0 = bilateral9(u0 + off, radA, sigma_r);
+    vec3 bc1 = bilateral9(u1,       radA, sigma_r);
+    vec3 bc2 = bilateral9(u2 - off, radA, sigma_r);
+
+    vec3 kaleidoRGB = vec3(bc0.r, bc1.g, bc2.b);
+
+    vec4 kaleidoColor = vec4(kaleidoRGB, 1.0) * vec4(tint, 1.0);
+    vec4 merged = mix(kaleidoColor, originalTexture, blendFactor);
+
+    merged.rgb *= (0.75 + 0.25*ring) * (0.85 + 0.15*pulse) * vign;
+
+    vec3 bloom = merged.rgb * merged.rgb * 0.18 + pow(max(merged.rgb-0.6,0.0), vec3(2.0))*0.12;
+    vec3 outCol = merged.rgb + bloom;
+
+    float wob = 0.9 + 0.1*sin(time_f + rD*14.0 + k*9.0);
+    outCol *= wob;
+
+    vec3 grad = movingGradient(TexCoord, m, time_f, aspect) * 0.5; // 1/2 brightness
+    float gradBase = 0.35 + 0.25*sin(time_f*0.5 + rD*7.0 + k*9.0);
+    float gradAmt = 0.5 * mix(gradBase*0.5, 0.95, sStrong);   // 1/2 influence
+    vec3 screenBlend = 1.0 - (1.0 - outCol) * (1.0 - grad);
+    outCol = mix(outCol, screenBlend, gradAmt);
+
+    vec4 t = texture(textTexture, TexCoord);
+    outCol = mix(outCol, outCol*t.rgb, 0.8);
+
+    outCol = sin(outCol * (0.5 + 0.5*pingPong(time_f, 12.0)));
+    outCol = clamp(outCol, vec3(0.08), vec3(0.96));
+
+    color = vec4(outCol, 1.0);
+}
+)SHD";
+inline const char *src_frac_shader01_smooth = R"SHD(#version 300 es
+precision highp float;
+out vec4 color;
+in vec2 TexCoord;
+
+uniform sampler2D textTexture;
+uniform vec2 iResolution;
+uniform float time_f;
+uniform vec4 iMouse;
+)SHD" COMMON_UNIFORMS COLOR_HELPERS R"SHD(
+float pingPong(float x, float length){
+    float m = mod(x, length*2.0);
+    return m <= length ? m : length*2.0 - m;
+}
+
+vec2 rotateUV(vec2 uv, float angle, vec2 c, float aspect){
+    float s = sin(angle), cc = cos(angle);
+    vec2 p = uv - c;
+    p.x *= aspect;
+    p = mat2(cc, -s, s, cc) * p;
+    p.x /= aspect;
+    return p + c;
+}
+
+vec2 reflectUV(vec2 uv, float segments, vec2 c, float aspect){
+    vec2 p = uv - c;
+    p.x *= aspect;
+    float ang = atan(p.y, p.x);
+    float rad = length(p);
+    float stepA = 6.28318530718 / segments;
+    ang = mod(ang, stepA);
+    ang = abs(ang - stepA * 0.5);
+    vec2 r = vec2(cos(ang), sin(ang)) * rad;
+    r.x /= aspect;
+    return r + c;
+}
+
+vec2 fractalFold(vec2 uv, float zoom, float t, vec2 c, float aspect){
+    vec2 p = uv;
+    for(int i=0;i<6;i++){
+        p = abs((p - c) * (zoom + 0.15*sin(t*0.35+float(i)))) - 0.5 + c;
+        p = rotateUV(p, t*0.12 + float(i)*0.07, c, aspect);
+    }
+    return p;
+}
+
+vec3 hsv2rgb(vec3 c){
+    vec4 K = vec4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
+    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+
+vec3 movingGradient(vec2 uv, vec2 c, float t, float aspect){
+    vec2 ar = vec2(aspect, 1.0);
+    vec2 p = (uv - c) * ar;
+    vec2 d = normalize(vec2(cos(t*0.27), sin(t*0.31)));
+    float s = dot(p, d);
+    float band = 0.5 + 0.5*sin(s*6.28318530718*0.35 + t*0.9);
+    float h = fract(s*0.22 + t*0.07 + 0.15*sin(t*0.33));
+    float S = 0.75 + 0.25*sin(t*0.21 + s*2.0);
+    float V = 0.75 + 0.25*band;
+    vec3 base = hsv2rgb(vec3(h, S, V));
+    float edge = smoothstep(0.2, 0.8, band);
+    return mix(base*0.6, base, edge);
+}
+
+vec2 diamondFold(vec2 uv, vec2 c, float aspect){
+    vec2 p = (uv - c) * vec2(aspect, 1.0);
+    p = abs(p);
+    if(p.y > p.x) p = p.yx;
+    p.x /= aspect;
+    return p + c;
+}
+
+float diamondRadius(vec2 p){
+    p = abs(p);
+    return max(p.x, p.y);
+}
+
+float luma(vec3 c){ return dot(c, vec3(0.299,0.587,0.114)); }
+
+vec3 bilateral9(vec2 uv, float radiusScale, float sigma_r){
+    vec2 texel = 1.0 / iResolution;
+    vec2 o = texel * radiusScale;
+    vec3 c0 = texture(textTexture, uv).rgb;
+    float L0 = luma(c0);
+    vec2 offs[9] = vec2[](
+        vec2(0,0),
+        vec2( o.x, 0), vec2(-o.x, 0),
+        vec2(0,  o.y), vec2(0, -o.y),
+        vec2( o.x,  o.y), vec2(-o.x,  o.y),
+        vec2( o.x, -o.y), vec2(-o.x, -o.y)
+    );
+    float wsum = 0.0;
+    vec3 acc = vec3(0.0);
+    for(int i=0;i<9;i++){
+        vec3 c = texture(textTexture, uv + offs[i]).rgb;
+        float dl = luma(c) - L0;
+        float wr = exp(-(dl*dl)/(2.0*sigma_r*sigma_r));
+        float dsq = dot(offs[i]/texel, offs[i]/texel);
+        float ws = exp(-dsq/(2.0*1.0*1.0));
+        float w = wr*ws;
+        acc += c*w;
+        wsum += w;
+    }
+    return acc / max(wsum, 1e-6);
+}
+
+float localVar9(vec2 uv, float radiusScale){
+    vec2 texel = 1.0 / iResolution;
+    vec2 o = texel * radiusScale;
+    float m = 0.0;
+    float s = 0.0;
+    int n = 0;
+    for(int y=-1;y<=1;y++){
+        for(int x=-1;x<=1;x++){
+            vec3 c = texture(textTexture, uv + vec2(x,y)*o).rgb;
+            float L = luma(c);
+            m += L;
+            s += L*L;
+            n++;
+        }
+    }
+    m /= float(n);
+    s /= float(n);
+    return max(s - m*m, 0.0);
+}
+
+void main(){
+    float aspect = iResolution.x / iResolution.y;
+    vec2 ar = vec2(aspect, 1.0);
+    vec2 m = (iMouse.z > 0.5) ? (iMouse.xy / iResolution) : vec2(0.5);
+    vec2 uv = TexCoord;
+    vec4 originalTexture = texture(textTexture, TexCoord);
+
+    float seg = 4.0 + 2.0*sin(time_f*0.33);
+    vec2 kUV = reflectUV(uv, seg, m, aspect);
+    kUV = diamondFold(kUV, m, aspect);
+    float foldZoom = 1.45 + 0.55 * sin(time_f * 0.42);
+    kUV = fractalFold(kUV, foldZoom, time_f, m, aspect);
+    kUV = rotateUV(kUV, time_f * 0.23, m, aspect);
+    kUV = diamondFold(kUV, m, aspect);
+
+    vec2 p = (kUV - m) * ar;
+    vec2 q = p;
+    q = abs(q);
+    if(q.y > q.x) q = q.yx;
+
+    float base = 1.82 + 0.18*sin(time_f*0.2);
+    float period = log(base);
+    float tz = time_f * 0.65;
+    float rD = diamondRadius(p) + 1e-6;
+    float ang = atan(q.y, q.x) + tz * 0.35 + 0.35*sin(rD*18.0 + time_f*0.6);
+    float k = fract((log(rD) - tz) / period);
+    float rw = exp(k * period);
+    vec2 pwrap = vec2(cos(ang), sin(ang)) * rw;
+
+    vec2 u0 = fract(pwrap / ar + m);
+    vec2 u1 = fract((pwrap*1.045) / ar + m);
+    vec2 u2 = fract((pwrap*0.955) / ar + m);
+
+    vec2 dir = normalize(pwrap + 1e-6);
+    vec2 off = dir * (0.0015 + 0.001 * sin(time_f*1.3)) * vec2(1.0, 1.0/aspect);
+
+    float hue = fract(ang*0.25 + time_f*0.08 + k*0.5);
+    float sat = 0.75 - 0.25*cos(time_f*0.7 + rD*10.0);
+    float val = 0.8 + 0.2*sin(time_f*0.9 + k*6.28318530718);
+    vec3 tint = hsv2rgb(vec3(hue, sat, val));
+
+    float ring = smoothstep(0.0, 0.7, sin(log(rD+1e-3)*9.5 + time_f*1.2));
+    float pulse = 0.5 + 0.5*sin(time_f*2.0 + rD*28.0 + k*12.0);
+
+    float vign = 1.0 - smoothstep(0.75, 1.2, length((TexCoord - m)*ar));
+    vign = mix(0.85, 1.2, vign);
+
+    float blendFactor = 0.58;
+
+    float v0 = localVar9(u0, 1.0);
+    float v1 = localVar9(u1, 1.0);
+    float v2 = localVar9(u2, 1.0);
+    float pix = (v0+v1+v2)/3.0;
+
+    float sStrong = smoothstep(0.02, 0.20, pix);
+    float radA = mix(0.75, 2.25, sStrong);
+    float sigma_r = mix(0.10, 0.22, sStrong);
+
+    vec3 bc0 = bilateral9(u0 + off, radA, sigma_r);
+    vec3 bc1 = bilateral9(u1,       radA, sigma_r);
+    vec3 bc2 = bilateral9(u2 - off, radA, sigma_r);
+
+    float rC = bc0.r;
+    float gC = bc1.g;
+    float bC = bc2.b;
+    vec3 kaleidoRGB = vec3(rC, gC, bC);
+
+    vec4 kaleidoColor = vec4(kaleidoRGB, 1.0) * vec4(tint, 1.0);
+    vec4 merged = mix(kaleidoColor, originalTexture, blendFactor);
+
+    merged.rgb *= (0.75 + 0.25*ring) * (0.85 + 0.15*pulse) * vign;
+
+    vec3 bloom = merged.rgb * merged.rgb * 0.18 + pow(max(merged.rgb-0.6,0.0), vec3(2.0))*0.12;
+    vec3 outCol = merged.rgb + bloom;
+
+    float wob = 0.9 + 0.1*sin(time_f + rD*14.0 + k*9.0);
+    outCol *= wob;
+
+    vec3 grad = movingGradient(TexCoord, m, time_f, aspect);
+    float gradBase = 0.35 + 0.25*sin(time_f*0.5 + rD*7.0 + k*9.0);
+    float gradAmt = mix(gradBase*0.5, 0.95, sStrong);
+    vec3 screenBlend = 1.0 - (1.0 - outCol) * (1.0 - grad);
+    outCol = mix(outCol, screenBlend, gradAmt);
+
+    vec4 t = texture(textTexture, TexCoord);
+    outCol = mix(outCol, outCol*t.rgb, 0.8);
+
+    outCol = sin(outCol * (0.5 + 0.5*pingPong(time_f, 12.0)));
+    outCol = clamp(outCol, vec3(0.08), vec3(0.96));
+
+    color = vec4(outCol, 1.0);
+}
+)SHD";
+inline const char *src_frac_shader01_smooth_neon = R"SHD(#version 300 es
+precision highp float;
+out vec4 color;
+in vec2 TexCoord;
+
+uniform sampler2D textTexture;
+uniform vec2 iResolution;
+uniform float time_f;
+uniform vec4 iMouse;
+)SHD" COMMON_UNIFORMS COLOR_HELPERS R"SHD(
+uniform float amp;  
+uniform float uamp;
+uniform float iTime;
+uniform int iFrame; 
+uniform float iTimeDelta;
+uniform vec4 iDate;
+uniform vec2 iMouseClick;
+uniform float iFrameRate;
+uniform vec3 iChannelResolution[4];
+uniform float iChannelTime[4];
+uniform float iSampleRate;
+
+float pingPong(float x, float length){
+    float m = mod(x, length*2.0);
+    return m <= length ? m : length*2.0 - m;
+}
+
+vec2 rotateUV(vec2 uv, float angle, vec2 c, float aspect){
+    float s = sin(angle), cc = cos(angle);
+    vec2 p = uv - c;
+    p.x *= aspect;
+    p = mat2(cc, -s, s, cc) * p;
+    p.x /= aspect;
+    return p + c;
+}
+
+vec2 reflectUV(vec2 uv, float segments, vec2 c, float aspect){
+    vec2 p = uv - c;
+    p.x *= aspect;
+    float ang = atan(p.y, p.x);
+    float rad = length(p);
+    float stepA = 6.28318530718 / segments;
+    ang = mod(ang, stepA);
+    ang = abs(ang - stepA * 0.5);
+    vec2 r = vec2(cos(ang), sin(ang)) * rad;
+    r.x /= aspect;
+    return r + c;
+}
+
+vec2 fractalFold(vec2 uv, float zoom, float t, vec2 c, float aspect){
+    vec2 p = uv;
+    for(int i=0;i<6;i++){
+        p = abs((p - c) * (zoom + 0.15*sin(t*0.35+float(i)))) - 0.5 + c;
+        p = rotateUV(p, t*0.12 + float(i)*0.07, c, aspect);
+    }
+    return p;
+}
+
+vec3 hsv2rgb(vec3 c){
+    vec4 K = vec4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
+    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+
+vec3 movingGradient(vec2 uv, vec2 c, float t, float aspect){
+    vec2 ar = vec2(aspect, 1.0);
+    vec2 p = (uv - c) * ar;
+    vec2 d = normalize(vec2(cos(t*0.27), sin(t*0.31)));
+    float s = dot(p, d);
+    float band = 0.5 + 0.5*sin(s*6.28318530718*0.35 + t*0.9);
+    float h = fract(s*0.22 + t*0.07 + 0.15*sin(t*0.33));
+    float S = 0.75 + 0.25*sin(t*0.21 + s*2.0);
+    float V = 0.75 + 0.25*band;
+    vec3 base = hsv2rgb(vec3(h, S, V));
+    float edge = smoothstep(0.2, 0.8, band);
+    return mix(base*0.6, base, edge);
+}
+
+vec2 diamondFold(vec2 uv, vec2 c, float aspect){
+    vec2 p = (uv - c) * vec2(aspect, 1.0);
+    p = abs(p);
+    if(p.y > p.x) p = p.yx;
+    p.x /= aspect;
+    return p + c;
+}
+
+float diamondRadius(vec2 p){
+    p = abs(p);
+    return max(p.x, p.y);
+}
+
+float luma(vec3 c){ return dot(c, vec3(0.299,0.587,0.114)); }
+
+vec3 bilateral9(vec2 uv, float radiusScale, float sigma_r){
+    vec2 texel = 1.0 / iResolution;
+    vec2 o = texel * radiusScale;
+    vec3 c0 = texture(textTexture, uv).rgb;
+    float L0 = luma(c0);
+    vec2 offs[9] = vec2[](
+        vec2(0,0),
+        vec2( o.x, 0), vec2(-o.x, 0),
+        vec2(0,  o.y), vec2(0, -o.y),
+        vec2( o.x,  o.y), vec2(-o.x,  o.y),
+        vec2( o.x, -o.y), vec2(-o.x, -o.y)
+    );
+    float wsum = 0.0;
+    vec3 acc = vec3(0.0);
+    for(int i=0;i<9;i++){
+        vec3 c = texture(textTexture, uv + offs[i]).rgb;
+        float dl = luma(c) - L0;
+        float wr = exp(-(dl*dl)/(2.0*sigma_r*sigma_r));
+        float dsq = dot(offs[i]/texel, offs[i]/texel);
+        float ws = exp(-dsq/(2.0*1.0*1.0));
+        float w = wr*ws;
+        acc += c*w;
+        wsum += w;
+    }
+    return acc / max(wsum, 1e-6);
+}
+
+float localVar9(vec2 uv, float radiusScale){
+    vec2 texel = 1.0 / iResolution;
+    vec2 o = texel * radiusScale;
+    float m = 0.0;
+    float s = 0.0;
+    int n = 0;
+    for(int y=-1;y<=1;y++){
+        for(int x=-1;x<=1;x++){
+            vec3 c = texture(textTexture, uv + vec2(x,y)*o).rgb;
+            float L = luma(c);
+            m += L;
+            s += L*L;
+            n++;
+        }
+    }
+    m /= float(n);
+    s /= float(n);
+    return max(s - m*m, 0.0);
+}
+
+void main(){
+    float aspect = iResolution.x / iResolution.y;
+    vec2 ar = vec2(aspect, 1.0);
+    vec2 m = (iMouse.z > 0.5) ? (iMouse.xy / iResolution) : vec2(0.5);
+    vec2 uv = TexCoord;
+    vec4 originalTexture = texture(textTexture, TexCoord);
+
+    float seg = 4.0 + 2.0*sin(time_f*0.33);
+    vec2 kUV = reflectUV(uv, seg, m, aspect);
+    kUV = diamondFold(kUV, m, aspect);
+    float foldZoom = 1.45 + 0.55 * sin(time_f * 0.42);
+    kUV = fractalFold(kUV, foldZoom, time_f, m, aspect);
+    kUV = rotateUV(kUV, time_f * 0.23, m, aspect);
+    kUV = diamondFold(kUV, m, aspect);
+
+    vec2 p = (kUV - m) * ar;
+    vec2 q = p;
+    q = abs(q);
+    if(q.y > q.x) q = q.yx;
+
+    float base = 1.82 + 0.18*sin(time_f*0.2);
+    float period = log(base);
+    float tz = time_f * 0.65;
+    float rD = diamondRadius(p) + 1e-6;
+    float ang = atan(q.y, q.x) + tz * 0.35 + 0.35*sin(rD*18.0 + time_f*0.6);
+    float k = fract((log(rD) - tz) / period);
+    float rw = exp(k * period);
+    vec2 pwrap = vec2(cos(ang), sin(ang)) * rw;
+
+    vec2 u0 = fract(pwrap / ar + m);
+    vec2 u1 = fract((pwrap*1.045) / ar + m);
+    vec2 u2 = fract((pwrap*0.955) / ar + m);
+
+    vec2 dir = normalize(pwrap + 1e-6);
+    vec2 off = dir * (0.0015 + 0.001 * sin(time_f*1.3)) * vec2(1.0, 1.0/aspect);
+
+    float hue = fract(ang*0.25 + time_f*0.08 + k*0.5);
+    float sat = 0.75 - 0.25*cos(time_f*0.7 + rD*10.0);
+    float val = 0.8 + 0.2*sin(time_f*0.9 + k*6.28318530718);
+    vec3 tint = hsv2rgb(vec3(hue, sat, val));
+
+    float ring = smoothstep(0.0, 0.7, sin(log(rD+1e-3)*9.5 + time_f*1.2));
+    float pulse = 0.5 + 0.5*sin(time_f*2.0 + rD*28.0 + k*12.0);
+
+    float vign = 1.0 - smoothstep(0.75, 1.2, length((TexCoord - m)*ar));
+    vign = mix(0.85, 1.2, vign);
+
+    float blendFactor = 0.58;
+
+    float v0 = localVar9(u0, 1.0);
+    float v1 = localVar9(u1, 1.0);
+    float v2 = localVar9(u2, 1.0);
+    float pix = (v0+v1+v2)/3.0;
+
+    float sStrong = smoothstep(0.02, 0.20, pix);
+    float radA = mix(0.75, 2.25, sStrong);
+    float sigma_r = mix(0.10, 0.22, sStrong);
+
+    vec3 bc0 = bilateral9(u0 + off, radA, sigma_r);
+    vec3 bc1 = bilateral9(u1,       radA, sigma_r);
+    vec3 bc2 = bilateral9(u2 - off, radA, sigma_r);
+
+    float rC = bc0.r;
+    float gC = bc1.g;
+    float bC = bc2.b;
+    vec3 kaleidoRGB = vec3(rC, gC, bC);
+
+    vec4 kaleidoColor = vec4(kaleidoRGB, 1.0) * vec4(tint, 1.0);
+    vec4 merged = mix(kaleidoColor, originalTexture, blendFactor);
+
+    merged.rgb *= (0.75 + 0.25*ring) * (0.85 + 0.15*pulse) * vign;
+
+    vec3 bloom = merged.rgb * merged.rgb * 0.18 + pow(max(merged.rgb-0.6,0.0), vec3(2.0))*0.12;
+    vec3 outCol = merged.rgb + bloom;
+
+    float wob = 0.9 + 0.1*sin(time_f + rD*14.0 + k*9.0);
+    outCol *= wob;
+
+    vec3 grad = movingGradient(TexCoord, m, time_f, aspect);
+    float gradBase = 0.35 + 0.25*sin(time_f*0.5 + rD*7.0 + k*9.0);
+    float gradAmt = mix(gradBase*0.5, 0.95, sStrong);
+    vec3 screenBlend = 1.0 - (1.0 - outCol) * (1.0 - grad);
+    outCol = mix(outCol, screenBlend, gradAmt);
+
+    vec4 t = texture(textTexture, TexCoord);
+    outCol = mix(outCol, outCol*t.rgb, 0.8);
+
+    float lum = dot(outCol, vec3(0.299, 0.587, 0.114));
+    float tHue = time_f * 0.15 + uamp * 0.1;
+    float hueBase = fract(lum * 0.8 + tHue);
+    vec3 neon1 = hsv2rgb(vec3(hueBase, 1.0, 1.0));
+    vec3 neon2 = hsv2rgb(vec3(fract(hueBase + 0.33), 1.0, 1.0));
+    float wave = pingPong(time_f * 0.25 + amp * 2.0, 1.0);
+    vec3 neon = mix(neon1, neon2, wave);
+
+    float audio = clamp(amp * 1.5 + uamp * 0.25, 0.0, 1.5);
+    float strength = clamp(0.2 + audio, 0.0, 1.0);
+
+    vec3 mixed = mix(outCol, neon, strength);
+    mixed = pow(mixed, vec3(0.8));
+    mixed = clamp(mixed, 0.0, 1.0);
+
+    color = vec4(mixed, 1.0);
+}
+)SHD";
+inline const char *src_frac_shader02_dmd = R"SHD(#version 300 es
+precision highp float;
+out vec4 color;
+in vec2 TexCoord;
+
+uniform sampler2D textTexture;
+uniform vec2 iResolution;
+uniform float time_f;
+uniform vec4 iMouse;
+)SHD" COMMON_UNIFORMS COLOR_HELPERS R"SHD(
+const float PI = 3.1415926535897932384626433832795;
+
+float pingPong(float x, float length){
+    float m = mod(x, length*2.0);
+    return m <= length ? m : length*2.0 - m;
+}
+
+vec2 rotateUV(vec2 uv, float angle, vec2 c, float aspect){
+    float s = sin(angle), cc = cos(angle);
+    vec2 p = uv - c;
+    p.x *= aspect;
+    p = mat2(cc, -s, s, cc) * p;
+    p.x /= aspect;
+    return p + c;
+}
+
+vec2 reflectUV(vec2 uv, float segments, vec2 c, float aspect){
+    vec2 p = uv - c;
+    p.x *= aspect;
+    float ang = atan(p.y, p.x);
+    float rad = length(p);
+    float stepA = 6.28318530718 / segments;
+    ang = mod(ang, stepA);
+    ang = abs(ang - stepA * 0.5);
+    vec2 r = vec2(cos(ang), sin(ang)) * rad;
+    r.x /= aspect;
+    return r + c;
+}
+
+vec2 fractalFold(vec2 uv, float zoom, float t, vec2 c, float aspect){
+    vec2 p = uv;
+    for(int i=0;i<6;i++){
+        p = abs((p - c) * (zoom + 0.15*sin(t*0.35+float(i)))) - 0.5 + c;
+        p = rotateUV(p, t*0.12 + float(i)*0.07, c, aspect);
+    }
+    return p;
+}
+
+vec3 hsv2rgb(vec3 c){
+    vec4 K = vec4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
+    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+
+vec3 movingGradient(vec2 uv, vec2 c, float t, float aspect){
+    vec2 ar = vec2(aspect, 1.0);
+    vec2 p = (uv - c) * ar;
+    vec2 d = normalize(vec2(cos(t*0.27), sin(t*0.31)));
+    float s = dot(p, d);
+    float band = 0.5 + 0.5*sin(s*6.28318530718*0.35 + t*0.9);
+    float h = fract(s*0.22 + t*0.07 + 0.15*sin(t*0.33));
+    float S = 0.75 + 0.25*sin(t*0.21 + s*2.0);
+    float V = 0.75 + 0.25*band;
+    vec3 base = hsv2rgb(vec3(h, S, V));
+    float edge = smoothstep(0.2, 0.8, band);
+    return mix(base*0.6, base, edge);
+}
+
+vec2 diamondFold(vec2 uv, vec2 c, float aspect){
+    vec2 p = (uv - c) * vec2(aspect, 1.0);
+    p = abs(p);
+    if(p.y > p.x) p = p.yx;
+    p.x /= aspect;
+    return p + c;
+}
+
+float diamondRadius(vec2 p){
+    p = abs(p);
+    return max(p.x, p.y);
+}
+
+void main(){
+    float aspect = iResolution.x / iResolution.y;
+    vec2 ar = vec2(aspect, 1.0);
+    vec2 m = (iMouse.z > 0.5) ? (iMouse.xy / iResolution) : vec2(0.5);
+    vec2 uv = TexCoord;
+    vec4 originalTexture = texture(textTexture, TexCoord);
+
+    float seg = 4.0 + 2.0*sin(time_f*0.33);
+    vec2 kUV = reflectUV(uv, seg, m, aspect);
+    kUV = diamondFold(kUV, m, aspect);
+    float foldZoom = 1.45 + 0.55 * sin(time_f * 0.42);
+    kUV = fractalFold(kUV, foldZoom, time_f, m, aspect);
+    kUV = rotateUV(kUV, time_f * 0.23, m, aspect);
+    kUV = diamondFold(kUV, m, aspect);
+
+    vec2 p = (kUV - m) * ar;
+    vec2 q = p;
+    q = abs(q);
+    if(q.y > q.x) q = q.yx;
+
+    float base = 1.82 + 0.18*sin(time_f*0.2);
+    float period = log(base);
+    float tz = time_f * 0.65;
+    float rD = diamondRadius(p) + 1e-6;
+    float ang = atan(q.y, q.x) + tz * 0.35 + 0.35*sin(rD*18.0 + time_f*0.6);
+    float k = fract((log(rD) - tz) / period);
+    float rw = exp(k * period);
+    vec2 pwrap = vec2(cos(ang), sin(ang)) * rw;
+
+    vec2 u0 = fract(pwrap / ar + m);
+    vec2 u1 = fract((pwrap*1.045) / ar + m);
+    vec2 u2 = fract((pwrap*0.955) / ar + m);
+
+    vec2 dir = normalize(pwrap + 1e-6);
+    vec2 off = dir * (0.0015 + 0.001 * sin(time_f*1.3)) * vec2(1.0, 1.0/aspect);
+
+    float hue = fract(ang*0.25 + time_f*0.08 + k*0.5);
+    float sat = 0.75 - 0.25*cos(time_f*0.7 + rD*10.0);
+    float val = 0.8 + 0.2*sin(time_f*0.9 + k*6.28318530718);
+    vec3 tint = hsv2rgb(vec3(hue, sat, val));
+
+    float ring = smoothstep(0.0, 0.7, sin(log(rD+1e-3)*9.5 + time_f*1.2));
+    float pulse = 0.5 + 0.5*sin(time_f*2.0 + rD*28.0 + k*12.0);
+
+    float vign = 1.0 - smoothstep(0.75, 1.2, length((TexCoord - m)*ar));
+    vign = mix(0.85, 1.2, vign);
+
+    float blendFactor = 0.58;
+
+    float rC = texture(textTexture, u0 + off).r;
+    float gC = texture(textTexture, u1).g;
+    float bC = texture(textTexture, u2 - off).b;
+    vec3 kaleidoRGB = vec3(rC, gC, bC);
+
+    vec4 kaleidoColor = vec4(kaleidoRGB, 1.0) * vec4(tint, 1.0);
+    vec4 merged = mix(kaleidoColor, originalTexture, blendFactor);
+
+    merged.rgb *= (0.75 + 0.25*ring) * (0.85 + 0.15*pulse) * vign;
+
+    vec3 bloom = merged.rgb * merged.rgb * 0.18 + pow(max(merged.rgb-0.6,0.0), vec3(2.0))*0.12;
+    vec3 outCol = merged.rgb + bloom;
+
+    float wob = 0.9 + 0.1*sin(time_f + rD*14.0 + k*9.0);
+    outCol *= wob;
+
+    vec3 grad = movingGradient(TexCoord, m, time_f, aspect);
+    float gradAmt = 0.35 + 0.25*sin(time_f*0.5 + rD*7.0 + k*9.0);
+    vec3 screenBlend = 1.0 - (1.0 - outCol) * (1.0 - grad);
+    outCol = mix(outCol, screenBlend, gradAmt);
+
+    vec4 t = texture(textTexture, TexCoord);
+    outCol = mix(outCol, outCol*t.rgb, 0.8);
+
+    outCol = sin(outCol * (0.5 + 0.5*pingPong(-time_f * PI, 5.0)));
+    outCol = clamp(outCol, vec3(0.08), vec3(0.96));
+
+    
+
+    color = mix(t, vec4(outCol, 1.0),-pingPong(time_f *
+ PI, 5.0));
+
+}
+)SHD";
+inline const char *src_frac_shader02_dmd_mandella = R"SHD(#version 300 es
+precision highp float;
+out vec4 color;
+in vec2 TexCoord;
+
+uniform sampler2D textTexture;
+uniform vec2 iResolution;
+uniform float time_f;
+uniform vec4 iMouse;
+)SHD" COMMON_UNIFORMS COLOR_HELPERS R"SHD(
+uniform float amp;
+uniform float uamp;
+uniform float seed;
+
+const float PI = 3.1415926535897932384626433832795;
+
+float pingPong(float x, float length) {
+    float m = mod(x, length * 2.0);
+    return m <= length ? m : length * 2.0 - m;
+}
+
+vec3 hsv2rgb(vec3 c) {
+    vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+
+vec2 rotateUV(vec2 uv, float angle, vec2 c, float aspect) {
+    float s = sin(angle), cc = cos(angle);
+    vec2 p = uv - c;
+    p.x *= aspect;
+    p = mat2(cc, -s, s, cc) * p;
+    p.x /= aspect;
+    return p + c;
+}
+
+vec2 reflectUV(vec2 uv, float segments, vec2 c, float aspect) {
+    vec2 p = uv - c;
+    p.x *= aspect;
+    float ang = atan(p.y, p.x);
+    float rad = length(p);
+    float stepA = 6.28318530718 / segments;
+    ang = mod(ang, stepA);
+    ang = abs(ang - stepA * 0.5);
+    vec2 r = vec2(cos(ang), sin(ang)) * rad;
+    r.x /= aspect;
+    return r + c;
+}
+
+vec2 fractalFold(vec2 uv, float zoom, float t, vec2 c, float aspect) {
+    vec2 p = uv;
+    for (int i = 0; i < 6; i++) {
+        p = abs((p - c) * (zoom + 0.15 * sin(t * 0.35 + float(i)))) - 0.5 + c;
+        p = rotateUV(p, t * 0.12 + float(i) * 0.07, c, aspect);
+    }
+    return p;
+}
+
+vec3 neonPalette(float t) {
+    vec3 pink = vec3(1.0, 0.15, 0.75);
+    vec3 blue = vec3(0.10, 0.55, 1.0);
+    vec3 green = vec3(0.10, 1.00, 0.45);
+    float ph = fract(t * 0.08);
+    vec3 k1 = mix(pink, blue, smoothstep(0.00, 0.33, ph));
+    vec3 k2 = mix(blue, green, smoothstep(0.33, 0.66, ph));
+    vec3 k3 = mix(green, pink, smoothstep(0.66, 1.00, ph));
+    float a = step(ph, 0.33);
+    float b = step(0.33, ph) * step(ph, 0.66);
+    float c = step(0.66, ph);
+    return normalize(a * k1 + b * k2 + c * k3) * 1.05;
+}
+
+vec3 softTone(vec3 c) {
+    c = pow(max(c, 0.0), vec3(0.95));
+    float l = dot(c, vec3(0.299, 0.587, 0.114));
+    c = mix(vec3(l), c, 0.9);
+    return clamp(c, 0.0, 1.0);
+}
+
+vec3 tentBlur3(sampler2D img, vec2 uv, vec2 res) {
+    vec2 ts = 1.0 / res;
+    vec3 s00 = textureGrad(img, uv + ts * vec2(-1.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s10 = textureGrad(img, uv + ts * vec2(0.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s20 = textureGrad(img, uv + ts * vec2(1.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s01 = textureGrad(img, uv + ts * vec2(-1.0, 0.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s11 = textureGrad(img, uv, dFdx(uv), dFdy(uv)).rgb;
+    vec3 s21 = textureGrad(img, uv + ts * vec2(1.0, 0.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s02 = textureGrad(img, uv + ts * vec2(-1.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s12 = textureGrad(img, uv + ts * vec2(0.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s22 = textureGrad(img, uv + ts * vec2(1.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    return (s00 + 2.0 * s10 + s20 + 2.0 * s01 + 4.0 * s11 + 2.0 * s21 + s02 + 2.0 * s12 + s22) / 16.0;
+}
+
+vec3 preBlendColor(vec2 uv, float tSlow, float tFast, float aspect) {
+    vec3 tex = tentBlur3(textTexture, uv, iResolution);
+    vec2 gdir = normalize(vec2(cos(tSlow * 0.27), sin(tSlow * 0.31)));
+    float s = dot((uv - 0.5) * vec2(aspect, 1.0), gdir);
+    float w = max(fwidth(s) * 4.0, 0.002);
+    float band = smoothstep(-0.5 - w, -0.5 + w, sin(s * 2.2 + tFast * 0.9));
+    vec3 neon = neonPalette(tFast);
+    vec3 grad = mix(tex, mix(tex, neon, 0.6), 0.35 + 0.25 * band);
+    grad = mix(grad, tex, 0.10);
+    grad = softTone(grad);
+    return grad;
+}
+
+float diamondRadius(vec2 p) {
+    p = sin(abs(p));
+    return max(p.x, p.y);
+}
+
+vec2 diamondFold(vec2 uv, vec2 c, float aspect) {
+    vec2 p = (uv - c) * vec2(aspect, 1.0);
+    p = abs(p);
+    if (p.y > p.x) p = p.yx;
+    p.x /= aspect;
+    return p + c;
+}
+
+vec2 rot2(vec2 v, float a) {
+    float c = cos(a), s = sin(a);
+    return vec2(c * v.x - s * v.y, s * v.x + c * v.y);
+}
+
+vec2 h2(vec2 p) {
+    return fract(sin(vec2(dot(p, vec2(127.1, 311.7)),
+                          dot(p, vec2(269.5, 183.3)))) * 43758.5453);
+}
+
+vec3 limitHighlights(vec3 c) {
+    float m = max(c.r, max(c.g, c.b));
+    if (m > 0.9) c *= 0.9 / m;
+    return c;
+}
+
+// Spiral / sector warp from the extra shader, amplitude–aware.
+vec2 spiralWarp(vec2 tcIn, float tBase, float a01, out float ringMirrorOut) {
+    float loopDuration = 25.0;
+    float t = mod(tBase * (0.6 + 1.8 * a01), loopDuration);
+    vec2 aspect2 = vec2(iResolution.x / iResolution.y, 1.0);
+
+    vec2 nc = (tcIn * 2.0 - 1.0) * aspect2;
+    nc.x = abs(nc.x);
+    float d = length(nc);
+    float a = atan(nc.y, nc.x);
+
+    float spiralSpeed = 5.0 * (0.7 + 1.5 * a01);
+    float inward = (t / loopDuration) * (0.5 + 0.5 * a01);
+
+    a += (1.0 - smoothstep(0.0, 8.0, d)) * t * spiralSpeed;
+    d *= 1.0 - inward;
+
+    vec2 spiral = vec2(cos(a), sin(a)) * tan(d);
+    vec2 uv0 = (spiral / aspect2 + 1.0) * 0.5;
+
+    vec2 p = (uv0 * 2.0 - 1.0) * aspect2;
+    float r = length(p);
+    float ang = atan(p.y, p.x);
+
+    float N = mix(8.0, 16.0, a01);
+    float tau = 6.28318530718;
+    float sector = tau / N;
+    ang = mod(ang + 0.5 * sector, sector);
+    ang = abs(ang - 0.5 * sector);
+
+    float ringFreq = 6.0 + 4.0 * a01;
+    float ring = fract(r * ringFreq + 0.15 * sin(tBase * 0.5));
+    float ringMirror = abs(ring - 0.5) * 2.0;
+
+    float swirl = 0.25 * sin(tBase * 0.3) * (0.5 + 1.0 * a01);
+    ang += swirl * r;
+
+    float zoom = 0.85 + 0.1 * sin(tBase * 0.27) + 0.08 * a01;
+    vec2 m = vec2(cos(ang), sin(ang)) * (r * zoom * (0.85 + 0.15 * ringMirror));
+
+    vec2 uv = (m / aspect2 + 1.0) * 0.5;
+    ringMirrorOut = ringMirror;
+    return uv;
+}
+
+void main(void) {
+    float a = clamp(amp, 0.0, 1.0);
+    float ua = clamp(uamp, 0.0, 1.0);
+    float aMix = clamp(amp * 0.7 + uamp * 1.3, 0.0, 4.0);
+    float a01 = clamp(aMix / 2.5, 0.0, 1.0);
+
+    float aspect = iResolution.x / iResolution.y;
+    vec2 ar = vec2(aspect, 1.0);
+
+    float tBase = time_f;
+    float tSlow = tBase * mix(0.2, 0.9, a01);
+    float tFast = tBase * mix(0.7, 3.5, a01);
+
+    vec2 m = (iMouse.z > 0.5) ? (iMouse.xy / iResolution)
+                              : fract(vec2(0.37 + 0.11 * sin(tSlow * 0.63 + seed),
+                                           0.42 + 0.13 * cos(tSlow * 0.57 + seed * 2.0)));
+
+    // Base coordinates from original screen
+    vec2 tc0 = TexCoord;
+    vec2 center = vec2(0.5, 0.5);
+    float radius = length(tc0 - center);
+
+    // Ripple + twist (driven by amplitude)
+    float rippleSpeed = 5.0 * (1.0 + 2.0 * a01);
+    float rippleAmplitude = 0.03 * (0.5 + 1.5 * a01);
+    float rippleWavelength = 10.0;
+    float twistStrength = 1.0 + 4.0 * a01;
+
+    float ripple = sin(tc0.x * rippleWavelength + tFast * rippleSpeed) * rippleAmplitude;
+    ripple += sin(tc0.y * rippleWavelength + tFast * rippleSpeed) * rippleAmplitude;
+    vec2 rippleTC = tc0 + vec2(ripple, ripple);
+
+    float angleTwist = twistStrength * (radius - 1.0) + tSlow;
+    float cosA = cos(angleTwist);
+    float sinA = sin(angleTwist);
+    mat2 rotationMatrix = mat2(cosA, -sinA, sinA, cosA);
+    vec2 twistedTC = rotationMatrix * (tc0 - center) + center;
+
+    float mixRT = 0.5 + 0.35 * a01;
+    vec2 tcRT = mix(rippleTC, twistedTC, mixRT);
+
+    // Spiral warp on top of ripple+twist
+    float ringMirrorSpiral;
+    vec2 spiralTC = spiralWarp(tcRT, tBase, a01, ringMirrorSpiral);
+
+    vec4 baseTex = texture(textTexture, spiralTC);
+
+    // Glow radius based on spiral coordinates
+    vec2 uvForGlow = spiralTC * 2.0 - 1.0;
+    uvForGlow.x *= aspect;
+    float rGlow = pingPong(sin(length(uvForGlow) * tSlow), 5.0);
+    float radiusMax = sqrt(aspect * aspect + 1.0) + 0.5;
+    float glow = smoothstep(radiusMax, radiusMax - 0.25, rGlow);
+    glow *= (0.8 + 0.4 * ringMirrorSpiral);
+
+    // Use spiral output as main UV for chroma air + kaleido
+    vec2 uv = spiralTC;
+    float speedScale = 1.0 + 2.0 * a01 + 3.0 * ua;
+
+    float speedR = 5.0 * speedScale;
+    float speedG = 6.5 * speedScale;
+    float speedB = 4.0 * speedScale;
+    float ampR   = 0.03 * (0.7 + 0.6 * a01);
+    float ampG   = 0.025 * (0.7 + 0.6 * a01);
+    float ampB   = 0.035 * (0.7 + 0.6 * a01);
+    float waveR  = 10.0;
+    float waveG  = 12.0;
+    float waveB  = 8.0;
+
+    float rR = sin(uv.x * waveR        + tFast * speedR) * ampR
+             + sin(uv.y * waveR * 0.8  + tFast * speedR * 1.2) * ampR;
+    float rG = sin(uv.x * waveG * 1.5  + tFast * speedG) * ampG
+             + sin(uv.y * waveG * 0.3  + tFast * speedG * 0.7) * ampG;
+    float rB = sin(uv.x * waveB * 0.5  + tFast * speedB) * ampB
+             + sin(uv.y * waveB * 1.7  + tFast * speedB * 1.3) * ampB;
+
+    vec2 tcR = uv + vec2(rR, rR);
+    vec2 tcG = uv + vec2(rG, -0.5 * rG);
+    vec2 tcB = uv + vec2(0.3 * rB, rB);
+
+    vec3 pats[4] = vec3[](vec3(1,0,1), vec3(0,1,0), vec3(1,0,0), vec3(0,0,1));
+    float pspd = 4.0;
+    int pidx = int(mod(floor(tBase * pspd + seed * 4.0), 4.0));
+    vec3 mir = pats[pidx];
+
+    vec2 dR = tcR - m;
+    vec2 dG = tcG - m;
+    vec2 dB = tcB - m;
+
+    float fallR = smoothstep(0.55, 0.0, length(dR));
+    float fallG = smoothstep(0.55, 0.0, length(dG));
+    float fallB = smoothstep(0.55, 0.0, length(dB));
+
+    float sw = (0.12 + 0.38 * ua + 0.25 * a);
+    vec2 tangR = rot2(normalize(dR + 1e-4), 1.5707963);
+    vec2 tangG = rot2(normalize(dG + 1e-4), 1.5707963);
+    vec2 tangB = rot2(normalize(dB + 1e-4), 1.5707963);
+
+    vec2 airR = tangR * sw * fallR * (0.06 + 0.22 * a) * (0.6 + 0.4 * cos(uv.y * 40.0 + tFast * 3.0 + seed));
+    vec2 airG = tangG * sw * fallG * (0.06 + 0.22 * a) * (0.6 + 0.4 * cos(uv.y * 38.0 + tFast * 3.3 + seed * 1.7));
+    vec2 airB = tangB * sw * fallB * (0.06 + 0.22 * a) * (0.6 + 0.4 * cos(uv.y * 42.0 + tFast * 2.9 + seed * 0.9));
+
+    vec2 jit = (h2(uv * vec2(233.3, 341.9) + tFast + seed) - 0.5)
+             * (0.0006 + 0.004 * ua);
+
+    tcR += airR + jit;
+    tcG += airG + jit;
+    tcB += airB + jit;
+
+    vec2 fR = vec2(mir.r > 0.5 ? 1.0 - tcR.x : tcR.x, tcR.y);
+    vec2 fG = vec2(mir.g > 0.5 ? 1.0 - tcG.x : tcG.x, tcG.y);
+    vec2 fB = vec2(mir.b > 0.5 ? 1.0 - tcB.x : tcB.x, tcB.y);
+
+    float seg = 4.0 + 2.0 * sin(tSlow * 0.33 + a01 * 2.0);
+    vec2 kUV = reflectUV(spiralTC, seg, m, aspect);
+    kUV = diamondFold(kUV, m, aspect);
+    float foldZoom = 1.45 + 0.55 * sin(tSlow * 0.42 + a01 * 3.0);
+    kUV = fractalFold(kUV, foldZoom, tFast, m, aspect);
+    kUV = rotateUV(kUV, tSlow * 0.23 + a01 * 1.1, m, aspect);
+    kUV = diamondFold(kUV, m, aspect);
+
+    vec2 p = (kUV - m) * ar;
+    vec2 q = abs(p);
+    if (q.y > q.x) q = q.yx;
+
+    float base = 1.82 + 0.18 * pingPong(sin(tSlow * 0.2) * (PI * tSlow), 5.0);
+    float period = log(base) * pingPong(tSlow * PI, 5.0);
+    float tz = tSlow * 0.65;
+    float rD = diamondRadius(p) + 1e-6;
+
+    float ang = atan(q.y, q.x) + tz * 0.35
+              + 0.35 * sin(rD * 18.0 + tFast * 0.6);
+    float k = fract((log(rD) - tz) / period);
+    float rw = exp(k * period);
+    vec2 pwrap = vec2(cos(ang), sin(ang)) * rw;
+
+    vec2 u0 = fract(pwrap / ar + m);
+    vec2 u1 = fract((pwrap * 1.045) / ar + m);
+    vec2 u2 = fract((pwrap * 0.955) / ar + m);
+
+    vec2 dirK = normalize(pwrap + 1e-6);
+    vec2 off = dirK * (0.0015 + 0.001 * sin(tFast * 1.3)) * vec2(1.0, 1.0 / aspect);
+
+    float vign = 1.0 - smoothstep(0.75, 1.2, length((spiralTC - m) * ar));
+    vign = mix(0.9, 1.15, vign) * (0.8 + 0.3 * ringMirrorSpiral);
+
+    vec2 sR = mix(u0, fR, 0.6);
+    vec2 sG = mix(u1, fG, 0.6);
+    vec2 sB = mix(u2, fB, 0.6);
+
+    vec3 rC = preBlendColor(sR + off, tSlow, tFast, aspect);
+    vec3 gC = preBlendColor(sG,       tSlow, tFast, aspect);
+    vec3 bC = preBlendColor(sB - off, tSlow, tFast, aspect);
+
+    vec3 kaleidoRGB = vec3(rC.r, gC.g, bC.b);
+
+    float ring = smoothstep(0.0, 0.7, sin(log(rD + 1e-3) * 9.5 + tFast * 1.2));
+    ring = ring * pingPong(tSlow * PI, 5.0) * (0.7 + 0.5 * ringMirrorSpiral);
+    float pulse = 0.5 + 0.5 * sin(tFast * 2.0 + rD * 28.0 + k * 12.0);
+    pulse *= mix(0.4, 1.4, a01);
+
+    vec3 outCol = kaleidoRGB;
+    outCol *= (0.75 + 0.25 * ring) * (0.85 + 0.15 * pulse) * vign;
+
+    vec3 bloom = outCol * outCol * 0.10
+               + pow(max(outCol - 0.6, 0.0), vec3(2.0)) * 0.06;
+
+    float pulseAdd = 0.004 * (0.5 + 0.5 * sin(tFast * 3.7 + seed));
+    outCol += bloom;
+    outCol += pulseAdd * ua;
+
+    outCol = clamp(outCol, vec3(0.0), vec3(1.0));
+    outCol = limitHighlights(outCol);
+
+    vec3 finalRGB = mix(baseTex.rgb, outCol, pingPong(glow * PI, 5.0) * (0.6 + 0.3 * a01));
+    finalRGB = limitHighlights(finalRGB);
+    finalRGB = clamp(finalRGB, 0.0, 1.0);
+
+    color = vec4(finalRGB, baseTex.a);
+}
+)SHD";
+inline const char *src_frac_shader02_dmd2 = R"SHD(#version 300 es
+precision highp float;
+out vec4 color;
+in vec2 TexCoord;
+
+uniform sampler2D textTexture;
+uniform vec2 iResolution;
+uniform float time_f;
+uniform vec4 iMouse;
+)SHD" COMMON_UNIFORMS COLOR_HELPERS R"SHD(
+const float PI = 3.1415926535897932384626433832795;
+
+float pingPong(float x, float length) {
+    float m = mod(x, length * 2.0);
+    return m <= length ? m : length * 2.0 - m;
+}
+
+vec3 hsv2rgb(vec3 c) {
+    vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+
+vec2 rotateUV(vec2 uv, float angle, vec2 c, float aspect) {
+    float s = sin(angle), cc = cos(angle);
+    vec2 p = uv - c;
+    p.x *= aspect;
+    p = mat2(cc, -s, s, cc) * p;
+    p.x /= aspect;
+    return p + c;
+}
+
+vec2 reflectUV(vec2 uv, float segments, vec2 c, float aspect) {
+    vec2 p = uv - c;
+    p.x *= aspect;
+    float ang = atan(p.y, p.x);
+    float rad = length(p);
+    float stepA = 6.28318530718 / segments;
+    ang = mod(ang, stepA);
+    ang = abs(ang - stepA * 0.5);
+    vec2 r = vec2(cos(ang), sin(ang)) * rad;
+    r.x /= aspect;
+    return r + c;
+}
+
+vec2 fractalFold(vec2 uv, float zoom, float t, vec2 c, float aspect) {
+    vec2 p = uv;
+    for (int i = 0; i < 6; i++) {
+        p = abs((p - c) * (zoom + 0.15 * sin(t * 0.35 + float(i)))) - 0.5 + c;
+        p = rotateUV(p, t * 0.12 + float(i) * 0.07, c, aspect);
+    }
+    return p;
+}
+
+vec3 neonPalette(float t) {
+    vec3 pink = vec3(1.0, 0.15, 0.75);
+    vec3 blue = vec3(0.10, 0.55, 1.0);
+    vec3 green = vec3(0.10, 1.00, 0.45);
+    float ph = fract(t * 0.08);
+    vec3 k1 = mix(pink, blue, smoothstep(0.00, 0.33, ph));
+    vec3 k2 = mix(blue, green, smoothstep(0.33, 0.66, ph));
+    vec3 k3 = mix(green, pink, smoothstep(0.66, 1.00, ph));
+    float a = step(ph, 0.33);
+    float b = step(0.33, ph) * step(ph, 0.66);
+    float c = step(0.66, ph);
+    return normalize(a * k1 + b * k2 + c * k3) * 1.05;
+}
+
+vec3 softTone(vec3 c) {
+    c = pow(max(c, 0.0), vec3(0.95));
+    float l = dot(c, vec3(0.299, 0.587, 0.114));
+    c = mix(vec3(l), c, 0.9);
+    return clamp(c, 0.0, 1.0);
+}
+
+vec3 tentBlur3(sampler2D img, vec2 uv, vec2 res) {
+    vec2 ts = 1.0 / res;
+    vec3 s00 = textureGrad(img, uv + ts * vec2(-1.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s10 = textureGrad(img, uv + ts * vec2(0.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s20 = textureGrad(img, uv + ts * vec2(1.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s01 = textureGrad(img, uv + ts * vec2(-1.0, 0.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s11 = textureGrad(img, uv, dFdx(uv), dFdy(uv)).rgb;
+    vec3 s21 = textureGrad(img, uv + ts * vec2(1.0, 0.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s02 = textureGrad(img, uv + ts * vec2(-1.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s12 = textureGrad(img, uv + ts * vec2(0.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s22 = textureGrad(img, uv + ts * vec2(1.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    return (s00 + 2.0 * s10 + s20 + 2.0 * s01 + 4.0 * s11 + 2.0 * s21 + s02 + 2.0 * s12 + s22) / 16.0;
+}
+
+vec3 preBlendColor(vec2 uv) {
+    vec3 tex = tentBlur3(textTexture, uv, iResolution);
+    float aspect = iResolution.x / iResolution.y;
+    vec2 p = (uv - 0.5) * vec2(aspect, 1.0);
+    float r = length(p);
+    float t = time_f;
+    vec3 neon = neonPalette(t + r * 1.3);
+    float neonAmt = smoothstep(0.1, 0.8, r);
+    neonAmt = 0.3 + 0.4 * (1.0 - neonAmt);
+    vec3 grad = mix(tex, neon, neonAmt);
+    grad = mix(grad, tex, 0.2);
+    grad = softTone(grad);
+    return grad;
+}
+
+float diamondRadius(vec2 p) {
+    p = abs(p);
+    return max(p.x, p.y);
+}
+
+vec2 diamondFold(vec2 uv, vec2 c, float aspect) {
+    vec2 p = (uv - c) * vec2(aspect, 1.0);
+    p = abs(p);
+    if (p.y > p.x) p = p.yx;
+    p.x /= aspect;
+    return p + c;
+}
+
+void main(void) {
+    vec4 baseTex = texture(textTexture, TexCoord);
+    vec2 uv = TexCoord * 2.0 - 1.0;
+    float aspect = iResolution.x / iResolution.y;
+    uv.x *= aspect;
+    float r = length(uv);
+    float radius = sqrt(aspect * aspect + 1.0) + 0.5;
+    float glow = smoothstep(radius, radius - 0.25, r);
+    vec2 m = (iMouse.z > 0.5) ? (iMouse.xy / iResolution) : vec2(0.5);
+    vec2 ar = vec2(aspect, 1.0);
+    vec3 baseCol = preBlendColor(TexCoord);
+    float seg = 4.0 + 2.0 * sin(time_f * 0.33);
+    vec2 kUV = reflectUV(TexCoord, seg, m, aspect);
+    kUV = diamondFold(kUV, m, aspect);
+    float foldZoom = 1.45 + 0.55 * sin(time_f * 0.42);
+    kUV = fractalFold(kUV, foldZoom, time_f, m, aspect);
+    kUV = rotateUV(kUV, time_f * 0.23, m, aspect);
+    kUV = diamondFold(kUV, m, aspect);
+    vec2 p = (kUV - m) * ar;
+    vec2 q = abs(p);
+    if (q.y > q.x) q = q.yx;
+    float base = 1.82 + 0.18 * sin(time_f * 0.2);
+    float period = log(base);
+    float tz = time_f * 0.65;
+    float rD = diamondRadius(p) + 1e-6;
+    float ang = atan(q.y, q.x) + tz * 0.35 + 0.35 * sin(rD * 18.0 + time_f * 0.6);
+    float k = fract((log(rD) - tz) / period);
+    float rw = exp(k * period);
+    vec2 pwrap = vec2(cos(ang), sin(ang)) * rw;
+    vec2 u0 = fract(pwrap / ar + m);
+    vec2 u1 = fract((pwrap * 1.045) / ar + m);
+    vec2 u2 = fract((pwrap * 0.955) / ar + m);
+    vec2 dir = normalize(pwrap + 1e-6);
+    vec2 off = dir * (0.0015 + 0.001 * sin(time_f * 1.3)) * vec2(1.0, 1.0 / aspect);
+    float vign = 1.0 - smoothstep(0.75, 1.2, length((TexCoord - m) * ar));
+    vign = mix(0.9, 1.15, vign);
+    vec3 rC = preBlendColor(u0 + off);
+    vec3 gC = preBlendColor(u1);
+    vec3 bC = preBlendColor(u2 - off);
+    vec3 kaleidoRGB = vec3(rC.r, gC.g, bC.b);
+    float ring = smoothstep(0.0, 0.7, sin(log(rD + 1e-3) * 9.5 + time_f * 1.2));
+    float pulse = 0.5 + 0.5 * sin(time_f * 2.0 + rD * 28.0 + k * 12.0);
+    vec3 outCol = kaleidoRGB;
+    outCol *= (0.75 + 0.25 * ring) * (0.85 + 0.15 * pulse) * vign;
+    vec3 bloom = outCol * outCol * 0.18 + pow(max(outCol - 0.6, 0.0), vec3(2.0)) * 0.12;
+    outCol += bloom;
+    outCol = mix(outCol, baseCol, 0.18);
+    outCol = clamp(outCol, vec3(0.05), vec3(0.97));
+    vec3 finalRGB = mix(baseTex.rgb, outCol, pingPong(glow * PI, 5.0) * 0.8);
+    color = vec4(finalRGB, baseTex.a);
+}
+)SHD";
+inline const char *src_frac_shader02_dmd2_amp = R"SHD(#version 300 es
+precision highp float;
+out vec4 color;
+in vec2 TexCoord;
+
+uniform sampler2D textTexture;
+uniform vec2 iResolution;
+uniform float time_f;
+uniform vec4 iMouse;
+)SHD" COMMON_UNIFORMS COLOR_HELPERS R"SHD(
+uniform float amp;
+uniform float uamp;
+
+const float PI = 3.1415926535897932384626433832795;
+
+float pingPong(float x, float length) {
+    float m = mod(x, length * 2.0);
+    return m <= length ? m : length * 2.0 - m;
+}
+
+vec3 hsv2rgb(vec3 c) {
+    vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+
+vec2 rotateUV(vec2 uv, float angle, vec2 c, float aspect) {
+    float s = sin(angle), cc = cos(angle);
+    vec2 p = uv - c;
+    p.x *= aspect;
+    p = mat2(cc, -s, s, cc) * p;
+    p.x /= aspect;
+    return p + c;
+}
+
+vec2 reflectUV(vec2 uv, float segments, vec2 c, float aspect) {
+    vec2 p = uv - c;
+    p.x *= aspect;
+    float ang = atan(p.y, p.x);
+    float rad = length(p);
+    float stepA = 6.28318530718 / segments;
+    ang = mod(ang, stepA);
+    ang = abs(ang - stepA * 0.5);
+    vec2 r = vec2(cos(ang), sin(ang)) * rad;
+    r.x /= aspect;
+    return r + c;
+}
+
+vec2 fractalFold(vec2 uv, float zoom, float t, vec2 c, float aspect) {
+    vec2 p = uv;
+    for (int i = 0; i < 6; i++) {
+        p = abs((p - c) * (zoom + 0.15 * sin(t * 0.35 + float(i)))) - 0.5 + c;
+        p = rotateUV(p, t * 0.12 + float(i) * 0.07, c, aspect);
+    }
+    return p;
+}
+
+vec3 neonPalette(float t) {
+    vec3 pink = vec3(1.0, 0.15, 0.75);
+    vec3 blue = vec3(0.10, 0.55, 1.0);
+    vec3 green = vec3(0.10, 1.00, 0.45);
+    float ph = fract(t * 0.08);
+    vec3 k1 = mix(pink, blue, smoothstep(0.00, 0.33, ph));
+    vec3 k2 = mix(blue, green, smoothstep(0.33, 0.66, ph));
+    vec3 k3 = mix(green, pink, smoothstep(0.66, 1.00, ph));
+    float a = step(ph, 0.33);
+    float b = step(0.33, ph) * step(ph, 0.66);
+    float c = step(0.66, ph);
+    return normalize(a * k1 + b * k2 + c * k3) * 1.05;
+}
+
+vec3 softTone(vec3 c) {
+    c = pow(max(c, 0.0), vec3(0.95));
+    float l = dot(c, vec3(0.299, 0.587, 0.114));
+    c = mix(vec3(l), c, 0.9);
+    return clamp(c, 0.0, 1.0);
+}
+
+vec3 tentBlur3(sampler2D img, vec2 uv, vec2 res) {
+    vec2 ts = 1.0 / res;
+    vec3 s00 = textureGrad(img, uv + ts * vec2(-1.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s10 = textureGrad(img, uv + ts * vec2(0.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s20 = textureGrad(img, uv + ts * vec2(1.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s01 = textureGrad(img, uv + ts * vec2(-1.0, 0.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s11 = textureGrad(img, uv, dFdx(uv), dFdy(uv)).rgb;
+    vec3 s21 = textureGrad(img, uv + ts * vec2(1.0, 0.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s02 = textureGrad(img, uv + ts * vec2(-1.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s12 = textureGrad(img, uv + ts * vec2(0.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s22 = textureGrad(img, uv + ts * vec2(1.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    return (s00 + 2.0 * s10 + s20 + 2.0 * s01 + 4.0 * s11 + 2.0 * s21 + s02 + 2.0 * s12 + s22) / 16.0;
+}
+
+vec3 preBlendColor(vec2 uv, float t) {
+    float aspect = iResolution.x / iResolution.y;
+    vec3 tex = tentBlur3(textTexture, uv, iResolution);
+    vec2 gdir = normalize(vec2(cos(t * 0.27), sin(t * 0.31)));
+    float s = dot((uv - 0.5) * vec2(aspect, 1.0), gdir);
+    float w = max(fwidth(s) * 4.0, 0.002);
+    float band = smoothstep(-0.5 - w, -0.5 + w, sin(s * 2.2 + t * 0.9));
+    vec3 neon = neonPalette(t);
+    vec3 grad = mix(tex, mix(tex, neon, 0.6), 0.35 + 0.25 * band);
+    grad = mix(grad, tex, 0.10);
+    grad = softTone(grad);
+    return grad;
+}
+
+float diamondRadius(vec2 p) {
+    p = abs(p);
+    return max(p.x, p.y);
+}
+
+vec2 diamondFold(vec2 uv, vec2 c, float aspect) {
+    vec2 p = (uv - c) * vec2(aspect, 1.0);
+    p = abs(p);
+    if (p.y > p.x) p = p.yx;
+    p.x /= aspect;
+    return p + c;
+}
+
+vec3 limitHighlights(vec3 c) {
+    float m = max(c.r, max(c.g, c.b));
+    if (m > 0.95) c *= 0.95 / m;
+    return c;
+}
+
+void main(void) {
+    float aAcc = clamp(amp, 0.0, 20.0);
+    float aInst = clamp(uamp, 0.0, 20.0);
+    float aMix = clamp(aAcc * 0.5 + aInst * 1.0, 0.0, 20.0);
+    float a01 = clamp(aMix / 6.0, 0.0, 1.0);
+
+    float aspect = iResolution.x / iResolution.y;
+    vec2 center = (iMouse.z > 0.5) ? (iMouse.xy / iResolution) : vec2(0.5, 0.5);
+
+    float tSpin  = time_f * mix(0.3, 1.8, a01);
+    float tSlow  = time_f * mix(0.2, 0.9, a01);
+    float tFast  = time_f * mix(0.8, 3.2, a01);
+
+    vec2 offset = TexCoord - center;
+    float maxRadius = length(vec2(0.5, 0.5));
+    float radius = length(offset);
+    float normalizedRadius = radius / maxRadius;
+    float angle = atan(offset.y, offset.x);
+
+    float distortion = 0.25 + 0.75 * a01;
+    float distortedRadius = normalizedRadius + distortion * normalizedRadius * normalizedRadius;
+    distortedRadius = clamp(distortedRadius, 0.0, 1.0);
+    distortedRadius *= maxRadius;
+
+    vec2 distortedCoords = center + distortedRadius * vec2(cos(angle), sin(angle));
+
+    float modulatedTime = pingPong(tSpin, 5.0);
+    angle += modulatedTime;
+
+    vec2 rotatedTC;
+    rotatedTC.x = cos(angle) * (distortedCoords.x - center.x)
+                - sin(angle) * (distortedCoords.y - center.y) + center.x;
+    rotatedTC.y = sin(angle) * (distortedCoords.x - center.x)
+                + cos(angle) * (distortedCoords.y - center.y) + center.y;
+
+    float warpSpeed = 0.05 + 0.25 * a01 + 0.2 * (aInst / (aInst + 1.0));
+    vec2 warpedCoords;
+    warpedCoords.x = pingPong(rotatedTC.x + tSpin * warpSpeed, 1.0);
+    warpedCoords.y = pingPong(rotatedTC.y + tSpin * warpSpeed, 1.0);
+
+    vec2 uvGlow = warpedCoords * 2.0 - 1.0;
+    uvGlow.x *= aspect;
+    float rGlow = length(uvGlow);
+    float radiusMax = sqrt(aspect * aspect + 1.0) + 0.5;
+    float glow = smoothstep(radiusMax, radiusMax - 0.25, rGlow);
+
+    vec2 m = center;
+    vec2 ar = vec2(aspect, 1.0);
+
+    vec3 baseColBlur = preBlendColor(warpedCoords, tSlow);
+    float seg = 4.0 + 2.0 * sin(tSlow * 0.33 + a01 * 2.0);
+
+    vec2 kUV = reflectUV(warpedCoords, seg, m, aspect);
+    kUV = diamondFold(kUV, m, aspect);
+
+    float foldZoom = 1.45 + 0.55 * sin(tSlow * 0.42 + a01 * 3.0);
+    kUV = fractalFold(kUV, foldZoom, tFast, m, aspect);
+    kUV = rotateUV(kUV, tSlow * 0.23 + a01 * 1.1, m, aspect);
+    kUV = diamondFold(kUV, m, aspect);
+
+    vec2 p = (kUV - m) * ar;
+    vec2 q = abs(p);
+    if (q.y > q.x) q = q.yx;
+
+    float base = 1.82 + 0.18 * sin(tSlow * 0.2);
+    float period = log(base);
+    float tz = tSlow * 0.65;
+    float rD = diamondRadius(p) + 1e-6;
+
+    float ang = atan(q.y, q.x) + tz * 0.35 + 0.35 * sin(rD * 18.0 + tFast * 0.6);
+    float k = fract((log(rD) - tz) / period);
+    float rw = exp(k * period);
+    vec2 pwrap = vec2(cos(ang), sin(ang)) * rw;
+
+    vec2 u0 = fract(pwrap / ar + m);
+    vec2 u1 = fract((pwrap * 1.045) / ar + m);
+    vec2 u2 = fract((pwrap * 0.955) / ar + m);
+
+    vec2 dir = normalize(pwrap + 1e-6);
+    vec2 off = dir * (0.0015 + 0.001 * sin(tFast * 1.3)) * vec2(1.0, 1.0 / aspect);
+
+    float vign = 1.0 - smoothstep(0.75, 1.2, length((warpedCoords - m) * ar));
+    vign = mix(0.9, 1.15, vign);
+
+    vec3 rC = preBlendColor(u0 + off, tFast);
+    vec3 gC = preBlendColor(u1,       tFast);
+    vec3 bC = preBlendColor(u2 - off, tFast);
+    vec3 kaleidoRGB = vec3(rC.r, gC.g, bC.b);
+
+    float ring = smoothstep(0.0, 0.7, sin(log(rD + 1e-3) * 9.5 + tFast * 1.2));
+    float pulse = 0.5 + 0.5 * sin(tFast * 2.0 + rD * 28.0 + k * 12.0);
+    pulse *= mix(0.4, 1.4, a01);
+
+    vec3 outCol = kaleidoRGB;
+    outCol *= (0.75 + 0.25 * ring) * (0.85 + 0.15 * pulse) * vign;
+
+    vec3 bloom = outCol * outCol * 0.10
+               + pow(max(outCol - 0.6, 0.0), vec3(2.0)) * 0.06;
+    outCol += bloom;
+
+    outCol = mix(outCol, baseColBlur, 0.18 + 0.3 * a01);
+    outCol = limitHighlights(outCol);
+    outCol = clamp(outCol, 0.0, 1.0);
+
+    vec4 baseTex = texture(textTexture, warpedCoords);
+    float mixAmt = pingPong(glow * PI, 5.0) * mix(0.4, 0.9, a01);
+    vec3 finalRGB = mix(baseTex.rgb, outCol, mixAmt);
+    finalRGB = limitHighlights(finalRGB);
+    finalRGB = clamp(finalRGB, 0.0, 1.0);
+
+    color = vec4(finalRGB, baseTex.a);
+}
+)SHD";
+inline const char *src_frac_shader02_dmd3 = R"SHD(#version 300 es
+precision highp float;
+out vec4 color;
+in vec2 TexCoord;
+
+uniform sampler2D textTexture;
+uniform vec2 iResolution;
+uniform float time_f;
+uniform vec4 iMouse;
+)SHD" COMMON_UNIFORMS COLOR_HELPERS R"SHD(
+const float PI = 3.1415926535897932384626433832795;
+
+float pingPong(float x, float length) {
+    float m = mod(x, length * 2.0);
+    return m <= length ? m : length * 2.0 - m;
+}
+
+vec3 hsv2rgb(vec3 c) {
+    vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+
+vec2 rotateUV(vec2 uv, float angle, vec2 c, float aspect) {
+    float s = sin(angle), cc = cos(angle);
+    vec2 p = uv - c;
+    p.x *= aspect;
+    p = mat2(cc, -s, s, cc) * p;
+    p.x /= aspect;
+    return p + c;
+}
+
+vec2 reflectUV(vec2 uv, float segments, vec2 c, float aspect) {
+    vec2 p = uv - c;
+    p.x *= aspect;
+    float ang = atan(p.y, p.x);
+    float rad = length(p);
+    float stepA = 6.28318530718 / segments;
+    ang = mod(ang, stepA);
+    ang = abs(ang - stepA * 0.5);
+    vec2 r = vec2(cos(ang), sin(ang)) * rad;
+    r.x /= aspect;
+    return r + c;
+}
+
+vec2 fractalFold(vec2 uv, float zoom, float t, vec2 c, float aspect) {
+    vec2 p = uv;
+    for (int i = 0; i < 6; i++) {
+        p = abs((p - c) * (zoom + 0.15 * sin(t * 0.35 + float(i)))) - 0.5 + c;
+        p = rotateUV(p, t * 0.12 + float(i) * 0.07, c, aspect);
+    }
+    return p;
+}
+
+vec3 neonPalette(float t) {
+    vec3 pink = vec3(1.0, 0.15, 0.75);
+    vec3 blue = vec3(0.10, 0.55, 1.0);
+    vec3 green = vec3(0.10, 1.00, 0.45);
+    float ph = fract(t * 0.08);
+    vec3 k1 = mix(pink, blue, smoothstep(0.00, 0.33, ph));
+    vec3 k2 = mix(blue, green, smoothstep(0.33, 0.66, ph));
+    vec3 k3 = mix(green, pink, smoothstep(0.66, 1.00, ph));
+    float a = step(ph, 0.33);
+    float b = step(0.33, ph) * step(ph, 0.66);
+    float c = step(0.66, ph);
+    return normalize(a * k1 + b * k2 + c * k3) * 1.05;
+}
+
+vec3 softTone(vec3 c) {
+    c = pow(max(c, 0.0), vec3(0.95));
+    float l = dot(c, vec3(0.299, 0.587, 0.114));
+    c = mix(vec3(l), c, 0.9);
+    return clamp(c, 0.0, 1.0);
+}
+
+vec3 tentBlur3(sampler2D img, vec2 uv, vec2 res) {
+    vec2 ts = 1.0 / res;
+    vec3 s00 = textureGrad(img, uv + ts * vec2(-1.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s10 = textureGrad(img, uv + ts * vec2(0.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s20 = textureGrad(img, uv + ts * vec2(1.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s01 = textureGrad(img, uv + ts * vec2(-1.0, 0.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s11 = textureGrad(img, uv, dFdx(uv), dFdy(uv)).rgb;
+    vec3 s21 = textureGrad(img, uv + ts * vec2(1.0, 0.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s02 = textureGrad(img, uv + ts * vec2(-1.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s12 = textureGrad(img, uv + ts * vec2(0.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s22 = textureGrad(img, uv + ts * vec2(1.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    return (s00 + 2.0 * s10 + s20 + 2.0 * s01 + 4.0 * s11 + 2.0 * s21 + s02 + 2.0 * s12 + s22) / 16.0;
+}
+
+vec3 preBlendColor(vec2 uv) {
+    vec3 tex = tentBlur3(textTexture, uv, iResolution);
+    float aspect = iResolution.x / iResolution.y;
+    vec2 p = (uv - 0.5) * vec2(aspect, 1.0);
+    float r = length(p);
+    float t = time_f;
+    vec3 neon = neonPalette(t + r * 1.3);
+    float neonAmt = smoothstep(0.1, 0.8, r);
+    neonAmt = 0.3 + 0.4 * (1.0 - neonAmt);
+    vec3 grad = mix(tex, neon, neonAmt);
+    grad = mix(grad, tex, 0.2);
+    grad = softTone(grad);
+    return grad;
+}
+
+float diamondRadius(vec2 p) {
+    p = abs(p);
+    return max(p.x, p.y);
+}
+
+vec2 diamondFold(vec2 uv, vec2 c, float aspect) {
+    vec2 p = (uv - c) * vec2(aspect, 1.0);
+    p = abs(p);
+    if (p.y > p.x) p = p.yx;
+    p.x /= aspect;
+    return p + c;
+}
+
+void main(void) {
+    vec4 baseTex = texture(textTexture, TexCoord);
+    vec2 uv = TexCoord * 2.0 - 1.0;
+    float aspect = iResolution.x / iResolution.y;
+    uv.x *= aspect;
+    float r = length(uv);
+    float radius = sqrt(aspect * aspect + 1.0) + 0.5;
+    float glow = smoothstep(radius, radius - 0.25, r);
+    vec2 m = (iMouse.z > 0.5) ? (iMouse.xy / iResolution) : vec2(0.5);
+    vec2 ar = vec2(aspect, 1.0);
+    vec3 baseCol = preBlendColor(TexCoord);
+    float seg = 4.0 + 2.0 * sin(time_f * 0.33);
+    vec2 kUV = reflectUV(TexCoord, seg, m, aspect);
+    kUV = diamondFold(kUV, m, aspect);
+    float foldZoom = 1.45 + 0.55 * sin(time_f * 0.42);
+    kUV = fractalFold(kUV, foldZoom, time_f, m, aspect);
+    kUV = rotateUV(kUV, time_f * 0.23, m, aspect);
+    kUV = diamondFold(kUV, m, aspect);
+    vec2 p = (kUV - m) * ar;
+    vec2 q = abs(p);
+    if (q.y > q.x) q = q.yx;
+    float base = 1.82 + 0.18 * sin(time_f * 0.2);
+    float period = log(base);
+    float tz = time_f * 0.65;
+    float rD = diamondRadius(p) + 1e-6;
+    float ang = atan(q.y, q.x) + tz * 0.35 + 0.35 * sin(rD * 18.0 + time_f * 0.6);
+    float k = fract((log(rD) - tz) / period);
+    float rw = exp(k * period);
+    vec2 pwrap = vec2(cos(ang), sin(ang)) * rw;
+    vec2 u0 = fract(pwrap / ar + m);
+    vec2 u1 = fract((pwrap * 1.045) / ar + m);
+    vec2 u2 = fract((pwrap * 0.955) / ar + m);
+    vec2 dir = normalize(pwrap + 1e-6);
+    vec2 off = dir * (0.0015 + 0.001 * sin(time_f * 1.3)) * vec2(1.0, 1.0 / aspect);
+    float vign = 1.0 - smoothstep(0.75, 1.2, length((TexCoord - m) * ar));
+    vign = mix(0.9, 1.15, vign);
+    vec3 rC = preBlendColor(u0 + off);
+    vec3 gC = preBlendColor(u1);
+    vec3 bC = preBlendColor(u2 - off);
+    vec3 kaleidoRGB = vec3(rC.r, gC.g, bC.b);
+    float ring = smoothstep(0.0, 0.7, sin(log(rD + 1e-3) * 9.5 + time_f * 1.2));
+    float pulse = 0.5 + 0.5 * sin(time_f * 2.0 + rD * 28.0 + k * 12.0);
+    vec3 outCol = kaleidoRGB;
+    outCol *= (0.75 + 0.25 * ring) * (0.85 + 0.15 * pulse) * vign;
+    vec3 bloom = outCol * outCol * 0.18 + pow(max(outCol - 0.6, 0.0), vec3(2.0)) * 0.12;
+    outCol += bloom;
+    outCol = mix(outCol, baseCol, pingPong(pulse *  PI, 5.0) * 0.18);
+    outCol = clamp(outCol, vec3(0.05), vec3(0.97));
+    vec3 finalRGB = mix(baseTex.rgb, outCol, pingPong(glow * PI, 5.0) * 0.8);
+    color = vec4(finalRGB, baseTex.a);
+}
+)SHD";
+inline const char *src_frac_shader02_dmd4 = R"SHD(#version 300 es
+precision highp float;
+out vec4 color;
+in vec2 TexCoord;
+
+uniform sampler2D textTexture;
+uniform vec2 iResolution;
+uniform float time_f;
+uniform vec4 iMouse;
+)SHD" COMMON_UNIFORMS COLOR_HELPERS R"SHD(
+const float PI = 3.1415926535897932384626433832795;
+
+float pingPong(float x, float length) {
+    float m = mod(x, length * 2.0);
+    return m <= length ? m : length * 2.0 - m;
+}
+
+vec3 hsv2rgb(vec3 c) {
+    vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+
+vec2 rotateUV(vec2 uv, float angle, vec2 c, float aspect) {
+    float s = sin(angle), cc = cos(angle);
+    vec2 p = uv - c;
+    p.x *= aspect;
+    p = mat2(cc, -s, s, cc) * p;
+    p.x /= aspect;
+    return p + c;
+}
+
+vec2 reflectUV(vec2 uv, float segments, vec2 c, float aspect) {
+    vec2 p = uv - c;
+    p.x *= aspect;
+    float ang = atan(p.y, p.x);
+    float rad = length(p);
+    float stepA = 6.28318530718 / segments;
+    ang = mod(ang, stepA);
+    ang = abs(ang - stepA * 0.5);
+    vec2 r = vec2(cos(ang), sin(ang)) * rad;
+    r.x /= aspect;
+    return r + c;
+}
+
+vec2 fractalFold(vec2 uv, float zoom, float t, vec2 c, float aspect) {
+    vec2 p = uv;
+    for (int i = 0; i < 6; i++) {
+        p = abs((p - c) * (zoom + 0.15 * sin(t * 0.35 + float(i)))) - 0.5 + c;
+        p = rotateUV(p, t * 0.12 + float(i) * 0.07, c, aspect);
+    }
+    return p;
+}
+
+vec3 neonPalette(float t) {
+    vec3 pink = vec3(1.0, 0.15, 0.75);
+    vec3 blue = vec3(0.10, 0.55, 1.0);
+    vec3 green = vec3(0.10, 1.00, 0.45);
+    float ph = fract(t * 0.08);
+    vec3 k1 = mix(pink, blue, smoothstep(0.00, 0.33, ph));
+    vec3 k2 = mix(blue, green, smoothstep(0.33, 0.66, ph));
+    vec3 k3 = mix(green, pink, smoothstep(0.66, 1.00, ph));
+    float a = step(ph, 0.33);
+    float b = step(0.33, ph) * step(ph, 0.66);
+    float c = step(0.66, ph);
+    return normalize(a * k1 + b * k2 + c * k3) * 1.05;
+}
+
+vec3 softTone(vec3 c) {
+    c = pow(max(c, 0.0), vec3(0.95));
+    float l = dot(c, vec3(0.299, 0.587, 0.114));
+    c = mix(vec3(l), c, 0.9);
+    return clamp(c, 0.0, 1.0);
+}
+
+vec3 tentBlur3(sampler2D img, vec2 uv, vec2 res) {
+    vec2 ts = 1.0 / res;
+    vec3 s00 = textureGrad(img, uv + ts * vec2(-1.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s10 = textureGrad(img, uv + ts * vec2(0.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s20 = textureGrad(img, uv + ts * vec2(1.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s01 = textureGrad(img, uv + ts * vec2(-1.0, 0.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s11 = textureGrad(img, uv, dFdx(uv), dFdy(uv)).rgb;
+    vec3 s21 = textureGrad(img, uv + ts * vec2(1.0, 0.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s02 = textureGrad(img, uv + ts * vec2(-1.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s12 = textureGrad(img, uv + ts * vec2(0.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s22 = textureGrad(img, uv + ts * vec2(1.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    return (s00 + 2.0 * s10 + s20 + 2.0 * s01 + 4.0 * s11 + 2.0 * s21 + s02 + 2.0 * s12 + s22) / 16.0;
+}
+
+vec3 preBlendColor(vec2 uv) {
+    vec3 tex = tentBlur3(textTexture, uv, iResolution);
+    float aspect = iResolution.x / iResolution.y;
+    vec2 p = (uv - 0.5) * vec2(aspect, 1.0);
+    float r = length(p);
+    float t = time_f;
+    vec3 neon = neonPalette(t + r * 1.3);
+    float neonAmt = smoothstep(0.1, 0.8, r);
+    neonAmt = 0.3 + 0.4 * (1.0 - neonAmt);
+    vec3 grad = mix(tex, neon, neonAmt);
+    grad = mix(grad, tex, 0.2);
+    grad = softTone(grad);
+    return grad;
+}
+
+float diamondRadius(vec2 p) {
+    p = abs(p);
+    return max(p.x, p.y);
+}
+
+vec2 diamondFold(vec2 uv, vec2 c, float aspect) {
+    vec2 p = (uv - c) * vec2(aspect, 1.0);
+    p = abs(p);
+    if (p.y > p.x) p = p.yx;
+    p.x /= aspect;
+    return p + c;
+}
+
+void main(void) {
+    vec4 baseTex = texture(textTexture, TexCoord);
+    vec2 uv = TexCoord * 2.0 - 1.0;
+    float aspect = iResolution.x / iResolution.y;
+    uv.x *= aspect;
+    float r = length(uv);
+    float radius = sqrt(aspect * aspect + 1.0) + 0.5;
+    float glow = smoothstep(radius, radius - 0.25, r);
+    vec2 m = (iMouse.z > 0.5) ? (iMouse.xy / iResolution) : vec2(0.5);
+    vec2 ar = vec2(aspect, 1.0);
+    vec3 baseCol = preBlendColor(TexCoord);
+    float seg = 4.0 + 2.0 * sin(time_f * 0.33);
+    vec2 kUV = reflectUV(TexCoord, seg, m, aspect);
+    kUV = diamondFold(kUV, m, aspect);
+    float foldZoom = 1.45 + 0.55 * sin(time_f * 0.42);
+    kUV = fractalFold(kUV, foldZoom, time_f, m, aspect);
+    kUV = rotateUV(kUV, time_f * 0.23, m, aspect);
+    kUV = diamondFold(kUV, m, aspect);
+    vec2 p = (kUV - m) * ar;
+    vec2 q = abs(p);
+    if (q.y > q.x) q = q.yx;
+    float base = 1.82 + 0.18 * sin(time_f * 0.2);
+    float period = log(base);
+    float tz = time_f * 0.65;
+    float rD = diamondRadius(p) + 1e-6;
+    float ang = atan(q.y, q.x) + tz * 0.35 + 0.35 * sin(rD * 18.0 + time_f * 0.6);
+    float k = fract((log(rD) - tz) / period);
+    float rw = exp(k * period);
+    rw =  pingPong(sin(rw * (time_f * PI)), 5.0);
+    vec2 pwrap = vec2(cos(ang), sin(ang)) * rw;
+    vec2 u0 = fract(pwrap / ar + m);
+    vec2 u1 = fract((pwrap * 1.045) / ar + m);
+    vec2 u2 = fract((pwrap * 0.955) / ar + m);
+    vec2 dir = normalize(pwrap + 1e-6);
+    vec2 off = dir * (0.0015 + 0.001 * sin(time_f * 1.3)) * vec2(1.0, 1.0 / aspect);
+    float vign = 1.0 - smoothstep(0.75, 1.2, length((TexCoord - m) * ar));
+    vign = mix(0.9, 1.15, vign);
+    vec3 rC = preBlendColor(u0 + off);
+    vec3 gC = preBlendColor(u1);
+    vec3 bC = preBlendColor(u2 - off);
+    vec3 kaleidoRGB = vec3(rC.r, gC.g, bC.b);
+    float ring = smoothstep(0.0, 0.7, sin(log(rD + 1e-3) * 9.5 + time_f * 1.2));
+    float pulse = 0.5 + 0.5 * sin(time_f * 2.0 + rD * 28.0 + k * 12.0);
+    vec3 outCol = kaleidoRGB;
+    outCol *= (0.75 + 0.25 * ring) * (0.85 + 0.15 * pulse) * vign;
+    vec3 bloom = outCol * outCol * 0.18 + pow(max(outCol - 0.6, 0.0), vec3(2.0)) * 0.12;
+    outCol += bloom;
+    outCol = mix(outCol, baseCol, pingPong(pulse *  (PI * time_f), 5.0) * 0.18);
+    outCol = clamp(outCol, vec3(0.05), vec3(0.97));
+    vec3 finalRGB = mix(baseTex.rgb, outCol, pingPong(glow * PI, 5.0) * 0.8);
+    color = vec4(finalRGB, baseTex.a);
+}
+)SHD";
+inline const char *src_frac_shader02_dmd5 = R"SHD(#version 300 es
+precision highp float;
+out vec4 color;
+in vec2 TexCoord;
+
+uniform sampler2D textTexture;
+uniform vec2 iResolution;
+uniform float time_f;
+uniform vec4 iMouse;
+)SHD" COMMON_UNIFORMS COLOR_HELPERS R"SHD(
+const float PI = 3.1415926535897932384626433832795;
+
+float pingPong(float x, float length) {
+    float m = mod(x, length * 2.0);
+    return m <= length ? m : length * 2.0 - m;
+}
+
+vec3 hsv2rgb(vec3 c) {
+    vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+
+vec2 rotateUV(vec2 uv, float angle, vec2 c, float aspect) {
+    float s = sin(angle), cc = cos(angle);
+    vec2 p = uv - c;
+    p.x *= aspect;
+    p = mat2(cc, -s, s, cc) * p;
+    p.x /= aspect;
+    return p + c;
+}
+
+vec2 reflectUV(vec2 uv, float segments, vec2 c, float aspect) {
+    vec2 p = uv - c;
+    p.x *= aspect;
+    float ang = atan(p.y, p.x);
+    float rad = length(p);
+    float stepA = 6.28318530718 / segments;
+    ang = mod(ang, stepA);
+    ang = abs(ang - stepA * 0.5);
+    vec2 r = vec2(cos(ang), sin(ang)) * rad;
+    r.x /= aspect;
+    return r + c;
+}
+
+vec2 fractalFold(vec2 uv, float zoom, float t, vec2 c, float aspect) {
+    vec2 p = uv;
+    for (int i = 0; i < 6; i++) {
+        p = abs((p - c) * (zoom + 0.15 * sin(t * 0.35 + float(i)))) - 0.5 + c;
+        p = rotateUV(p, t * 0.12 + float(i) * 0.07, c, aspect);
+    }
+    return p;
+}
+
+vec3 neonPalette(float t) {
+    vec3 pink = vec3(1.0, 0.15, 0.75);
+    vec3 blue = vec3(0.10, 0.55, 1.0);
+    vec3 green = vec3(0.10, 1.00, 0.45);
+    float ph = fract(t * 0.08);
+    vec3 k1 = mix(pink, blue, smoothstep(0.00, 0.33, ph));
+    vec3 k2 = mix(blue, green, smoothstep(0.33, 0.66, ph));
+    vec3 k3 = mix(green, pink, smoothstep(0.66, 1.00, ph));
+    float a = step(ph, 0.33);
+    float b = step(0.33, ph) * step(ph, 0.66);
+    float c = step(0.66, ph);
+    return normalize(a * k1 + b * k2 + c * k3) * 1.05;
+}
+
+vec3 softTone(vec3 c) {
+    c = pow(max(c, 0.0), vec3(0.95));
+    float l = dot(c, vec3(0.299, 0.587, 0.114));
+    c = mix(vec3(l), c, 0.9);
+    return clamp(c, 0.0, 1.0);
+}
+
+vec3 tentBlur3(sampler2D img, vec2 uv, vec2 res) {
+    vec2 ts = 1.0 / res;
+    vec3 s00 = textureGrad(img, uv + ts * vec2(-1.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s10 = textureGrad(img, uv + ts * vec2(0.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s20 = textureGrad(img, uv + ts * vec2(1.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s01 = textureGrad(img, uv + ts * vec2(-1.0, 0.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s11 = textureGrad(img, uv, dFdx(uv), dFdy(uv)).rgb;
+    vec3 s21 = textureGrad(img, uv + ts * vec2(1.0, 0.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s02 = textureGrad(img, uv + ts * vec2(-1.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s12 = textureGrad(img, uv + ts * vec2(0.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s22 = textureGrad(img, uv + ts * vec2(1.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    return (s00 + 2.0 * s10 + s20 + 2.0 * s01 + 4.0 * s11 + 2.0 * s21 + s02 + 2.0 * s12 + s22) / 16.0;
+}
+
+vec3 preBlendColor(vec2 uv) {
+    vec3 tex = tentBlur3(textTexture, uv, iResolution);
+    float aspect = iResolution.x / iResolution.y;
+    vec2 p = (uv - 0.5) * vec2(aspect, 1.0);
+    float r = length(p);
+    float t = time_f;
+    vec3 neon = neonPalette(t + r * 1.3);
+    float neonAmt = smoothstep(0.1, 0.8, r);
+    neonAmt = 0.3 + 0.4 * (1.0 - neonAmt);
+    vec3 grad = mix(tex, neon, neonAmt);
+    grad = mix(grad, tex, 0.2);
+    grad = softTone(grad);
+    return grad;
+}
+
+float diamondRadius(vec2 p) {
+    p = abs(p);
+    return max(p.x, p.y);
+}
+
+vec2 diamondFold(vec2 uv, vec2 c, float aspect) {
+    vec2 p = (uv - c) * vec2(aspect, 1.0);
+    p = abs(p);
+    if (p.y > p.x) p = p.yx;
+    p.x /= aspect;
+    return p + c;
+}
+
+void main(void) {
+    vec4 baseTex = texture(textTexture, TexCoord);
+    vec2 uv = TexCoord * 2.0 - 1.0;
+    float aspect = iResolution.x / iResolution.y;
+    uv.x *= aspect;
+    float r = length(uv);
+    float radius = sqrt(aspect * aspect + 1.0) + 0.5;
+    float glow = smoothstep(radius, radius - 0.25, r);
+    vec2 m = (iMouse.z > 0.5) ? (iMouse.xy / iResolution) : vec2(0.5);
+    vec2 ar = vec2(aspect, 1.0);
+    vec3 baseCol = preBlendColor(TexCoord);
+    float seg = 4.0 + 2.0 * sin(time_f * 0.33);
+    vec2 kUV = reflectUV(TexCoord, seg, m, aspect);
+    kUV = diamondFold(kUV, m, aspect);
+    float foldZoom = 1.45 + 0.55 * sin(time_f * 0.42);
+    kUV = fractalFold(kUV, foldZoom, time_f, m, aspect);
+    kUV = rotateUV(kUV, time_f * 0.23, m, aspect);
+    kUV = diamondFold(kUV, m, aspect);
+    vec2 p = (kUV - m) * ar;
+    vec2 q = abs(p);
+    if (q.y > q.x) q = q.yx;
+    float base = 1.82 + 0.18 * sin(time_f * 0.2);
+    float period = log(base);
+    float tz = time_f * 0.65;
+    float rD = diamondRadius(p) + 1e-6;
+    float ang = atan(q.y, q.x) + tz * 0.35 + 0.35 * sin(rD * 18.0 + time_f * 0.6);
+    float k = fract((log(rD) - tz) / period);
+    float rw = exp(k * period);
+    vec2 pwrap = vec2(cos(ang), sin(ang)) * rw;
+    vec2 u0 = fract(pwrap / ar + m);
+    vec2 u1 = fract((pwrap * 1.045) / ar + m);
+    vec2 u2 = fract((pwrap * 0.955) / ar + m);
+    vec2 dir = normalize(pwrap + 1e-6);
+    vec2 off = dir * (0.0015 + 0.001 * sin(time_f * 1.3)) * vec2(1.0, 1.0 / aspect);
+    float vign = 1.0 - smoothstep(0.75, 1.2, length((TexCoord - m) * ar));
+    vign = mix(0.9, 1.15, vign);
+    vec3 rC = preBlendColor(u0 + off);
+    vec3 gC = preBlendColor(u1);
+    vec3 bC = preBlendColor(u2 - off);
+    vec3 kaleidoRGB = vec3(rC.r, gC.g, bC.b);
+    float ring = smoothstep(0.0, 0.7, sin(log(rD + 1e-3) * 9.5 + time_f * 1.2));
+    float pulse = 0.5 + 0.5 * sin(time_f * 2.0 + rD * 28.0 + k * 12.0);
+
+    pulse = (pulse * PI) *  pingPong(time_f, 5.0);
+
+    vec3 outCol = kaleidoRGB;
+    outCol *= (0.75 + 0.25 * ring) * (0.85 + 0.15 * pulse) * vign;
+    vec3 bloom = outCol * outCol * 0.18 + pow(max(outCol - 0.6, 0.0), vec3(2.0)) * 0.12;
+    outCol += bloom;
+    outCol = mix(outCol, baseCol, pingPong(pulse *  PI, 5.0) * 0.18);
+    outCol = clamp(outCol, vec3(0.05), vec3(0.97));
+    vec3 finalRGB = mix(baseTex.rgb, outCol, pingPong(glow * PI, 5.0) * 0.8);
+    color = vec4(finalRGB, baseTex.a);
+}
+)SHD";
+inline const char *src_frac_shader02_dmd6i = R"SHD(#version 300 es
+precision highp float;
+out vec4 color;
+in vec2 TexCoord;
+
+uniform sampler2D textTexture;
+uniform vec2 iResolution;
+uniform float time_f;
+uniform vec4 iMouse;
+)SHD" COMMON_UNIFORMS COLOR_HELPERS R"SHD(
+const float PI = 3.1415926535897932384626433832795;
+
+float pingPong(float x, float length) {
+    float m = mod(x, length * 2.0);
+    return m <= length ? m : length * 2.0 - m;
+}
+
+vec3 hsv2rgb(vec3 c) {
+    vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+
+vec2 rotateUV(vec2 uv, float angle, vec2 c, float aspect) {
+    float s = sin(angle), cc = cos(angle);
+    vec2 p = uv - c;
+    p.x *= aspect;
+    p = mat2(cc, -s, s, cc) * p;
+    p.x /= aspect;
+    return p + c;
+}
+
+vec2 reflectUV(vec2 uv, float segments, vec2 c, float aspect) {
+    vec2 p = uv - c;
+    p.x *= aspect;
+    float ang = atan(p.y, p.x);
+    float rad = length(p);
+    float stepA = 6.28318530718 / segments;
+    ang = mod(ang, stepA);
+    ang = abs(ang - stepA * 0.5);
+    vec2 r = vec2(cos(ang), sin(ang)) * rad;
+    r.x /= aspect;
+    return r + c;
+}
+
+vec2 fractalFold(vec2 uv, float zoom, float t, vec2 c, float aspect) {
+    vec2 p = uv;
+    for (int i = 0; i < 6; i++) {
+        p = abs((p - c) * (zoom + 0.15 * sin(t * 0.35 + float(i)))) - 0.5 + c;
+        p = rotateUV(p, t * 0.12 + float(i) * 0.07, c, aspect);
+    }
+    return p;
+}
+
+vec3 neonPalette(float t) {
+    vec3 pink = vec3(1.0, 0.15, 0.75);
+    vec3 blue = vec3(0.10, 0.55, 1.0);
+    vec3 green = vec3(0.10, 1.00, 0.45);
+    float ph = fract(t * 0.08);
+    vec3 k1 = mix(pink, blue, smoothstep(0.00, 0.33, ph));
+    vec3 k2 = mix(blue, green, smoothstep(0.33, 0.66, ph));
+    vec3 k3 = mix(green, pink, smoothstep(0.66, 1.00, ph));
+    float a = step(ph, 0.33);
+    float b = step(0.33, ph) * step(ph, 0.66);
+    float c = step(0.66, ph);
+    return normalize(a * k1 + b * k2 + c * k3) * 1.05;
+}
+
+vec3 softTone(vec3 c) {
+    c = pow(max(c, 0.0), vec3(0.95));
+    float l = dot(c, vec3(0.299, 0.587, 0.114));
+    c = mix(vec3(l), c, 0.9);
+    return clamp(c, 0.0, 1.0);
+}
+
+vec3 tentBlur3(sampler2D img, vec2 uv, vec2 res) {
+    vec2 ts = 1.0 / res;
+    vec3 s00 = textureGrad(img, uv + ts * vec2(-1.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s10 = textureGrad(img, uv + ts * vec2(0.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s20 = textureGrad(img, uv + ts * vec2(1.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s01 = textureGrad(img, uv + ts * vec2(-1.0, 0.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s11 = textureGrad(img, uv, dFdx(uv), dFdy(uv)).rgb;
+    vec3 s21 = textureGrad(img, uv + ts * vec2(1.0, 0.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s02 = textureGrad(img, uv + ts * vec2(-1.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s12 = textureGrad(img, uv + ts * vec2(0.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s22 = textureGrad(img, uv + ts * vec2(1.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    return (s00 + 2.0 * s10 + s20 + 2.0 * s01 + 4.0 * s11 + 2.0 * s21 + s02 + 2.0 * s12 + s22) / 16.0;
+}
+
+vec3 preBlendColor(vec2 uv) {
+    vec3 tex = tentBlur3(textTexture, uv, iResolution);
+    float aspect = iResolution.x / iResolution.y;
+    vec2 p = (uv - 0.5) * vec2(aspect, 1.0);
+    float r = length(p);
+    float t = time_f;
+    vec3 neon = neonPalette(t + r * 1.3);
+    float neonAmt = smoothstep(0.1, 0.8, r);
+    neonAmt = 0.3 + 0.4 * (1.0 - neonAmt);
+    vec3 grad = mix(tex, neon, neonAmt);
+    grad = mix(grad, tex, 0.2);
+    grad = softTone(grad);
+    return grad;
+}
+
+float diamondRadius(vec2 p) {
+    p = sin(abs(p));
+    return max(p.x, p.y);
+}
+
+vec2 diamondFold(vec2 uv, vec2 c, float aspect) {
+    vec2 p = (uv - c) * vec2(aspect, 1.0);
+    p = abs(p);
+    if (p.y > p.x) p = p.yx;
+    p.x /= aspect;
+    return p + c;
+}
+
+void main(void) {
+    vec4 baseTex = texture(textTexture, TexCoord);
+    vec2 uv = TexCoord * 2.0 - 1.0;
+    float aspect = iResolution.x / iResolution.y;
+    uv.x *= aspect;
+    float r = pingPong(sin(length(uv) * time_f), 5.0); 
+    float radius = sqrt(aspect * aspect + 1.0) + 0.5;
+    float glow = smoothstep(radius, radius - 0.25, r);
+    vec2 m = (iMouse.z > 0.5) ? (iMouse.xy / iResolution) : vec2(0.5);
+    vec2 ar = vec2(aspect, 1.0);
+    vec3 baseCol = preBlendColor(TexCoord);
+    float seg = 4.0 + 2.0 * sin(time_f * 0.33);
+    vec2 kUV = reflectUV(TexCoord, seg, m, aspect);
+    kUV = diamondFold(kUV, m, aspect);
+    float foldZoom = 1.45 + 0.55 * sin(time_f * 0.42);
+    kUV = fractalFold(kUV, foldZoom, time_f, m, aspect);
+    kUV = rotateUV(kUV, time_f * 0.23, m, aspect);
+    kUV = diamondFold(kUV, m, aspect);
+    vec2 p = (kUV - m) * ar;
+    vec2 q = abs(p);
+    if (q.y > q.x) q = q.yx;
+    float base = 1.82 + 0.18 * pingPong(sin(time_f * 0.2) * (PI * time_f), 5.0);
+    float period = log(base) * pingPong(time_f * PI, 5.0);
+    float tz = time_f * 0.65;
+    float rD = diamondRadius(p) + 1e-6;
+    float ang = atan(q.y, q.x) + tz * 0.35 + 0.35 * sin(rD * 18.0 + time_f * 0.6);
+    float k = fract((log(rD) - tz) / period);
+    float rw = exp(k * period);
+    vec2 pwrap = vec2(cos(ang), sin(ang)) * rw;
+    vec2 u0 = fract(pwrap / ar + m);
+    vec2 u1 = fract((pwrap * 1.045) / ar + m);
+    vec2 u2 = fract((pwrap * 0.955) / ar + m);
+    vec2 dir = normalize(pwrap + 1e-6);
+    vec2 off = dir * (0.0015 + 0.001 * sin(time_f * 1.3)) * vec2(1.0, 1.0 / aspect);
+    float vign = 1.0 - smoothstep(0.75, 1.2, length((TexCoord - m) * ar));
+    vign = mix(0.9, 1.15, vign);
+    vec3 rC = preBlendColor(u0 + off);
+    vec3 gC = preBlendColor(u1);
+    vec3 bC = preBlendColor(u2 - off);
+    vec3 kaleidoRGB = vec3(rC.r, gC.g, bC.b);
+    float ring = smoothstep(0.0, 0.7, sin(log(rD + 1e-3) * 9.5 + time_f * 1.2));
+    ring = ring * pingPong((time_f * PI), 5.0);
+    float pulse = 0.5 + 0.5 * sin(time_f * 2.0 + rD * 28.0 + k * 12.0);
+    vec3 outCol = kaleidoRGB;
+    outCol *= (0.75 + 0.25 * ring) * (0.85 + 0.15 * pulse) * vign;
+    vec3 bloom = outCol * outCol * 0.18 + pow(max(outCol - 0.6, 0.0), vec3(2.0)) * 0.12;
+
+    outCol += bloom;
+    outCol = mix(outCol, baseCol, pingPong(pulse *  PI, 5.0) * 0.18);
+    outCol = clamp(outCol, vec3(0.05), vec3(0.97));
+    vec3 finalRGB = mix(baseTex.rgb, outCol, pingPong(glow * PI, 5.0) * 0.8);
+    color = vec4(finalRGB, baseTex.a);
+}
+)SHD";
+inline const char *src_frac_shader02_dmd6i_air = R"SHD(#version 300 es
+precision highp float;
+out vec4 color;
+in vec2 TexCoord;
+
+uniform sampler2D textTexture;
+uniform vec2 iResolution;
+uniform float time_f;
+uniform vec4 iMouse;
+)SHD" COMMON_UNIFORMS COLOR_HELPERS R"SHD(
+uniform float amp;
+uniform float uamp;
+uniform float seed;
+
+const float PI = 3.1415926535897932384626433832795;
+
+float pingPong(float x, float length) {
+    float m = mod(x, length * 2.0);
+    return m <= length ? m : length * 2.0 - m;
+}
+
+vec3 hsv2rgb(vec3 c) {
+    vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+
+vec2 rotateUV(vec2 uv, float angle, vec2 c, float aspect) {
+    float s = sin(angle), cc = cos(angle);
+    vec2 p = uv - c;
+    p.x *= aspect;
+    p = mat2(cc, -s, s, cc) * p;
+    p.x /= aspect;
+    return p + c;
+}
+
+vec2 reflectUV(vec2 uv, float segments, vec2 c, float aspect) {
+    vec2 p = uv - c;
+    p.x *= aspect;
+    float ang = atan(p.y, p.x);
+    float rad = length(p);
+    float stepA = 6.28318530718 / segments;
+    ang = mod(ang, stepA);
+    ang = abs(ang - stepA * 0.5);
+    vec2 r = vec2(cos(ang), sin(ang)) * rad;
+    r.x /= aspect;
+    return r + c;
+}
+
+vec2 fractalFold(vec2 uv, float zoom, float t, vec2 c, float aspect) {
+    vec2 p = uv;
+    for (int i = 0; i < 6; i++) {
+        p = abs((p - c) * (zoom + 0.15 * sin(t * 0.35 + float(i)))) - 0.5 + c;
+        p = rotateUV(p, t * 0.12 + float(i) * 0.07, c, aspect);
+    }
+    return p;
+}
+
+vec3 neonPalette(float t) {
+    vec3 pink = vec3(1.0, 0.15, 0.75);
+    vec3 blue = vec3(0.10, 0.55, 1.0);
+    vec3 green = vec3(0.10, 1.00, 0.45);
+    float ph = fract(t * 0.08);
+    vec3 k1 = mix(pink, blue, smoothstep(0.00, 0.33, ph));
+    vec3 k2 = mix(blue, green, smoothstep(0.33, 0.66, ph));
+    vec3 k3 = mix(green, pink, smoothstep(0.66, 1.00, ph));
+    float a = step(ph, 0.33);
+    float b = step(0.33, ph) * step(ph, 0.66);
+    float c = step(0.66, ph);
+    return normalize(a * k1 + b * k2 + c * k3) * 1.05;
+}
+
+vec3 softTone(vec3 c) {
+    c = pow(max(c, 0.0), vec3(0.95));
+    float l = dot(c, vec3(0.299, 0.587, 0.114));
+    c = mix(vec3(l), c, 0.9);
+    return clamp(c, 0.0, 1.0);
+}
+
+vec3 tentBlur3(sampler2D img, vec2 uv, vec2 res) {
+    vec2 ts = 1.0 / res;
+    vec3 s00 = textureGrad(img, uv + ts * vec2(-1.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s10 = textureGrad(img, uv + ts * vec2(0.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s20 = textureGrad(img, uv + ts * vec2(1.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s01 = textureGrad(img, uv + ts * vec2(-1.0, 0.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s11 = textureGrad(img, uv, dFdx(uv), dFdy(uv)).rgb;
+    vec3 s21 = textureGrad(img, uv + ts * vec2(1.0, 0.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s02 = textureGrad(img, uv + ts * vec2(-1.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s12 = textureGrad(img, uv + ts * vec2(0.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s22 = textureGrad(img, uv + ts * vec2(1.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    return (s00 + 2.0 * s10 + s20 + 2.0 * s01 + 4.0 * s11 + 2.0 * s21 + s02 + 2.0 * s12 + s22) / 16.0;
+}
+
+vec3 preBlendColor(vec2 uv, float tSlow, float tFast, float aspect) {
+    vec3 tex = tentBlur3(textTexture, uv, iResolution);
+    vec2 gdir = normalize(vec2(cos(tSlow * 0.27), sin(tSlow * 0.31)));
+    float s = dot((uv - 0.5) * vec2(aspect, 1.0), gdir);
+    float w = max(fwidth(s) * 4.0, 0.002);
+    float band = smoothstep(-0.5 - w, -0.5 + w, sin(s * 2.2 + tFast * 0.9));
+    vec3 neon = neonPalette(tFast);
+    vec3 grad = mix(tex, mix(tex, neon, 0.6), 0.35 + 0.25 * band);
+    grad = mix(grad, tex, 0.10);
+    grad = softTone(grad);
+    return grad;
+}
+
+float diamondRadius(vec2 p) {
+    p = sin(abs(p));
+    return max(p.x, p.y);
+}
+
+vec2 diamondFold(vec2 uv, vec2 c, float aspect) {
+    vec2 p = (uv - c) * vec2(aspect, 1.0);
+    p = abs(p);
+    if (p.y > p.x) p = p.yx;
+    p.x /= aspect;
+    return p + c;
+}
+
+vec2 rot2(vec2 v, float a){
+    float c = cos(a), s = sin(a);
+    return vec2(c*v.x - s*v.y, s*v.x + c*v.y);
+}
+
+vec2 h2(vec2 p){
+    return fract(sin(vec2(dot(p,vec2(127.1,311.7)),
+                          dot(p,vec2(269.5,183.3))))*43758.5453);
+}
+
+vec3 limitHighlights(vec3 c){
+    float m = max(c.r, max(c.g, c.b));
+    if(m > 0.9) c *= 0.9 / m;
+    return c;
+}
+
+void main(void) {
+    float a = clamp(amp, 0.0, 1.0);
+    float ua = clamp(uamp, 0.0, 1.0);
+    float aMix = clamp(amp * 0.7 + uamp * 1.3, 0.0, 4.0);
+    float a01 = clamp(aMix / 2.5, 0.0, 1.0);
+
+    float aspect = iResolution.x / iResolution.y;
+    vec2 ar = vec2(aspect, 1.0);
+
+    float tBase = time_f;
+    float tSlow = tBase * mix(0.2, 0.9, a01);
+    float tFast = tBase * mix(0.7, 3.5, a01);
+
+    vec2 m = (iMouse.z > 0.5) ? (iMouse.xy / iResolution)
+                              : fract(vec2(0.37 + 0.11 * sin(tSlow*0.63 + seed),
+                                           0.42 + 0.13 * cos(tSlow*0.57 + seed*2.0)));
+
+    vec4 baseTex = texture(textTexture, TexCoord);
+
+    vec2 uvForGlow = TexCoord * 2.0 - 1.0;
+    uvForGlow.x *= aspect;
+    float rGlow = pingPong(sin(length(uvForGlow) * tSlow), 5.0);
+    float radius = sqrt(aspect * aspect + 1.0) + 0.5;
+    float glow = smoothstep(radius, radius - 0.25, rGlow);
+
+    vec2 uv = TexCoord;
+    float speedScale = 1.0 + 2.0 * a01 + 3.0 * ua;
+
+    float speedR = 5.0  * speedScale;
+    float speedG = 6.5  * speedScale;
+    float speedB = 4.0  * speedScale;
+    float ampR   = 0.03 * (0.7 + 0.6 * a01);
+    float ampG   = 0.025 * (0.7 + 0.6 * a01);
+    float ampB   = 0.035 * (0.7 + 0.6 * a01);
+    float waveR  = 10.0;
+    float waveG  = 12.0;
+    float waveB  = 8.0;
+
+    float rR = sin(uv.x*waveR        + tFast*speedR)*ampR
+             + sin(uv.y*waveR*0.8    + tFast*speedR*1.2)*ampR;
+    float rG = sin(uv.x*waveG*1.5    + tFast*speedG)*ampG
+             + sin(uv.y*waveG*0.3    + tFast*speedG*0.7)*ampG;
+    float rB = sin(uv.x*waveB*0.5    + tFast*speedB)*ampB
+             + sin(uv.y*waveB*1.7    + tFast*speedB*1.3)*ampB;
+
+    vec2 tcR = uv + vec2(rR, rR);
+    vec2 tcG = uv + vec2(rG, -0.5*rG);
+    vec2 tcB = uv + vec2(0.3*rB, rB);
+
+    vec3 pats[4] = vec3[](vec3(1,0,1), vec3(0,1,0), vec3(1,0,0), vec3(0,0,1));
+    float pspd = 4.0;
+    int pidx = int(mod(floor(tBase*pspd + seed*4.0), 4.0));
+    vec3 mir = pats[pidx];
+
+    vec2 dR = tcR - m;
+    vec2 dG = tcG - m;
+    vec2 dB = tcB - m;
+
+    float fallR = smoothstep(0.55, 0.0, length(dR));
+    float fallG = smoothstep(0.55, 0.0, length(dG));
+    float fallB = smoothstep(0.55, 0.0, length(dB));
+
+    float sw = (0.12 + 0.38*ua + 0.25*a);
+    vec2 tangR = rot2(normalize(dR + 1e-4), 1.5707963);
+    vec2 tangG = rot2(normalize(dG + 1e-4), 1.5707963);
+    vec2 tangB = rot2(normalize(dB + 1e-4), 1.5707963);
+
+    vec2 airR = tangR * sw * fallR * (0.06+0.22*a) * (0.6+0.4*cos(uv.y*40.0 + tFast*3.0 + seed));
+    vec2 airG = tangG * sw * fallG * (0.06+0.22*a) * (0.6+0.4*cos(uv.y*38.0 + tFast*3.3 + seed*1.7));
+    vec2 airB = tangB * sw * fallB * (0.06+0.22*a) * (0.6+0.4*cos(uv.y*42.0 + tFast*2.9 + seed*0.9));
+
+    vec2 jit = (h2(uv*vec2(233.3,341.9) + tFast + seed) - 0.5)
+             * (0.0006 + 0.004*ua);
+
+    tcR += airR + jit;
+    tcG += airG + jit;
+    tcB += airB + jit;
+
+    vec2 fR = vec2(mir.r>0.5 ? 1.0 - tcR.x : tcR.x, tcR.y);
+    vec2 fG = vec2(mir.g>0.5 ? 1.0 - tcG.x : tcG.x, tcG.y);
+    vec2 fB = vec2(mir.b>0.5 ? 1.0 - tcB.x : tcB.x, tcB.y);
+
+    float seg = 4.0 + 2.0 * sin(tSlow * 0.33 + a01 * 2.0);
+    vec2 kUV = reflectUV(TexCoord, seg, m, aspect);
+    kUV = diamondFold(kUV, m, aspect);
+    float foldZoom = 1.45 + 0.55 * sin(tSlow * 0.42 + a01 * 3.0);
+    kUV = fractalFold(kUV, foldZoom, tFast, m, aspect);
+    kUV = rotateUV(kUV, tSlow * 0.23 + a01 * 1.1, m, aspect);
+    kUV = diamondFold(kUV, m, aspect);
+
+    vec2 p = (kUV - m) * ar;
+    vec2 q = abs(p);
+    if (q.y > q.x) q = q.yx;
+
+    float base = 1.82 + 0.18 * pingPong(sin(tSlow * 0.2) * (PI * tSlow), 5.0);
+    float period = log(base) * pingPong(tSlow * PI, 5.0);
+    float tz = tSlow * 0.65;
+    float rD = diamondRadius(p) + 1e-6;
+
+    float ang = atan(q.y, q.x) + tz * 0.35
+              + 0.35 * sin(rD * 18.0 + tFast * 0.6);
+    float k = fract((log(rD) - tz) / period);
+    float rw = exp(k * period);
+    vec2 pwrap = vec2(cos(ang), sin(ang)) * rw;
+
+    vec2 u0 = fract(pwrap / ar + m);
+    vec2 u1 = fract((pwrap * 1.045) / ar + m);
+    vec2 u2 = fract((pwrap * 0.955) / ar + m);
+
+    vec2 dirK = normalize(pwrap + 1e-6);
+    vec2 off = dirK * (0.0015 + 0.001 * sin(tFast * 1.3)) * vec2(1.0, 1.0 / aspect);
+
+    float vign = 1.0 - smoothstep(0.75, 1.2, length((TexCoord - m) * ar));
+    vign = mix(0.9, 1.15, vign);
+
+    vec2 sR = mix(u0, fR, 0.6);
+    vec2 sG = mix(u1, fG, 0.6);
+    vec2 sB = mix(u2, fB, 0.6);
+
+    vec3 rC = preBlendColor(sR + off, tSlow, tFast, aspect);
+    vec3 gC = preBlendColor(sG,       tSlow, tFast, aspect);
+    vec3 bC = preBlendColor(sB - off, tSlow, tFast, aspect);
+
+    vec3 kaleidoRGB = vec3(rC.r, gC.g, bC.b);
+
+    float ring = smoothstep(0.0, 0.7, sin(log(rD + 1e-3) * 9.5 + tFast * 1.2));
+    ring = ring * pingPong(tSlow * PI, 5.0);
+    float pulse = 0.5 + 0.5 * sin(tFast * 2.0 + rD * 28.0 + k * 12.0);
+    pulse *= mix(0.4, 1.4, a01);
+
+    vec3 outCol = kaleidoRGB;
+    outCol *= (0.75 + 0.25 * ring) * (0.85 + 0.15 * pulse) * vign;
+
+    vec3 bloom = outCol * outCol * 0.10
+               + pow(max(outCol - 0.6, 0.0), vec3(2.0)) * 0.06;
+
+    float pulseAdd = 0.004 * (0.5 + 0.5 * sin(tFast * 3.7 + seed));
+    outCol += bloom;
+    outCol += pulseAdd * ua;
+
+    outCol = clamp(outCol, vec3(0.0), vec3(1.0));
+    outCol = limitHighlights(outCol);
+
+    vec3 finalRGB = mix(baseTex.rgb, outCol, pingPong(glow * PI, 5.0) * (0.6 + 0.3 * a01));
+    finalRGB = limitHighlights(finalRGB);
+    finalRGB = clamp(finalRGB, 0.0, 1.0);
+
+    color = vec4(finalRGB, baseTex.a);
+}
+)SHD";
+inline const char *src_frac_shader02_dmd6i_air_twist = R"SHD(#version 300 es
+precision highp float;
+out vec4 color;
+in vec2 TexCoord;
+
+uniform sampler2D textTexture;
+uniform vec2 iResolution;
+uniform float time_f;
+uniform vec4 iMouse;
+)SHD" COMMON_UNIFORMS COLOR_HELPERS R"SHD(
+uniform float amp;
+uniform float uamp;
+uniform float seed;
+
+const float PI = 3.1415926535897932384626433832795;
+
+float pingPong(float x, float length) {
+    float m = mod(x, length * 2.0);
+    return m <= length ? m : length * 2.0 - m;
+}
+
+vec3 hsv2rgb(vec3 c) {
+    vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+
+vec2 rotateUV(vec2 uv, float angle, vec2 c, float aspect) {
+    float s = sin(angle), cc = cos(angle);
+    vec2 p = uv - c;
+    p.x *= aspect;
+    p = mat2(cc, -s, s, cc) * p;
+    p.x /= aspect;
+    return p + c;
+}
+
+vec2 reflectUV(vec2 uv, float segments, vec2 c, float aspect) {
+    vec2 p = uv - c;
+    p.x *= aspect;
+    float ang = atan(p.y, p.x);
+    float rad = length(p);
+    float stepA = 6.28318530718 / segments;
+    ang = mod(ang, stepA);
+    ang = abs(ang - stepA * 0.5);
+    vec2 r = vec2(cos(ang), sin(ang)) * rad;
+    r.x /= aspect;
+    return r + c;
+}
+
+vec2 fractalFold(vec2 uv, float zoom, float t, vec2 c, float aspect) {
+    vec2 p = uv;
+    for (int i = 0; i < 6; i++) {
+        p = abs((p - c) * (zoom + 0.15 * sin(t * 0.35 + float(i)))) - 0.5 + c;
+        p = rotateUV(p, t * 0.12 + float(i) * 0.07, c, aspect);
+    }
+    return p;
+}
+
+vec3 neonPalette(float t) {
+    vec3 pink = vec3(1.0, 0.15, 0.75);
+    vec3 blue = vec3(0.10, 0.55, 1.0);
+    vec3 green = vec3(0.10, 1.00, 0.45);
+    float ph = fract(t * 0.08);
+    vec3 k1 = mix(pink, blue, smoothstep(0.00, 0.33, ph));
+    vec3 k2 = mix(blue, green, smoothstep(0.33, 0.66, ph));
+    vec3 k3 = mix(green, pink, smoothstep(0.66, 1.00, ph));
+    float a = step(ph, 0.33);
+    float b = step(0.33, ph) * step(ph, 0.66);
+    float c = step(0.66, ph);
+    return normalize(a * k1 + b * k2 + c * k3) * 1.05;
+}
+
+vec3 softTone(vec3 c) {
+    c = pow(max(c, 0.0), vec3(0.95));
+    float l = dot(c, vec3(0.299, 0.587, 0.114));
+    c = mix(vec3(l), c, 0.9);
+    return clamp(c, 0.0, 1.0);
+}
+
+vec3 tentBlur3(sampler2D img, vec2 uv, vec2 res) {
+    vec2 ts = 1.0 / res;
+    vec3 s00 = textureGrad(img, uv + ts * vec2(-1.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s10 = textureGrad(img, uv + ts * vec2(0.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s20 = textureGrad(img, uv + ts * vec2(1.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s01 = textureGrad(img, uv + ts * vec2(-1.0, 0.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s11 = textureGrad(img, uv, dFdx(uv), dFdy(uv)).rgb;
+    vec3 s21 = textureGrad(img, uv + ts * vec2(1.0, 0.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s02 = textureGrad(img, uv + ts * vec2(-1.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s12 = textureGrad(img, uv + ts * vec2(0.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s22 = textureGrad(img, uv + ts * vec2(1.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    return (s00 + 2.0 * s10 + s20 + 2.0 * s01 + 4.0 * s11 + 2.0 * s21 + s02 + 2.0 * s12 + s22) / 16.0;
+}
+
+vec3 preBlendColor(vec2 uv, float tSlow, float tFast, float aspect) {
+    vec3 tex = tentBlur3(textTexture, uv, iResolution);
+    vec2 gdir = normalize(vec2(cos(tSlow * 0.27), sin(tSlow * 0.31)));
+    float s = dot((uv - 0.5) * vec2(aspect, 1.0), gdir);
+    float w = max(fwidth(s) * 4.0, 0.002);
+    float band = smoothstep(-0.5 - w, -0.5 + w, sin(s * 2.2 + tFast * 0.9));
+    vec3 neon = neonPalette(tFast);
+    vec3 grad = mix(tex, mix(tex, neon, 0.6), 0.35 + 0.25 * band);
+    grad = mix(grad, tex, 0.10);
+    grad = softTone(grad);
+    return grad;
+}
+
+float diamondRadius(vec2 p) {
+    p = sin(abs(p));
+    return max(p.x, p.y);
+}
+
+vec2 diamondFold(vec2 uv, vec2 c, float aspect) {
+    vec2 p = (uv - c) * vec2(aspect, 1.0);
+    p = abs(p);
+    if (p.y > p.x) p = p.yx;
+    p.x /= aspect;
+    return p + c;
+}
+
+vec2 rot2(vec2 v, float a) {
+    float c = cos(a), s = sin(a);
+    return vec2(c * v.x - s * v.y, s * v.x + c * v.y);
+}
+
+vec2 h2(vec2 p) {
+    return fract(sin(vec2(dot(p, vec2(127.1, 311.7)),
+                          dot(p, vec2(269.5, 183.3)))) * 43758.5453);
+}
+
+vec3 limitHighlights(vec3 c) {
+    float m = max(c.r, max(c.g, c.b));
+    if (m > 0.9) c *= 0.9 / m;
+    return c;
+}
+
+void main(void) {
+    float a = clamp(amp, 0.0, 1.0);
+    float ua = clamp(uamp, 0.0, 1.0);
+    float aMix = clamp(amp * 0.7 + uamp * 1.3, 0.0, 4.0);
+    float a01 = clamp(aMix / 2.5, 0.0, 1.0);
+
+    float aspect = iResolution.x / iResolution.y;
+    vec2 ar = vec2(aspect, 1.0);
+
+    float tBase = time_f;
+    float tSlow = tBase * mix(0.2, 0.9, a01);
+    float tFast = tBase * mix(0.7, 3.5, a01);
+
+    vec2 m = (iMouse.z > 0.5) ? (iMouse.xy / iResolution)
+                              : fract(vec2(0.37 + 0.11 * sin(tSlow * 0.63 + seed),
+                                           0.42 + 0.13 * cos(tSlow * 0.57 + seed * 2.0)));
+
+    vec2 tc0 = TexCoord;
+    vec2 center = vec2(0.5, 0.5);
+    float radius = length(tc0 - center);
+
+    float rippleSpeed = 5.0 * (1.0 + 2.0 * a01);
+    float rippleAmplitude = 0.03 * (0.5 + 1.5 * a01);
+    float rippleWavelength = 10.0;
+    float twistStrength = 1.0 + 4.0 * a01;
+
+    float ripple = sin(tc0.x * rippleWavelength + tFast * rippleSpeed) * rippleAmplitude;
+    ripple += sin(tc0.y * rippleWavelength + tFast * rippleSpeed) * rippleAmplitude;
+    vec2 rippleTC = tc0 + vec2(ripple, ripple);
+
+    float angleTwist = twistStrength * (radius - 1.0) + tSlow;
+    float cosA = cos(angleTwist);
+    float sinA = sin(angleTwist);
+    mat2 rotationMatrix = mat2(cosA, -sinA, sinA, cosA);
+    vec2 twistedTC = rotationMatrix * (tc0 - center) + center;
+
+    float mixRT = 0.5 + 0.35 * a01;
+    vec2 tcRT = mix(rippleTC, twistedTC, mixRT);
+
+    vec4 baseTex = texture(textTexture, tcRT);
+
+    vec2 uvForGlow = tcRT * 2.0 - 1.0;
+    uvForGlow.x *= aspect;
+    float rGlow = pingPong(sin(length(uvForGlow) * tSlow), 5.0);
+    float radiusMax = sqrt(aspect * aspect + 1.0) + 0.5;
+    float glow = smoothstep(radiusMax, radiusMax - 0.25, rGlow);
+
+    vec2 uv = tcRT;
+    float speedScale = 1.0 + 2.0 * a01 + 3.0 * ua;
+
+    float speedR = 5.0 * speedScale;
+    float speedG = 6.5 * speedScale;
+    float speedB = 4.0 * speedScale;
+    float ampR   = 0.03 * (0.7 + 0.6 * a01);
+    float ampG   = 0.025 * (0.7 + 0.6 * a01);
+    float ampB   = 0.035 * (0.7 + 0.6 * a01);
+    float waveR  = 10.0;
+    float waveG  = 12.0;
+    float waveB  = 8.0;
+
+    float rR = sin(uv.x * waveR        + tFast * speedR) * ampR
+             + sin(uv.y * waveR * 0.8  + tFast * speedR * 1.2) * ampR;
+    float rG = sin(uv.x * waveG * 1.5  + tFast * speedG) * ampG
+             + sin(uv.y * waveG * 0.3  + tFast * speedG * 0.7) * ampG;
+    float rB = sin(uv.x * waveB * 0.5  + tFast * speedB) * ampB
+             + sin(uv.y * waveB * 1.7  + tFast * speedB * 1.3) * ampB;
+
+    vec2 tcR = uv + vec2(rR, rR);
+    vec2 tcG = uv + vec2(rG, -0.5 * rG);
+    vec2 tcB = uv + vec2(0.3 * rB, rB);
+
+    vec3 pats[4] = vec3[](vec3(1,0,1), vec3(0,1,0), vec3(1,0,0), vec3(0,0,1));
+    float pspd = 4.0;
+    int pidx = int(mod(floor(tBase * pspd + seed * 4.0), 4.0));
+    vec3 mir = pats[pidx];
+
+    vec2 dR = tcR - m;
+    vec2 dG = tcG - m;
+    vec2 dB = tcB - m;
+
+    float fallR = smoothstep(0.55, 0.0, length(dR));
+    float fallG = smoothstep(0.55, 0.0, length(dG));
+    float fallB = smoothstep(0.55, 0.0, length(dB));
+
+    float sw = (0.12 + 0.38 * ua + 0.25 * a);
+    vec2 tangR = rot2(normalize(dR + 1e-4), 1.5707963);
+    vec2 tangG = rot2(normalize(dG + 1e-4), 1.5707963);
+    vec2 tangB = rot2(normalize(dB + 1e-4), 1.5707963);
+
+    vec2 airR = tangR * sw * fallR * (0.06 + 0.22 * a) * (0.6 + 0.4 * cos(uv.y * 40.0 + tFast * 3.0 + seed));
+    vec2 airG = tangG * sw * fallG * (0.06 + 0.22 * a) * (0.6 + 0.4 * cos(uv.y * 38.0 + tFast * 3.3 + seed * 1.7));
+    vec2 airB = tangB * sw * fallB * (0.06 + 0.22 * a) * (0.6 + 0.4 * cos(uv.y * 42.0 + tFast * 2.9 + seed * 0.9));
+
+    vec2 jit = (h2(uv * vec2(233.3, 341.9) + tFast + seed) - 0.5)
+             * (0.0006 + 0.004 * ua);
+
+    tcR += airR + jit;
+    tcG += airG + jit;
+    tcB += airB + jit;
+
+    vec2 fR = vec2(mir.r > 0.5 ? 1.0 - tcR.x : tcR.x, tcR.y);
+    vec2 fG = vec2(mir.g > 0.5 ? 1.0 - tcG.x : tcG.x, tcG.y);
+    vec2 fB = vec2(mir.b > 0.5 ? 1.0 - tcB.x : tcB.x, tcB.y);
+
+    float seg = 4.0 + 2.0 * sin(tSlow * 0.33 + a01 * 2.0);
+    vec2 kUV = reflectUV(tcRT, seg, m, aspect);
+    kUV = diamondFold(kUV, m, aspect);
+    float foldZoom = 1.45 + 0.55 * sin(tSlow * 0.42 + a01 * 3.0);
+    kUV = fractalFold(kUV, foldZoom, tFast, m, aspect);
+    kUV = rotateUV(kUV, tSlow * 0.23 + a01 * 1.1, m, aspect);
+    kUV = diamondFold(kUV, m, aspect);
+
+    vec2 p = (kUV - m) * ar;
+    vec2 q = abs(p);
+    if (q.y > q.x) q = q.yx;
+
+    float base = 1.82 + 0.18 * pingPong(sin(tSlow * 0.2) * (PI * tSlow), 5.0);
+    float period = log(base) * pingPong(tSlow * PI, 5.0);
+    float tz = tSlow * 0.65;
+    float rD = diamondRadius(p) + 1e-6;
+
+    float ang = atan(q.y, q.x) + tz * 0.35
+              + 0.35 * sin(rD * 18.0 + tFast * 0.6);
+    float k = fract((log(rD) - tz) / period);
+    float rw = exp(k * period);
+    vec2 pwrap = vec2(cos(ang), sin(ang)) * rw;
+
+    vec2 u0 = fract(pwrap / ar + m);
+    vec2 u1 = fract((pwrap * 1.045) / ar + m);
+    vec2 u2 = fract((pwrap * 0.955) / ar + m);
+
+    vec2 dirK = normalize(pwrap + 1e-6);
+    vec2 off = dirK * (0.0015 + 0.001 * sin(tFast * 1.3)) * vec2(1.0, 1.0 / aspect);
+
+    float vign = 1.0 - smoothstep(0.75, 1.2, length((tcRT - m) * ar));
+    vign = mix(0.9, 1.15, vign);
+
+    vec2 sR = mix(u0, fR, 0.6);
+    vec2 sG = mix(u1, fG, 0.6);
+    vec2 sB = mix(u2, fB, 0.6);
+
+    vec3 rC = preBlendColor(sR + off, tSlow, tFast, aspect);
+    vec3 gC = preBlendColor(sG,       tSlow, tFast, aspect);
+    vec3 bC = preBlendColor(sB - off, tSlow, tFast, aspect);
+
+    vec3 kaleidoRGB = vec3(rC.r, gC.g, bC.b);
+
+    float ring = smoothstep(0.0, 0.7, sin(log(rD + 1e-3) * 9.5 + tFast * 1.2));
+    ring = ring * pingPong(tSlow * PI, 5.0);
+    float pulse = 0.5 + 0.5 * sin(tFast * 2.0 + rD * 28.0 + k * 12.0);
+    pulse *= mix(0.4, 1.4, a01);
+
+    vec3 outCol = kaleidoRGB;
+    outCol *= (0.75 + 0.25 * ring) * (0.85 + 0.15 * pulse) * vign;
+
+    vec3 bloom = outCol * outCol * 0.10
+               + pow(max(outCol - 0.6, 0.0), vec3(2.0)) * 0.06;
+
+    float pulseAdd = 0.004 * (0.5 + 0.5 * sin(tFast * 3.7 + seed));
+    outCol += bloom;
+    outCol += pulseAdd * ua;
+
+    outCol = clamp(outCol, vec3(0.0), vec3(1.0));
+    outCol = limitHighlights(outCol);
+
+    vec3 finalRGB = mix(baseTex.rgb, outCol, pingPong(glow * PI, 5.0) * (0.6 + 0.3 * a01));
+    finalRGB = limitHighlights(finalRGB);
+    finalRGB = clamp(finalRGB, 0.0, 1.0);
+
+    color = vec4(finalRGB, baseTex.a);
+}
+)SHD";
+inline const char *src_frac_shader02_dmd6i_amp = R"SHD(#version 300 es
+precision highp float;
+out vec4 color;
+in vec2 TexCoord;
+
+uniform sampler2D textTexture;
+uniform vec2 iResolution;
+uniform float time_f;
+uniform vec4 iMouse;
+)SHD" COMMON_UNIFORMS COLOR_HELPERS R"SHD(
+uniform float amp;
+uniform float uamp;
+
+const float PI = 3.1415926535897932384626433832795;
+
+float gAmp01;
+float gSlow;
+float gFast;
+float gDetail;
+
+float pingPong(float x, float length) {
+    float m = mod(x, length * 2.0);
+    return m <= length ? m : length * 2.0 - m;
+}
+
+vec3 hsv2rgb(vec3 c) {
+    vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+
+vec2 rotateUV(vec2 uv, float angle, vec2 c, float aspect) {
+    float s = sin(angle), cc = cos(angle);
+    vec2 p = uv - c;
+    p.x *= aspect;
+    p = mat2(cc, -s, s, cc) * p;
+    p.x /= aspect;
+    return p + c;
+}
+
+vec2 reflectUV(vec2 uv, float segments, vec2 c, float aspect) {
+    vec2 p = uv - c;
+    p.x *= aspect;
+    float ang = atan(p.y, p.x);
+    float rad = length(p);
+    float stepA = 6.28318530718 / segments;
+    ang = mod(ang, stepA);
+    ang = abs(ang - stepA * 0.5);
+    vec2 r = vec2(cos(ang), sin(ang)) * rad;
+    r.x /= aspect;
+    return r + c;
+}
+
+vec2 fractalFold(vec2 uv, float zoom, float t, vec2 c, float aspect) {
+    vec2 p = uv;
+    for (int i = 0; i < 6; i++) {
+        p = abs((p - c) * (zoom + 0.15 * sin(t * 0.35 + float(i)))) - 0.5 + c;
+        p = rotateUV(p, t * 0.12 + float(i) * 0.07, c, aspect);
+    }
+    return p;
+}
+
+vec3 neonPalette(float t) {
+    vec3 pink = vec3(1.0, 0.15, 0.75);
+    vec3 blue = vec3(0.10, 0.55, 1.0);
+    vec3 green = vec3(0.10, 1.00, 0.45);
+    float ph = fract(t * 0.08);
+    vec3 k1 = mix(pink, blue, smoothstep(0.00, 0.33, ph));
+    vec3 k2 = mix(blue, green, smoothstep(0.33, 0.66, ph));
+    vec3 k3 = mix(green, pink, smoothstep(0.66, 1.00, ph));
+    float a = step(ph, 0.33);
+    float b = step(0.33, ph) * step(ph, 0.66);
+    float c = step(0.66, ph);
+    return normalize(a * k1 + b * k2 + c * k3) * 1.05;
+}
+
+vec3 softTone(vec3 c) {
+    c = pow(max(c, 0.0), vec3(0.95));
+    float l = dot(c, vec3(0.299, 0.587, 0.114));
+    c = mix(vec3(l), c, 0.9);
+    return clamp(c, 0.0, 1.0);
+}
+
+vec3 tentBlur3(sampler2D img, vec2 uv, vec2 res) {
+    vec2 ts = 1.0 / res;
+    vec3 s00 = textureGrad(img, uv + ts * vec2(-1.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s10 = textureGrad(img, uv + ts * vec2(0.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s20 = textureGrad(img, uv + ts * vec2(1.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s01 = textureGrad(img, uv + ts * vec2(-1.0, 0.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s11 = textureGrad(img, uv, dFdx(uv), dFdy(uv)).rgb;
+    vec3 s21 = textureGrad(img, uv + ts * vec2(1.0, 0.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s02 = textureGrad(img, uv + ts * vec2(-1.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s12 = textureGrad(img, uv + ts * vec2(0.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s22 = textureGrad(img, uv + ts * vec2(1.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    return (s00 + 2.0 * s10 + s20 + 2.0 * s01 + 4.0 * s11 + 2.0 * s21 + s02 + 2.0 * s12 + s22) / 16.0;
+}
+
+vec3 preBlendColor(vec2 uv) {
+    vec3 tex = tentBlur3(textTexture, uv, iResolution);
+    float aspect = iResolution.x / iResolution.y;
+    vec2 p = (uv - 0.5) * vec2(aspect, 1.0);
+    float r = length(p);
+    float t = time_f;
+    vec3 neon = neonPalette(t + r * 1.3);
+    float neonAmt = smoothstep(0.1, 0.8, r);
+    neonAmt = 0.3 + 0.4 * (1.0 - neonAmt);
+    vec3 grad = mix(tex, neon, neonAmt);
+    grad = mix(grad, tex, 0.2);
+    grad = softTone(grad);
+    return grad;
+}
+
+float diamondRadius(vec2 p) {
+    float f = mix(0.4, 2.0, gAmp01);
+    p = sin(abs(p * f));
+    return max(p.x, p.y);
+}
+
+vec2 diamondFold(vec2 uv, vec2 c, float aspect) {
+    vec2 p = (uv - c) * vec2(aspect, 1.0);
+    p = abs(p);
+    if (p.y > p.x) p = p.yx;
+    p.x /= aspect;
+    return p + c;
+}
+
+void main(void) {
+    float aAcc = clamp(amp, 0.0, 4.0);
+    float aInst = clamp(uamp, 0.0, 4.0);
+    float ampMix = clamp(aAcc * 0.6 + aInst * 1.4, 0.0, 4.0);
+    gAmp01 = clamp(ampMix / 2.5, 0.0, 1.0);
+
+    gSlow = time_f * mix(0.15, 0.7, gAmp01);
+    gFast = time_f * mix(0.6, 3.5, gAmp01);
+    gDetail = time_f * mix(0.3, 2.0, gAmp01);
+
+    vec4 baseTex = texture(textTexture, TexCoord);
+    vec2 uv = TexCoord * 2.0 - 1.0;
+    float aspect = iResolution.x / iResolution.y;
+    uv.x *= aspect;
+    float r = pingPong(sin(length(uv) * gSlow), 5.0);
+    float radius = sqrt(aspect * aspect + 1.0) + 0.5;
+    float glow = smoothstep(radius, radius - 0.25, r);
+
+    vec2 m = (iMouse.z > 0.5) ? (iMouse.xy / iResolution) : vec2(0.5);
+    vec2 ar = vec2(aspect, 1.0);
+
+    vec3 baseCol = preBlendColor(TexCoord);
+
+    float seg = 4.0 + 2.0 * sin(gSlow * 0.33 + gAmp01 * 2.0);
+    vec2 kUV = reflectUV(TexCoord, seg, m, aspect);
+    kUV = diamondFold(kUV, m, aspect);
+
+    float foldZoom = 1.45 + 0.55 * sin(pingPong(gSlow * PI, 25.0) * 0.42 + gAmp01 * 3.0);
+    kUV = fractalFold(kUV, foldZoom, gDetail, m, aspect);
+    kUV = rotateUV(kUV, gSlow * 0.23 + gAmp01 * 1.2, m, aspect);
+    kUV = diamondFold(kUV, m, aspect);
+
+    vec2 p = (kUV - m) * ar;
+    vec2 q = abs(p);
+    if (q.y > q.x) q = q.yx;
+
+    float base = 1.82 + 0.18 * pingPong(sin(gSlow * 0.2) * (PI * gSlow), 5.0);
+    float period = log(base) * pingPong(gSlow * PI, 5.0);
+    float tz = gSlow * 0.65;
+    float rD = diamondRadius(p) + 1e-6;
+
+    float ang = atan(q.y, q.x) + tz * 0.35 + 0.35 * sin(rD * 18.0 + gFast * 0.6);
+    float k = fract((log(rD) - tz) / period);
+    float rw = exp(k * period);
+    vec2 pwrap = vec2(cos(ang), sin(ang)) * rw;
+
+    vec2 u0 = fract(pwrap / ar + m);
+    vec2 u1 = fract((pwrap * 1.045) / ar + m);
+    vec2 u2 = fract((pwrap * 0.955) / ar + m);
+    vec2 dir = normalize(pwrap + 1e-6);
+    vec2 off = dir * (0.0015 + 0.001 * sin(gFast * 1.3)) * vec2(1.0, 1.0 / aspect);
+
+    float vign = 1.0 - smoothstep(0.75, 1.2, length((TexCoord - m) * ar));
+    vign = mix(0.9, 1.15, vign);
+
+    vec3 rC = preBlendColor(u0 + off);
+    vec3 gC = preBlendColor(u1);
+    vec3 bC = preBlendColor(u2 - off);
+    vec3 kaleidoRGB = vec3(rC.r, gC.g, bC.b);
+
+    float ring = smoothstep(0.0, 0.7, sin(log(rD + 1e-3) * 9.5 + gFast * 1.2));
+    ring = ring * pingPong(gSlow * PI, 5.0);
+
+    float pulse = 0.5 + 0.5 * sin(gFast * 2.0 + rD * 28.0 + k * 12.0);
+    pulse *= mix(0.4, 1.4, gAmp01);
+
+    vec3 outCol = kaleidoRGB;
+    outCol *= (0.75 + 0.25 * ring) * (0.85 + 0.15 * pulse) * vign;
+
+    vec3 bloom = outCol * outCol * 0.10 + pow(max(outCol - 0.6, 0.0), vec3(2.0)) * 0.08;
+    outCol += bloom;
+
+    outCol = mix(outCol, baseCol, pingPong(pulse * PI, 5.0) * 0.18);
+    outCol = clamp(outCol, vec3(0.05), vec3(0.97));
+    outCol *= mix(0.7, 1.15, gAmp01);
+
+    vec3 finalRGB = mix(baseTex.rgb, outCol, pingPong(glow * PI, 5.0) * 0.8);
+    finalRGB = clamp(finalRGB, 0.0, 1.0);
+
+    color = vec4(finalRGB, baseTex.a);
+}
+)SHD";
+inline const char *src_frac_shader02_dmd6i_bowl = R"SHD(#version 300 es
+precision highp float;
+out vec4 color;
+in vec2 TexCoord;
+
+uniform sampler2D textTexture;
+uniform vec2 iResolution;
+uniform float time_f;
+uniform vec4 iMouse;
+)SHD" COMMON_UNIFORMS COLOR_HELPERS R"SHD(
+uniform float amp;
+uniform float uamp;
+uniform float seed;
+
+const float PI = 3.1415926535897932384626433832795;
+
+float h1(float n){return fract(sin(n*91.345+37.12)*43758.5453123);}
+vec2 h2(vec2 p){return fract(sin(vec2(dot(p,vec2(127.1,311.7)),dot(p,vec2(269.5,183.3))))*43758.5453);}
+vec2 rot(vec2 v,float a){float c=cos(a),s=sin(a);return vec2(c*v.x-s*v.y,s*v.x+c*v.y);}
+
+float pingPong(float x, float length) {
+    float modVal = mod(x, length * 2.0);
+    return modVal <= length ? modVal : length * 2.0 - modVal;
+}
+
+vec3 hsv2rgb(vec3 c) {
+    vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+
+vec2 rotateUV(vec2 uv, float angle, vec2 cent, float aspect) {
+    float s = sin(angle), cc = cos(angle);
+    vec2 p = uv - cent;
+    p.x *= aspect;
+    p = mat2(cc, -s, s, cc) * p;
+    p.x /= aspect;
+    return p + cent;
+}
+
+vec2 reflectUV(vec2 uv, float segments, vec2 cent, float aspect) {
+    vec2 p = uv - cent;
+    p.x *= aspect;
+    float ang = atan(p.y, p.x);
+    float rad = length(p);
+    float stepA = 6.28318530718 / segments;
+    ang = mod(ang, stepA);
+    ang = abs(ang - stepA * 0.5);
+    vec2 r = vec2(cos(ang), sin(ang)) * rad;
+    r.x /= aspect;
+    return r + cent;
+}
+
+vec2 fractalFold(vec2 uv, float zoom, float t, vec2 cent, float aspect) {
+    vec2 p = uv;
+    for (int i = 0; i < 6; i++) {
+        p = abs((p - cent) * (zoom + 0.15 * sin(t * 0.35 + float(i)))) - 0.5 + cent;
+        p = rotateUV(p, t * 0.12 + float(i) * 0.07, cent, aspect);
+    }
+    return p;
+}
+
+vec3 neonPalette(float t) {
+    vec3 pink = vec3(1.0, 0.15, 0.75);
+    vec3 blue = vec3(0.10, 0.55, 1.0);
+    vec3 green = vec3(0.10, 1.00, 0.45);
+    float ph = fract(t * 0.08);
+    vec3 k1 = mix(pink, blue, smoothstep(0.00, 0.33, ph));
+    vec3 k2 = mix(blue, green, smoothstep(0.33, 0.66, ph));
+    vec3 k3 = mix(green, pink, smoothstep(0.66, 1.00, ph));
+    float a = step(ph, 0.33);
+    float b = step(0.33, ph) * step(ph, 0.66);
+    float c = step(0.66, ph);
+    return normalize(a * k1 + b * k2 + c * k3) * 1.05;
+}
+
+vec3 softTone(vec3 col) {
+    col = pow(max(col, 0.0), vec3(0.95));
+    float l = dot(col, vec3(0.299, 0.587, 0.114));
+    col = mix(vec3(l), col, 0.9);
+    return clamp(col, 0.0, 1.0);
+}
+
+vec3 tentBlur3(sampler2D img, vec2 uv, vec2 res) {
+    vec2 ts = 1.0 / res;
+    vec3 s00 = textureGrad(img, uv + ts * vec2(-1.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s10 = textureGrad(img, uv + ts * vec2(0.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s20 = textureGrad(img, uv + ts * vec2(1.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s01 = textureGrad(img, uv + ts * vec2(-1.0, 0.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s11 = textureGrad(img, uv, dFdx(uv), dFdy(uv)).rgb;
+    vec3 s21 = textureGrad(img, uv + ts * vec2(1.0, 0.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s02 = textureGrad(img, uv + ts * vec2(-1.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s12 = textureGrad(img, uv + ts * vec2(0.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s22 = textureGrad(img, uv + ts * vec2(1.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    return (s00 + 2.0 * s10 + s20 + 2.0 * s01 + 4.0 * s11 + 2.0 * s21 + s02 + 2.0 * s12 + s22) / 16.0;
+}
+
+vec3 preBlendColor(vec2 uv) {
+    vec3 tex = tentBlur3(textTexture, uv, iResolution);
+    float aspect = iResolution.x / iResolution.y;
+    vec2 p = (uv - 0.5) * vec2(aspect, 1.0);
+    float r = length(p);
+    float t = time_f;
+    vec3 neon = neonPalette(t + r * 1.3);
+    float neonAmt = smoothstep(0.1, 0.8, r);
+    neonAmt = 0.3 + 0.4 * (1.0 - neonAmt);
+    vec3 grad = mix(tex, neon, neonAmt);
+    grad = mix(grad, tex, 0.2);
+    grad = softTone(grad);
+    return grad;
+}
+
+float diamondRadius(vec2 p) {
+    p = sin(abs(p));
+    return max(p.x, p.y);
+}
+
+vec2 diamondFold(vec2 uv, vec2 cent, float aspect) {
+    vec2 p = (uv - cent) * vec2(aspect, 1.0);
+    p = abs(p);
+    if (p.y > p.x) p = p.yx;
+    p.x /= aspect;
+    return p + cent;
+}
+
+void main(void){
+    float a = clamp(amp,0.0,1.0);
+    float ua = clamp(uamp,0.0,1.0);
+    float t = time_f;
+
+    vec2 center = vec2(0.5, 0.5);
+    vec2 baseUV = TexCoord;
+    vec2 offset = baseUV - center;
+    float maxRadius = length(vec2(0.5, 0.5));
+    float radius = length(offset);
+    float normalizedRadius = radius / maxRadius;
+
+    float distortion = 0.25 + 0.45*ua + 0.3*a;
+    float distortedRadius = normalizedRadius + distortion * normalizedRadius * normalizedRadius;
+    distortedRadius = clamp(distortedRadius, 0.0, 1.0);
+    distortedRadius *= maxRadius;
+    vec2 normDir = radius > 0.0 ? offset / radius : vec2(0.0);
+    vec2 distortedCoords = center + distortedRadius * normDir;
+
+    float spinSpeed = 0.6 + 1.8*(0.3 + 0.7*a);
+    float modulatedTime = pingPong(t * spinSpeed, 5.0);
+    float angSpin = atan(distortedCoords.y - center.y, distortedCoords.x - center.x) + modulatedTime;
+
+    vec2 rotatedTC;
+    rotatedTC.x = cos(angSpin) * (distortedCoords.x - center.x) - sin(angSpin) * (distortedCoords.y - center.y) + center.x;
+    rotatedTC.y = sin(angSpin) * (distortedCoords.x - center.x) + cos(angSpin) * (distortedCoords.y - center.y) + center.y;
+
+    float warpAmp = 0.02 + 0.06*ua + 0.04*a;
+    vec2 uvWarp;
+    uvWarp.x = pingPong(rotatedTC.x + t * 0.12 * (1.0 + warpAmp*5.0), 1.0);
+    uvWarp.y = pingPong(rotatedTC.y + t * 0.12 * (1.0 + warpAmp*5.0), 1.0);
+
+    vec2 uv = uvWarp;
+
+    float speedR=5.0, ampR=0.03, waveR=10.0;
+    float speedG=6.5, ampG=0.025, waveG=12.0;
+    float speedB=4.0, ampB=0.035, waveB=8.0;
+
+    float rR=sin(uv.x*waveR+t*speedR)*ampR + sin(uv.y*waveR*0.8+t*speedR*1.2)*ampR;
+    float rG=sin(uv.x*waveG*1.5+t*speedG)*ampG + sin(uv.y*waveG*0.3+t*speedG*0.7)*ampG;
+    float rB=sin(uv.x*waveB*0.5+t*speedB)*ampB + sin(uv.y*waveB*1.7+t*speedB*1.3)*ampB;
+
+    vec2 tcR=uv+vec2(rR,rR);
+    vec2 tcG=uv+vec2(rG,-0.5*rG);
+    vec2 tcB=uv+vec2(0.3*rB,rB);
+
+    vec3 pats[4]=vec3[](vec3(1,0,1),vec3(0,1,0),vec3(1,0,0),vec3(0,0,1));
+    float pspd=4.0;
+    int pidx=int(mod(floor(t*pspd+seed*4.0),4.0));
+    vec3 mir=pats[pidx];
+
+    vec2 m = iMouse.z>0.5 ? (iMouse.xy/iResolution) : fract(vec2(0.37+0.11*sin(t*0.63+seed),0.42+0.13*cos(t*0.57+seed*2.0)));
+    vec2 dR=tcR-m, dG=tcG-m, dB=tcB-m;
+
+    float fallR=smoothstep(0.55,0.0,length(dR));
+    float fallG=smoothstep(0.55,0.0,length(dG));
+    float fallB=smoothstep(0.55,0.0,length(dB));
+
+    float sw=(0.12+0.38*ua+0.25*a);
+    vec2 tangR=rot(normalize(dR+1e-4),1.5707963);
+    vec2 tangG=rot(normalize(dG+1e-4),1.5707963);
+    vec2 tangB=rot(normalize(dB+1e-4),1.5707963);
+
+    vec2 airR=tangR*sw*fallR*(0.06+0.22*a)*(0.6+0.4*cos(uv.y*40.0+t*3.0+seed));
+    vec2 airG=tangG*sw*fallG*(0.06+0.22*a)*(0.6+0.4*cos(uv.y*38.0+t*3.3+seed*1.7));
+    vec2 airB=tangB*sw*fallB*(0.06+0.22*a)*(0.6+0.4*cos(uv.y*42.0+t*2.9+seed*0.9));
+
+    vec2 jit = (h2(uv*vec2(233.3,341.9)+t+seed)-0.5)*(0.0006+0.004*ua);
+    tcR += airR + jit;
+    tcG += airG + jit;
+    tcB += airB + jit;
+
+    vec2 fR=vec2(mir.r>0.5?1.0-tcR.x:tcR.x, tcR.y);
+    vec2 fG=vec2(mir.g>0.5?1.0-tcG.x:tcG.x, tcG.y);
+    vec2 fB=vec2(mir.b>0.5?1.0-tcB.x:tcB.x, tcB.y);
+
+    float ca=0.0015+0.004*a;
+    vec4 C=texture(textTexture,uv);
+    C.r=texture(textTexture,fR+vec2( ca,0)).r;
+    C.g=texture(textTexture,fG              ).g;
+    C.b=texture(textTexture,fB+vec2(-ca,0)).b;
+
+    float pulseChrom=0.004*(0.5+0.5*sin(t*3.7+seed));
+    C.rgb+=pulseChrom*ua;
+    vec3 chromRGB = C.rgb;
+
+    vec4 baseTex = texture(textTexture, uv);
+    vec2 uvN = TexCoord * 2.0 - 1.0;
+    float aspect = iResolution.x / iResolution.y;
+    uvN.x *= aspect;
+    float r = pingPong(sin(length(uvN) * time_f), 5.0);
+    float radiusN = sqrt(aspect * aspect + 1.0) + 0.5;
+    float glow = smoothstep(radiusN, radiusN - 0.25, r);
+
+    vec2 ar = vec2(aspect, 1.0);
+    vec3 baseCol = preBlendColor(uv);
+    float seg = 4.0 + 2.0 * sin(time_f * 0.33);
+    vec2 kUV = reflectUV(uv, seg, m, aspect);
+    kUV = diamondFold(kUV, m, aspect);
+    float foldZoom = 1.45 + 0.55 * sin(time_f * 0.42);
+    kUV = fractalFold(kUV, foldZoom, time_f, m, aspect);
+    kUV = rotateUV(kUV, time_f * 0.23, m, aspect);
+    kUV = diamondFold(kUV, m, aspect);
+
+    vec2 p = (kUV - m) * ar;
+    vec2 q = abs(p);
+    if (q.y > q.x) q = q.yx;
+
+    float baseZ = 1.82 + 0.18 * pingPong(sin(time_f * 0.2) * (PI * time_f), 5.0);
+    float period = log(baseZ) * pingPong(time_f * PI, 5.0);
+    float tz = time_f * 0.65;
+    float rD = diamondRadius(p) + 1e-6;
+    float ang = atan(q.y, q.x) + tz * 0.35 + 0.35 * sin(rD * 18.0 + time_f * 0.6);
+    float k = fract((log(rD) - tz) / period);
+    float rw = exp(k * period);
+    vec2 pwrap = vec2(cos(ang), sin(ang)) * rw;
+    vec2 u0 = fract(pwrap / ar + m);
+    vec2 u1 = fract((pwrap * 1.045) / ar + m);
+    vec2 u2 = fract((pwrap * 0.955) / ar + m);
+    vec2 dir = normalize(pwrap + 1e-6);
+    vec2 off = dir * (0.0015 + 0.001 * sin(time_f * 1.3)) * vec2(1.0, 1.0 / aspect);
+
+    float vign = 1.0 - smoothstep(0.75, 1.2, length((TexCoord - m) * ar));
+    vign = mix(0.9, 1.15, vign);
+
+    vec3 rC = preBlendColor(u0 + off);
+    vec3 gC = preBlendColor(u1);
+    vec3 bC = preBlendColor(u2 - off);
+    vec3 kaleidoRGB = vec3(rC.r, gC.g, bC.b);
+
+    float ring = smoothstep(0.0, 0.7, sin(log(rD + 1e-3) * 9.5 + time_f * 1.2));
+    ring = ring * pingPong((time_f * PI), 5.0);
+    float pulse = 0.5 + 0.5 * sin(time_f * 2.0 + rD * 28.0 + k * 12.0);
+
+    vec3 outCol = kaleidoRGB;
+    outCol *= (0.75 + 0.25 * ring) * (0.85 + 0.15 * pulse) * vign;
+    vec3 bloom = outCol * outCol * 0.18 + pow(max(outCol - 0.6, 0.0), vec3(2.0)) * 0.12;
+    outCol += bloom;
+
+    float mixNeonBase = pingPong(pulse * PI, 5.0) * 0.18;
+    vec3 neonBaseMix = mix(baseCol, outCol, 0.65 + 0.35*ua);
+    vec3 neonOut = mix(baseTex.rgb, neonBaseMix, mixNeonBase + 0.45);
+    neonOut = clamp(neonOut, vec3(0.05), vec3(0.97));
+
+    float glowMix = pingPong(glow * PI, 5.0) * 0.8;
+    vec3 neonFinal = mix(baseTex.rgb, neonOut, glowMix);
+
+    float layerMix = clamp(0.35 + 0.4*a + 0.25*ua, 0.0, 1.0);
+    vec3 finalRGB = mix(neonFinal, chromRGB, layerMix);
+
+    color = vec4(finalRGB, 1.0);
+}
+)SHD";
+inline const char *src_frac_shader02_dmd6i_bubble = R"SHD(#version 300 es
+precision highp float;
+out vec4 color;
+in vec2 TexCoord;
+
+uniform sampler2D textTexture;
+uniform vec2 iResolution;
+uniform float time_f;
+uniform vec4 iMouse;
+)SHD" COMMON_UNIFORMS COLOR_HELPERS R"SHD(
+uniform float amp;
+uniform float uamp;
+
+const float PI = 3.1415926535897932384626433832795;
+
+float pingPong(float x, float length) {
+    float m = mod(x, length * 2.0);
+    return m <= length ? m : length * 2.0 - m;
+}
+
+vec3 hsv2rgb(vec3 c) {
+    vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+
+vec2 rotateUV(vec2 uv, float angle, vec2 c, float aspect) {
+    float s = sin(angle), cc = cos(angle);
+    vec2 p = uv - c;
+    p.x *= aspect;
+    p = mat2(cc, -s, s, cc) * p;
+    p.x /= aspect;
+    return p + c;
+}
+
+vec2 reflectUV(vec2 uv, float segments, vec2 c, float aspect) {
+    vec2 p = uv - c;
+    p.x *= aspect;
+    float ang = atan(p.y, p.x);
+    float rad = length(p);
+    float stepA = 6.28318530718 / segments;
+    ang = mod(ang, stepA);
+    ang = abs(ang - stepA * 0.5);
+    vec2 r = vec2(cos(ang), sin(ang)) * rad;
+    r.x /= aspect;
+    return r + c;
+}
+
+vec2 fractalFold(vec2 uv, float zoom, float t, vec2 c, float aspect) {
+    vec2 p = uv;
+    for (int i = 0; i < 6; i++) {
+        p = abs((p - c) * (zoom + 0.15 * sin(t * 0.35 + float(i)))) - 0.5 + c;
+        p = rotateUV(p, t * 0.12 + float(i) * 0.07, c, aspect);
+    }
+    return p;
+}
+
+vec3 neonPalette(float t) {
+    vec3 pink = vec3(1.0, 0.15, 0.75);
+    vec3 blue = vec3(0.10, 0.55, 1.0);
+    vec3 green = vec3(0.10, 1.00, 0.45);
+    float ph = fract(t * 0.08);
+    vec3 k1 = mix(pink, blue, smoothstep(0.00, 0.33, ph));
+    vec3 k2 = mix(blue, green, smoothstep(0.33, 0.66, ph));
+    vec3 k3 = mix(green, pink, smoothstep(0.66, 1.00, ph));
+    float a = step(ph, 0.33);
+    float b = step(0.33, ph) * step(ph, 0.66);
+    float c = step(0.66, ph);
+    return normalize(a * k1 + b * k2 + c * k3) * 1.05;
+}
+
+vec3 softTone(vec3 c) {
+    c = pow(max(c, 0.0), vec3(0.95));
+    float l = dot(c, vec3(0.299, 0.587, 0.114));
+    c = mix(vec3(l), c, 0.9);
+    return clamp(c, 0.0, 1.0);
+}
+
+vec3 tentBlur3(sampler2D img, vec2 uv, vec2 res) {
+    vec2 ts = 1.0 / res;
+    vec3 s00 = textureGrad(img, uv + ts * vec2(-1.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s10 = textureGrad(img, uv + ts * vec2(0.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s20 = textureGrad(img, uv + ts * vec2(1.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s01 = textureGrad(img, uv + ts * vec2(-1.0, 0.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s11 = textureGrad(img, uv, dFdx(uv), dFdy(uv)).rgb;
+    vec3 s21 = textureGrad(img, uv + ts * vec2(1.0, 0.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s02 = textureGrad(img, uv + ts * vec2(-1.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s12 = textureGrad(img, uv + ts * vec2(0.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s22 = textureGrad(img, uv + ts * vec2(1.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    return (s00 + 2.0 * s10 + s20 + 2.0 * s01 + 4.0 * s11 + 2.0 * s21 + s02 + 2.0 * s12 + s22) / 16.0;
+}
+
+vec3 preBlendColor(vec2 uv) {
+    vec3 tex = tentBlur3(textTexture, uv, iResolution);
+    float aspect = iResolution.x / iResolution.y;
+    vec2 p = (uv - 0.5) * vec2(aspect, 1.0);
+    float r = length(p);
+    float t = time_f;
+    vec3 neon = neonPalette(t + r * 1.3);
+    float neonAmt = smoothstep(0.1, 0.8, r);
+    neonAmt = 0.3 + 0.4 * (1.0 - neonAmt);
+    vec3 grad = mix(tex, neon, neonAmt);
+    grad = mix(grad, tex, 0.2);
+    grad = softTone(grad);
+    return grad;
+}
+
+float diamondRadius(vec2 p) {
+    p = sin(abs(p));
+    return max(p.x, p.y);
+}
+
+vec2 diamondFold(vec2 uv, vec2 c, float aspect) {
+    vec2 p = (uv - c) * vec2(aspect, 1.0);
+    p = abs(p);
+    if (p.y > p.x) p = p.yx;
+    p.x /= aspect;
+    return p + c;
+}
+
+void main(void) {
+    float audio = clamp(amp * 0.8 + uamp * 0.6, 0.0, 5.0);
+    float audioNorm = clamp(audio * 0.5, 0.0, 2.5);
+    float t = time_f * (1.0 + audioNorm * 0.25);
+
+    float aspect = iResolution.x / iResolution.y;
+    vec2 ar = vec2(aspect, 1.0);
+    vec2 m = (iMouse.z > 0.5) ? (iMouse.xy / iResolution) : vec2(0.5);
+
+    vec2 rel = TexCoord - m;
+    float dist = length(rel);
+    float bubSize = 0.38 + 0.12 * audioNorm;
+    float bubEdge = 0.28 + 0.10 * audioNorm;
+    float bubMask = 1.0 - smoothstep(bubSize, bubSize + bubEdge, dist);
+
+    float zoomBase = 1.3 + 0.7 * audioNorm;
+    float zoomAnim = 0.5 + 0.5 * sin(t * 1.6 + audioNorm * 2.3);
+    float zoom = mix(1.0, zoomBase, zoomAnim);
+
+    vec2 tcZoom = m + rel / zoom;
+    vec2 tcF = mix(TexCoord, tcZoom, bubMask);
+
+    vec4 baseTex = texture(textTexture, tcF);
+
+    vec2 uv = tcF * 2.0 - 1.0;
+    uv.x *= aspect;
+    float r = pingPong(sin(length(uv) * t), 5.0);
+    float radius = sqrt(aspect * aspect + 1.0) + 0.5;
+    float glow = smoothstep(radius, radius - 0.25, r);
+
+    vec3 baseCol = preBlendColor(tcF);
+
+    float seg = 4.0 + 2.0 * sin(t * 0.33);
+    vec2 kUV = reflectUV(tcF, seg, m, aspect);
+    kUV = diamondFold(kUV, m, aspect);
+
+    float foldZoom = 1.45 + 0.55 * sin(t * 0.42);
+    kUV = fractalFold(kUV, foldZoom, t, m, aspect);
+    kUV = rotateUV(kUV, t * 0.23, m, aspect);
+    kUV = diamondFold(kUV, m, aspect);
+
+    vec2 p = (kUV - m) * ar;
+    vec2 q = abs(p);
+    if (q.y > q.x) q = q.yx;
+
+    float base = 1.82 + 0.18 * pingPong(sin(t * 0.2) * (PI * t), 5.0);
+    float period = log(base) * pingPong(t * PI, 5.0);
+    float tz = t * 0.65;
+
+    float rD = diamondRadius(p) + 1e-6;
+    float ang = atan(q.y, q.x) + tz * 0.35 + 0.35 * sin(rD * 18.0 + t * 0.6);
+    float k = fract((log(rD) - tz) / period);
+    float rw = exp(k * period);
+
+    vec2 pwrap = vec2(cos(ang), sin(ang)) * rw;
+
+    vec2 u0 = fract(pwrap / ar + m);
+    vec2 u1 = fract((pwrap * 1.045) / ar + m);
+    vec2 u2 = fract((pwrap * 0.955) / ar + m);
+
+    vec2 dir = normalize(pwrap + 1e-6);
+    vec2 off = dir * (0.0015 + 0.001 * sin(t * 1.3)) * vec2(1.0, 1.0 / aspect);
+
+    float vign = 1.0 - smoothstep(0.75, 1.2, length((tcF - m) * ar));
+    vign = mix(0.9, 1.15, vign);
+
+    vec3 rC = preBlendColor(u0 + off);
+    vec3 gC = preBlendColor(u1);
+    vec3 bC = preBlendColor(u2 - off);
+    vec3 kaleidoRGB = vec3(rC.r, gC.g, bC.b);
+
+    float angDir = atan(p.y, p.x) / (2.0 * PI);
+    angDir = angDir * 0.5 + 0.5;
+    float radN = clamp(length(p) * 0.9, 0.0, 1.0);
+
+    float hueShift = pingPong(time_f * 0.18 + audioNorm * 0.12, 1.0);
+    float hue = fract(angDir + (radN - 0.5) * 0.4 + (hueShift - 0.5) * 0.6);
+    float sat = 0.4 + 0.4 * radN;
+    float val = 0.45 + 0.45 * (1.0 - radN);
+
+    vec3 gradCol = hsv2rgb(vec3(hue, sat, val));
+
+    float gMix = (0.18 + 0.25 * audioNorm) * (0.3 + 0.7 * bubMask);
+    vec3 outCol = mix(kaleidoRGB, kaleidoRGB * gradCol, gMix);
+
+    float ring = smoothstep(0.0, 0.7, sin(log(rD + 1e-3) * 9.5 + t * 1.2));
+    ring = ring * pingPong((t * PI), 5.0);
+    float pulse = 0.5 + 0.5 * sin(t * 2.0 + rD * 28.0 + k * 12.0 + audioNorm * 3.0);
+
+    outCol *= (0.60 + 0.20 * ring) * (0.80 + 0.10 * pulse) * vign;
+
+    vec3 bloom = outCol * outCol * 0.08;
+    outCol += bloom * 0.3;
+
+    outCol = mix(outCol, baseTex.rgb, 0.18 + audioNorm * 0.04);
+
+    float rim = smoothstep(bubSize + 0.02, bubSize - 0.02, dist);
+    vec3 bubbleHighlight = hsv2rgb(vec3(hue, 0.7, 0.9)) * rim * (0.10 + 0.20 * audioNorm);
+    outCol += bubbleHighlight * bubMask * 0.5;
+
+    outCol = clamp(outCol, vec3(0.05), vec3(0.90));
+
+    vec3 finalRGB = mix(baseTex.rgb, outCol, pingPong(glow * PI, 5.0) * 0.7 + 0.1);
+
+    float maxC = max(max(finalRGB.r, finalRGB.g), finalRGB.b);
+    float targetMax = 0.97;
+    if (maxC > targetMax) finalRGB *= targetMax / maxC;
+    finalRGB = clamp(finalRGB, vec3(0.03), vec3(0.97));
+
+    color = vec4(finalRGB, baseTex.a);
+}
+)SHD";
+inline const char *src_frac_shader02_dmd6i_neon = R"SHD(#version 300 es
+precision highp float;
+out vec4 color;
+in vec2 TexCoord;
+
+uniform sampler2D textTexture;
+uniform vec2 iResolution;
+uniform float time_f;
+uniform vec4 iMouse;
+)SHD" COMMON_UNIFORMS COLOR_HELPERS R"SHD(
+uniform float amp;
+uniform float uamp;
+
+const float PI = 3.1415926535897932384626433832795;
+
+float pingPong(float x, float length) {
+    float m = mod(x, length * 2.0);
+    return m <= length ? m : length * 2.0 - m;
+}
+
+vec3 hsv2rgb(vec3 c) {
+    vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+
+vec2 rotateUV(vec2 uv, float angle, vec2 c, float aspect) {
+    float s = sin(angle), cc = cos(angle);
+    vec2 p = uv - c;
+    p.x *= aspect;
+    p = mat2(cc, -s, s, cc) * p;
+    p.x /= aspect;
+    return p + c;
+}
+
+vec2 reflectUV(vec2 uv, float segments, vec2 c, float aspect) {
+    vec2 p = uv - c;
+    p.x *= aspect;
+    float ang = atan(p.y, p.x);
+    float rad = length(p);
+    float stepA = 6.28318530718 / segments;
+    ang = mod(ang, stepA);
+    ang = abs(ang - stepA * 0.5);
+    vec2 r = vec2(cos(ang), sin(ang)) * rad;
+    r.x /= aspect;
+    return r + c;
+}
+
+vec2 fractalFold(vec2 uv, float zoom, float t, vec2 c, float aspect) {
+    vec2 p = uv;
+    for (int i = 0; i < 6; i++) {
+        p = abs((p - c) * (zoom + 0.15 * sin(t * 0.35 + float(i)))) - 0.5 + c;
+        p = rotateUV(p, t * 0.12 + float(i) * 0.07, c, aspect);
+    }
+    return p;
+}
+
+vec3 neonPalette(float t) {
+    vec3 pink = vec3(1.0, 0.15, 0.75);
+    vec3 blue = vec3(0.10, 0.55, 1.0);
+    vec3 green = vec3(0.10, 1.00, 0.45);
+    float ph = fract(t * 0.08);
+    vec3 k1 = mix(pink, blue, smoothstep(0.00, 0.33, ph));
+    vec3 k2 = mix(blue, green, smoothstep(0.33, 0.66, ph));
+    vec3 k3 = mix(green, pink, smoothstep(0.66, 1.00, ph));
+    float a = step(ph, 0.33);
+    float b = step(0.33, ph) * step(ph, 0.66);
+    float c = step(0.66, ph);
+    return normalize(a * k1 + b * k2 + c * k3) * 1.05;
+}
+
+vec3 softTone(vec3 c) {
+    c = pow(max(c, 0.0), vec3(0.95));
+    float l = dot(c, vec3(0.299, 0.587, 0.114));
+    c = mix(vec3(l), c, 0.9);
+    return clamp(c, 0.0, 1.0);
+}
+
+vec3 tentBlur3(sampler2D img, vec2 uv, vec2 res) {
+    vec2 ts = 1.0 / res;
+    vec3 s00 = textureGrad(img, uv + ts * vec2(-1.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s10 = textureGrad(img, uv + ts * vec2(0.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s20 = textureGrad(img, uv + ts * vec2(1.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s01 = textureGrad(img, uv + ts * vec2(-1.0, 0.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s11 = textureGrad(img, uv, dFdx(uv), dFdy(uv)).rgb;
+    vec3 s21 = textureGrad(img, uv + ts * vec2(1.0, 0.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s02 = textureGrad(img, uv + ts * vec2(-1.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s12 = textureGrad(img, uv + ts * vec2(0.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s22 = textureGrad(img, uv + ts * vec2(1.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    return (s00 + 2.0 * s10 + s20 + 2.0 * s01 + 4.0 * s11 + 2.0 * s21 + s02 + 2.0 * s12 + s22) / 16.0;
+}
+
+vec3 preBlendColor(vec2 uv) {
+    vec3 tex = tentBlur3(textTexture, uv, iResolution);
+    float aspect = iResolution.x / iResolution.y;
+    vec2 p = (uv - 0.5) * vec2(aspect, 1.0);
+    float r = length(p);
+    float t = time_f;
+    vec3 neon = neonPalette(t + r * 1.3);
+    float neonAmt = smoothstep(0.1, 0.8, r);
+    neonAmt = 0.3 + 0.4 * (1.0 - neonAmt);
+    vec3 grad = mix(tex, neon, neonAmt);
+    grad = mix(grad, tex, 0.2);
+    grad = softTone(grad);
+    return grad;
+}
+
+float diamondRadius(vec2 p) {
+    p = sin(abs(p));
+    return max(p.x, p.y);
+}
+
+vec2 diamondFold(vec2 uv, vec2 c, float aspect) {
+    vec2 p = (uv - c) * vec2(aspect, 1.0);
+    p = abs(p);
+    if (p.y > p.x) p = p.yx;
+    p.x /= aspect;
+    return p + c;
+}
+
+void main(void) {
+    vec4 baseTex = texture(textTexture, TexCoord);
+    vec3 origRGB = baseTex.rgb;
+
+    vec2 uv = TexCoord * 2.0 - 1.0;
+    float aspect = iResolution.x / iResolution.y;
+    uv.x *= aspect;
+
+    float r = pingPong(sin(length(uv) * time_f), 5.0); 
+    float radius = sqrt(aspect * aspect + 1.0) + 0.5;
+    float glow = smoothstep(radius, radius - 0.25, r);
+
+    vec2 m = (iMouse.z > 0.5) ? (iMouse.xy / iResolution) : vec2(0.5);
+    vec2 ar = vec2(aspect, 1.0);
+
+    vec3 baseCol = preBlendColor(TexCoord);
+
+    float seg = 4.0 + 2.0 * sin(time_f * 0.33);
+    vec2 kUV = reflectUV(TexCoord, seg, m, aspect);
+    kUV = diamondFold(kUV, m, aspect);
+    float foldZoom = 1.45 + 0.55 * sin(time_f * 0.42);
+    kUV = fractalFold(kUV, foldZoom, time_f, m, aspect);
+    kUV = rotateUV(kUV, time_f * 0.23, m, aspect);
+    kUV = diamondFold(kUV, m, aspect);
+
+    vec2 p = (kUV - m) * ar;
+    vec2 q = abs(p);
+    if (q.y > q.x) q = q.yx;
+
+    float base = 1.82 + 0.18 * pingPong(sin(time_f * 0.2) * (PI * time_f), 5.0);
+    float period = log(base) * pingPong(time_f * PI, 5.0);
+    float tz = time_f * 0.65;
+    float rD = diamondRadius(p) + 1e-6;
+    float ang = atan(q.y, q.x) + tz * 0.35 + 0.35 * sin(rD * 18.0 + time_f * 0.6);
+    float k = fract((log(rD) - tz) / period);
+    float rw = exp(k * period);
+    vec2 pwrap = vec2(cos(ang), sin(ang)) * rw;
+
+    vec2 u0 = fract(pwrap / ar + m);
+    vec2 u1 = fract((pwrap * 1.045) / ar + m);
+    vec2 u2 = fract((pwrap * 0.955) / ar + m);
+
+    vec2 dir = normalize(pwrap + 1e-6);
+    vec2 off = dir * (0.0015 + 0.001 * sin(time_f * 1.3)) * vec2(1.0, 1.0 / aspect);
+
+    float vign = 1.0 - smoothstep(0.75, 1.2, length((TexCoord - m) * ar));
+    vign = mix(0.9, 1.15, vign);
+
+    vec3 rC = preBlendColor(u0 + off);
+    vec3 gC = preBlendColor(u1);
+    vec3 bC = preBlendColor(u2 - off);
+    vec3 kaleidoRGB = vec3(rC.r, gC.g, bC.b);
+
+    float ring = smoothstep(0.0, 0.7, sin(log(rD + 1e-3) * 9.5 + time_f * 1.2));
+    ring = ring * pingPong((time_f * PI), 5.0);
+    float pulse = 0.5 + 0.5 * sin(time_f * 2.0 + rD * 28.0 + k * 12.0);
+
+    vec3 outCol = kaleidoRGB;
+    outCol *= (0.75 + 0.25 * ring) * (0.85 + 0.15 * pulse) * vign;
+
+    vec3 bloom = outCol * outCol * 0.18 + pow(max(outCol - 0.6, 0.0), vec3(2.0)) * 0.12;
+    outCol += bloom;
+
+    outCol = mix(outCol, baseCol, pingPong(pulse * PI, 5.0) * 0.18);
+    outCol = clamp(outCol, vec3(0.05), vec3(0.97));
+
+    vec3 finalRGB = mix(origRGB, outCol, pingPong(glow * PI, 5.0) * 0.8);
+
+    float lum = dot(finalRGB, vec3(0.299, 0.587, 0.114));
+    float audio = clamp(amp * 1.5 + uamp * 0.35, 0.0, 2.0);
+    float tHue = time_f * 0.15 + uamp * 0.12;
+    float hueBase = fract(lum * 0.8 + tHue);
+    vec3 neon1 = hsv2rgb(vec3(hueBase, 1.0, 1.0));
+    vec3 neon2 = hsv2rgb(vec3(fract(hueBase + 0.33), 1.0, 1.0));
+    float wave = pingPong(time_f * 0.25 + amp * 2.0, 1.0);
+    vec3 neon = mix(neon1, neon2, wave);
+
+    float strength = clamp(0.2 + audio * 0.6, 0.0, 1.0);
+    vec3 texNeon = mix(finalRGB, neon, strength);
+
+    vec3 intertwined = mix(texNeon * origRGB, texNeon, 0.4 + 0.5 * clamp(audio, 0.0, 1.0));
+
+    vec3 mixed = pow(intertwined, vec3(0.8));
+    mixed = clamp(mixed, 0.0, 1.0);
+
+    color = vec4(mixed, baseTex.a);
+}
+)SHD";
+inline const char *src_frac_shader02_dmd6i1 = R"SHD(#version 300 es
+precision highp float;
+out vec4 color;
+in vec2 TexCoord;
+
+uniform sampler2D textTexture;
+uniform vec2 iResolution;
+uniform float time_f;
+uniform vec4 iMouse;
+)SHD" COMMON_UNIFORMS COLOR_HELPERS R"SHD(
+const float PI = 3.1415926535897932384626433832795;
+
+float pingPong(float x, float length) {
+    float m = mod(x, length * 2.0);
+    return m <= length ? m : length * 2.0 - m;
+}
+
+vec3 hsv2rgb(vec3 c) {
+    vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+
+vec2 rotateUV(vec2 uv, float angle, vec2 c, float aspect) {
+    float s = sin(angle), cc = cos(angle);
+    vec2 p = uv - c;
+    p.x *= aspect;
+    p = mat2(cc, -s, s, cc) * p;
+    p.x /= aspect;
+    return p + c;
+}
+
+vec2 reflectUV(vec2 uv, float segments, vec2 c, float aspect) {
+    vec2 p = uv - c;
+    p.x *= aspect;
+    float ang = atan(p.y, p.x);
+    float rad = length(p);
+    float stepA = 6.28318530718 / segments;
+    ang = mod(ang, stepA);
+    ang = abs(ang - stepA * 0.5);
+    vec2 r = vec2(cos(ang), sin(ang)) * rad;
+    r.x /= aspect;
+    return r + c;
+}
+
+vec2 fractalFold(vec2 uv, float zoom, float t, vec2 c, float aspect) {
+    vec2 p = uv;
+    for (int i = 0; i < 6; i++) {
+        p = abs((p - c) * (zoom + 0.15 * sin(t * 0.35 + float(i)))) - 0.5 + c;
+        p = rotateUV(p, t * 0.12 + float(i) * 0.07, c, aspect);
+    }
+    return p;
+}
+
+vec3 neonPalette(float t) {
+    vec3 pink = vec3(1.0, 0.15, 0.75);
+    vec3 blue = vec3(0.10, 0.55, 1.0);
+    vec3 green = vec3(0.10, 1.00, 0.45);
+    float ph = fract(t * 0.08);
+    vec3 k1 = mix(pink, blue, smoothstep(0.00, 0.33, ph));
+    vec3 k2 = mix(blue, green, smoothstep(0.33, 0.66, ph));
+    vec3 k3 = mix(green, pink, smoothstep(0.66, 1.00, ph));
+    float a = step(ph, 0.33);
+    float b = step(0.33, ph) * step(ph, 0.66);
+    float c = step(0.66, ph);
+    return normalize(a * k1 + b * k2 + c * k3) * 1.05;
+}
+
+vec3 softTone(vec3 c) {
+    c = pow(max(c, 0.0), vec3(0.95));
+    float l = dot(c, vec3(0.299, 0.587, 0.114));
+    c = mix(vec3(l), c, 0.9);
+    return clamp(c, 0.0, 1.0);
+}
+
+vec3 tentBlur3(sampler2D img, vec2 uv, vec2 res) {
+    vec2 ts = 1.0 / res;
+    vec3 s00 = textureGrad(img, uv + ts * vec2(-1.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s10 = textureGrad(img, uv + ts * vec2(0.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s20 = textureGrad(img, uv + ts * vec2(1.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s01 = textureGrad(img, uv + ts * vec2(-1.0, 0.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s11 = textureGrad(img, uv, dFdx(uv), dFdy(uv)).rgb;
+    vec3 s21 = textureGrad(img, uv + ts * vec2(1.0, 0.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s02 = textureGrad(img, uv + ts * vec2(-1.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s12 = textureGrad(img, uv + ts * vec2(0.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s22 = textureGrad(img, uv + ts * vec2(1.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    return (s00 + 2.0 * s10 + s20 + 2.0 * s01 + 4.0 * s11 + 2.0 * s21 + s02 + 2.0 * s12 + s22) / 16.0;
+}
+
+vec3 preBlendColor(vec2 uv) {
+    vec3 tex = tentBlur3(textTexture, uv, iResolution);
+    float aspect = iResolution.x / iResolution.y;
+    vec2 p = (uv - 0.5) * vec2(aspect, 1.0);
+    float r = length(p);
+    float t = time_f;
+    vec3 neon = neonPalette(t + r * 1.3);
+    float neonAmt = smoothstep(0.1, 0.8, r);
+    neonAmt = 0.3 + 0.4 * (1.0 - neonAmt);
+    vec3 grad = mix(tex, neon, neonAmt);
+    grad = mix(grad, tex, 0.2);
+    grad = softTone(grad);
+    return grad;
+}
+
+float diamondRadius(vec2 p) {
+    p = sin(abs(p));
+    return max(p.x, p.y);
+}
+
+vec2 diamondFold(vec2 uv, vec2 c, float aspect) {
+    vec2 p = (uv - c) * vec2(aspect, 1.0);
+    p = abs(p);
+    if (p.y > p.x) p = p.yx;
+    p.x /= aspect;
+    return p + c;
+}
+
+void main(void) {
+    vec4 baseTex = texture(textTexture, TexCoord);
+    vec2 uv = TexCoord * 2.0 - 1.0;
+    float aspect = iResolution.x / iResolution.y;
+    uv.x *= aspect;
+    float r = pingPong(sin(length(uv) * time_f), 5.0); 
+    float radius = sqrt(aspect * aspect + 1.0) + 0.5;
+    float glow = smoothstep(radius, radius - 0.25, r);
+    vec2 m = (iMouse.z > 0.5) ? (iMouse.xy / iResolution) : vec2(0.5);
+    vec2 ar = vec2(aspect, 1.0);
+    vec3 baseCol = preBlendColor(TexCoord);
+    float seg = 4.0 + 2.0 * sin(time_f * 0.33);
+    vec2 kUV = reflectUV(TexCoord, seg, m, aspect);
+    kUV = diamondFold(kUV, m, aspect);
+    float foldZoom = 1.45 + 0.55 * sin(time_f * 0.42);
+    kUV = fractalFold(kUV, foldZoom, time_f, m, aspect);
+    kUV = rotateUV(kUV, time_f * 0.23, m, aspect);
+    kUV = diamondFold(kUV, m, aspect);
+    vec2 p = (kUV - m) * ar;
+    vec2 q = abs(p);
+    if (q.y > q.x) q = q.yx;
+    float base = 1.82 + 0.18 * pingPong(sin(time_f * 0.2) * (PI * time_f), 5.0);
+    float period = log(base) * pingPong(time_f * PI, 5.0);
+    float tz = time_f * 0.65;
+    float rD = diamondRadius(p) + 1e-6;
+    float ang = atan(q.y, q.x) + tz * 0.35 + 0.35 * sin(rD * 18.0 + time_f * 0.6);
+    float k = fract((log(rD) - tz) / period);
+    float rw = exp(k * period);
+    vec2 pwrap = vec2(cos(ang), sin(ang)) * rw;
+    vec2 u0 = fract(pwrap / ar + m);
+    vec2 u1 = fract((pwrap * 1.045) / ar + m);
+    vec2 u2 = fract((pwrap * 0.955) / ar + m);
+    vec2 dir = normalize(pwrap + 1e-6);
+    vec2 off = dir * (0.0015 + 0.001 * sin(time_f * 1.3)) * vec2(1.0, 1.0 / aspect);
+    float vign = 1.0 - smoothstep(0.75, 1.2, length((TexCoord - m) * ar));
+    vign = mix(0.9, 1.15, vign);
+    vec3 rC = preBlendColor(u0 + off);
+    vec3 gC = preBlendColor(u1);
+    vec3 bC = preBlendColor(u2 - off);
+    vec3 kaleidoRGB = vec3(rC.r, gC.g, bC.b);
+    float ring = smoothstep(0.0, 0.7, sin(log(rD + 1e-3) * 9.5 + time_f * 1.2));
+    ring = ring * pingPong((time_f * (PI/2)), 5.0);
+    float pulse = 0.5 + 0.5 * sin(time_f * 2.0 + rD * 28.0 + k * 12.0);
+    vec3 outCol = vec3(kaleidoRGB.r * pingPong(time_f * PI, 2.0), kaleidoRGB.g * pingPong(time_f * PI, 2.0), kaleidoRGB.b * pingPong(time_f * PI, 2.0));
+    outCol *= (0.75 + 0.25 * ring) * (0.85 + 0.15 * pulse) * vign;
+    vec3 bloom = outCol * outCol * 0.18 + pow(max(outCol - 0.6, 0.0), vec3(2.0)) * 0.12;
+
+    outCol += bloom;
+    outCol = mix(outCol, baseCol, pingPong(pulse *  PI*2, 5.0) * 0.18);
+    outCol = clamp(outCol, vec3(0.05), vec3(0.97));
+    vec3 finalRGB = mix(baseTex.rgb, outCol, pingPong(glow * PI, 5.0) * 0.8);
+    color = vec4(finalRGB, baseTex.a);
+}
+)SHD";
+inline const char *src_frac_shader02_dmd7i = R"SHD(#version 300 es
+precision highp float;
+out vec4 color;
+in vec2 TexCoord;
+
+uniform sampler2D textTexture;
+uniform vec2 iResolution;
+uniform float time_f;
+uniform vec4 iMouse;
+)SHD" COMMON_UNIFORMS COLOR_HELPERS R"SHD(
+const float PI = 3.1415926535897932384626433832795;
+
+float pingPong(float x, float length) {
+    float m = mod(x, length * 2.0);
+    return m <= length ? m : length * 2.0 - m;
+}
+
+vec3 hsv2rgb(vec3 c) {
+    vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+
+vec2 rotateUV(vec2 uv, float angle, vec2 c, float aspect) {
+    float s = sin(angle), cc = cos(angle);
+    vec2 p = uv - c;
+    p.x *= aspect;
+    p = mat2(cc, -s, s, cc) * p;
+    p.x /= aspect;
+    return p + c;
+}
+
+vec2 reflectUV(vec2 uv, float segments, vec2 c, float aspect) {
+    vec2 p = uv - c;
+    p.x *= aspect;
+    float ang = atan(p.y, p.x);
+    float rad = length(p);
+    float stepA = 6.28318530718 / segments;
+    ang = mod(ang, stepA);
+    ang = abs(ang - stepA * 0.5);
+    vec2 r = vec2(cos(ang), sin(ang)) * rad;
+    r.x /= aspect;
+    return r + c;
+}
+
+vec2 fractalFold(vec2 uv, float zoom, float t, vec2 c, float aspect) {
+    vec2 p = uv;
+    for (int i = 0; i < 6; i++) {
+        p = abs((p - c) * (zoom + 0.15 * sin(t * 0.35 + float(i)))) - 0.5 + c;
+        p = rotateUV(p, t * 0.12 + float(i) * 0.07, c, aspect);
+    }
+    return p;
+}
+
+vec3 neonPalette(float t) {
+    vec3 pink = vec3(1.0, 0.15, 0.75);
+    vec3 blue = vec3(0.10, 0.55, 1.0);
+    vec3 green = vec3(0.10, 1.00, 0.45);
+    float ph = fract(t * 0.08);
+    vec3 k1 = mix(pink, blue, smoothstep(0.00, 0.33, ph));
+    vec3 k2 = mix(blue, green, smoothstep(0.33, 0.66, ph));
+    vec3 k3 = mix(green, pink, smoothstep(0.66, 1.00, ph));
+    float a = step(ph, 0.33);
+    float b = step(0.33, ph) * step(ph, 0.66);
+    float c = step(0.66, ph);
+    return normalize(a * k1 + b * k2 + c * k3) * 1.05;
+}
+
+vec3 softTone(vec3 c) {
+    c = pow(max(c, 0.0), vec3(0.95));
+    float l = dot(c, vec3(0.299, 0.587, 0.114));
+    c = mix(vec3(l), c, 0.9);
+    return clamp(c, 0.0, 1.0);
+}
+
+vec3 tentBlur3(sampler2D img, vec2 uv, vec2 res) {
+    vec2 ts = 1.0 / res;
+    vec3 s00 = textureGrad(img, uv + ts * vec2(-1.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s10 = textureGrad(img, uv + ts * vec2(0.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s20 = textureGrad(img, uv + ts * vec2(1.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s01 = textureGrad(img, uv + ts * vec2(-1.0, 0.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s11 = textureGrad(img, uv, dFdx(uv), dFdy(uv)).rgb;
+    vec3 s21 = textureGrad(img, uv + ts * vec2(1.0, 0.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s02 = textureGrad(img, uv + ts * vec2(-1.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s12 = textureGrad(img, uv + ts * vec2(0.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s22 = textureGrad(img, uv + ts * vec2(1.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    return (s00 + 2.0 * s10 + s20 + 2.0 * s01 + 4.0 * s11 + 2.0 * s21 + s02 + 2.0 * s12 + s22) / 16.0;
+}
+
+vec3 preBlendColor(vec2 uv) {
+    vec3 tex = tentBlur3(textTexture, uv, iResolution);
+    float aspect = iResolution.x / iResolution.y;
+    vec2 p = (uv - 0.5) * vec2(aspect, 1.0);
+    float r = length(p);
+    float t = time_f;
+    vec3 neon = neonPalette(t + r * 1.3);
+    float neonAmt = smoothstep(0.1, 0.8, r);
+    neonAmt = 0.3 + 0.4 * (1.0 - neonAmt);
+    vec3 grad = mix(tex, neon, neonAmt);
+    grad = mix(grad, tex, 0.2);
+    grad = softTone(grad);
+    return grad;
+}
+
+float diamondRadius(vec2 p) {
+    p = sin(abs(p * (pingPong(time_f * PI, 5.0))));
+    return max(p.x, p.y);
+}
+
+vec2 diamondFold(vec2 uv, vec2 c, float aspect) {
+    vec2 p = (uv - c) * vec2(aspect, 1.0);
+    p = abs(p);
+    if (p.y > p.x) p = p.yx;
+    p.x /= aspect;
+    return p + c;
+}
+
+void main(void) {
+    vec4 baseTex = texture(textTexture, TexCoord);
+    vec2 uv = TexCoord * 2.0 - 1.0;
+    float aspect = iResolution.x / iResolution.y;
+    uv.x *= aspect;
+    float r = pingPong(sin(length(uv) * time_f), 5.0); 
+    float radius = sqrt(aspect * aspect + 1.0) + 0.5;
+    float glow = smoothstep(radius, radius - 0.25, r);
+    vec2 m = (iMouse.z > 0.5) ? (iMouse.xy / iResolution) : vec2(0.5);
+    vec2 ar = vec2(aspect, 1.0);
+    vec3 baseCol = preBlendColor(TexCoord);
+    float seg = 4.0 + 2.0 * sin(time_f * 0.33);
+    vec2 kUV = reflectUV(TexCoord, seg, m, aspect);
+    kUV = diamondFold(kUV, m, aspect);
+    float foldZoom = 1.45 + 0.55 * sin(time_f * 0.42);
+    kUV = fractalFold(kUV, foldZoom, time_f, m, aspect);
+    kUV = rotateUV(kUV, time_f * 0.23, m, aspect);
+    kUV = diamondFold(kUV, m, aspect);
+    vec2 p = (kUV - m) * ar;
+    vec2 q = abs(p);
+    if (q.y > q.x) q = q.yx;
+    float base = 1.82 + 0.18 * pingPong(sin(time_f * 0.2) * (PI * time_f), 5.0);
+    float period = log(base) * pingPong(time_f * PI, 5.0);
+    float tz = time_f * 0.65;
+    float rD = diamondRadius(p) + 1e-6;
+    float ang = atan(q.y, q.x) + tz * 0.35 + 0.35 * sin(rD * 18.0 + time_f * 0.6);
+    float k = fract((log(rD) - tz) / period);
+    float rw = exp(k * period);
+    vec2 pwrap = vec2(cos(ang), sin(ang)) * rw;
+    vec2 u0 = fract(pwrap / ar + m);
+    vec2 u1 = fract((pwrap * 1.045) / ar + m);
+    vec2 u2 = fract((pwrap * 0.955) / ar + m);
+    vec2 dir = normalize(pwrap + 1e-6);
+    vec2 off = dir * (0.0015 + 0.001 * sin(time_f * 1.3)) * vec2(1.0, 1.0 / aspect);
+    float vign = 1.0 - smoothstep(0.75, 1.2, length((TexCoord - m) * ar));
+    vign = mix(0.9, 1.15, vign);
+    vec3 rC = preBlendColor(u0 + off);
+    vec3 gC = preBlendColor(u1);
+    vec3 bC = preBlendColor(u2 - off);
+    vec3 kaleidoRGB = vec3(rC.r, gC.g, bC.b);
+    float ring = smoothstep(0.0, 0.7, sin(log(rD + 1e-3) * 9.5 + time_f * 1.2));
+    ring = ring * pingPong((time_f * PI), 5.0);
+    float pulse = 0.5 + 0.5 * sin(time_f * 2.0 + rD * 28.0 + k * 12.0);
+    vec3 outCol = kaleidoRGB;
+    outCol *= (0.75 + 0.25 * ring) * (0.85 + 0.15 * pulse) * vign;
+    vec3 bloom = outCol * outCol * 0.18 + pow(max(outCol - 0.6, 0.0), vec3(2.0)) * 0.12;
+
+    outCol += bloom;
+    outCol = mix(outCol, baseCol, pingPong(pulse *  PI, 5.0) * 0.18);
+    outCol = clamp(outCol, vec3(0.05), vec3(0.97));
+    vec3 finalRGB = mix(baseTex.rgb, outCol, pingPong(glow * PI, 5.0) * 0.8);
+    color = vec4(finalRGB, baseTex.a);
+}
+)SHD";
+inline const char *src_frac_shader02_dmd8i = R"SHD(#version 300 es
+precision highp float;
+out vec4 color;
+in vec2 TexCoord;
+
+uniform sampler2D textTexture;
+uniform vec2 iResolution;
+uniform float time_f;
+uniform vec4 iMouse;
+)SHD" COMMON_UNIFORMS COLOR_HELPERS R"SHD(
+const float PI = 3.1415926535897932384626433832795;
+
+float pingPong(float x, float length) {
+    float m = mod(x, length * 2.0);
+    return m <= length ? m : length * 2.0 - m;
+}
+
+vec3 hsv2rgb(vec3 c) {
+    vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+
+vec2 rotateUV(vec2 uv, float angle, vec2 c, float aspect) {
+    float s = sin(angle), cc = cos(angle);
+    vec2 p = uv - c;
+    p.x *= aspect;
+    p = mat2(cc, -s, s, cc) * p;
+    p.x /= aspect;
+    return p + c;
+}
+
+vec2 reflectUV(vec2 uv, float segments, vec2 c, float aspect) {
+    vec2 p = uv - c;
+    p.x *= aspect;
+    float ang = atan(p.y, p.x);
+    float rad = length(p);
+    float stepA = 6.28318530718 / segments;
+    ang = mod(ang, stepA);
+    ang = abs(ang - stepA * 0.5);
+    vec2 r = vec2(cos(ang), sin(ang)) * rad;
+    r.x /= aspect;
+    return r + c;
+}
+
+vec2 fractalFold(vec2 uv, float zoom, float t, vec2 c, float aspect) {
+    vec2 p = uv;
+    for (int i = 0; i < 6; i++) {
+        p = abs((p - c) * (zoom + 0.15 * sin(t * 0.35 + float(i)))) - 0.5 + c;
+        p = rotateUV(p, t * 0.12 + float(i) * 0.07, c, aspect);
+    }
+    return p;
+}
+
+vec3 neonPalette(float t) {
+    vec3 pink = vec3(1.0, 0.15, 0.75);
+    vec3 blue = vec3(0.10, 0.55, 1.0);
+    vec3 green = vec3(0.10, 1.00, 0.45);
+    float ph = fract(t * 0.08);
+    vec3 k1 = mix(pink, blue, smoothstep(0.00, 0.33, ph));
+    vec3 k2 = mix(blue, green, smoothstep(0.33, 0.66, ph));
+    vec3 k3 = mix(green, pink, smoothstep(0.66, 1.00, ph));
+    float a = step(ph, 0.33);
+    float b = step(0.33, ph) * step(ph, 0.66);
+    float c = step(0.66, ph);
+    return normalize(a * k1 + b * k2 + c * k3) * 1.05;
+}
+
+vec3 softTone(vec3 c) {
+    c = pow(max(c, 0.0), vec3(0.95));
+    float l = dot(c, vec3(0.299, 0.587, 0.114));
+    c = mix(vec3(l), c, 0.9);
+    return clamp(c, 0.0, 1.0);
+}
+
+vec3 tentBlur3(sampler2D img, vec2 uv, vec2 res) {
+    vec2 ts = 1.0 / res;
+    vec3 s00 = textureGrad(img, uv + ts * vec2(-1.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s10 = textureGrad(img, uv + ts * vec2(0.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s20 = textureGrad(img, uv + ts * vec2(1.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s01 = textureGrad(img, uv + ts * vec2(-1.0, 0.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s11 = textureGrad(img, uv, dFdx(uv), dFdy(uv)).rgb;
+    vec3 s21 = textureGrad(img, uv + ts * vec2(1.0, 0.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s02 = textureGrad(img, uv + ts * vec2(-1.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s12 = textureGrad(img, uv + ts * vec2(0.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s22 = textureGrad(img, uv + ts * vec2(1.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    return (s00 + 2.0 * s10 + s20 + 2.0 * s01 + 4.0 * s11 + 2.0 * s21 + s02 + 2.0 * s12 + s22) / 16.0;
+}
+
+vec3 preBlendColor(vec2 uv) {
+    vec3 tex = tentBlur3(textTexture, uv, iResolution);
+    float aspect = iResolution.x / iResolution.y;
+    vec2 p = (uv - 0.5) * vec2(aspect, 1.0);
+    float r = length(p);
+    float t = time_f;
+    vec3 neon = neonPalette(t + r * 1.3);
+    float neonAmt = smoothstep(0.1, 0.8, r);
+    neonAmt = 0.3 + 0.4 * (1.0 - neonAmt);
+    vec3 grad = mix(tex, neon, neonAmt);
+    grad = mix(grad, tex, 0.2);
+    grad = softTone(grad);
+    return grad;
+}
+
+float diamondRadius(vec2 p) {
+    p = sin(abs(p * (pingPong(time_f * PI, 5.0))));
+    return max(p.x, p.y);
+}
+
+vec2 diamondFold(vec2 uv, vec2 c, float aspect) {
+    vec2 p = (uv - c) * vec2(aspect, 1.0);
+    p = abs(p);
+    if (p.y > p.x) p = p.yx;
+    p.x /= aspect;
+    return p + c;
+}
+
+void main(void) {
+    vec4 baseTex = texture(textTexture, TexCoord);
+    vec2 uv = TexCoord * 2.0 - 1.0;
+    float aspect = iResolution.x / iResolution.y;
+    uv.x *= aspect;
+    float r = pingPong(sin(length(uv) * time_f), 5.0); 
+    float radius = sqrt(aspect * aspect + 1.0) + 0.5;
+    float glow = smoothstep(radius, radius - 0.25, r);
+    vec2 m = (iMouse.z > 0.5) ? (iMouse.xy / iResolution) : vec2(0.5);
+    vec2 ar = vec2(aspect, 1.0);
+    vec3 baseCol = preBlendColor(TexCoord);
+    float seg = 4.0 + 2.0 * sin(time_f * 0.33);
+    vec2 kUV = reflectUV(TexCoord, seg, m, aspect);
+    kUV = diamondFold(kUV, m, aspect);
+    float foldZoom = 1.45 + 0.55 * sin(pingPong(time_f * PI, 25.0) * 0.42);
+    kUV = fractalFold(kUV, foldZoom, time_f, m, aspect);
+    kUV = rotateUV(kUV, time_f * 0.23, m, aspect);
+    kUV = diamondFold(kUV, m, aspect);
+    vec2 p = (kUV - m) * ar;
+    vec2 q = abs(p);
+    if (q.y > q.x) q = q.yx;
+    float base = 1.82 + 0.18 * pingPong(sin(time_f * 0.2) * (PI * time_f), 5.0);
+    float period = log(base) * pingPong(time_f * PI, 5.0);
+    float tz = time_f * 0.65;
+    float rD = diamondRadius(p) + 1e-6;
+    float ang = atan(q.y, q.x) + tz * 0.35 + 0.35 * sin(rD * 18.0 + time_f * 0.6);
+    float k = fract((log(rD) - tz) / period);
+    float rw = exp(k * period);
+    vec2 pwrap = vec2(cos(ang), sin(ang)) * rw;
+    vec2 u0 = fract(pwrap / ar + m);
+    vec2 u1 = fract((pwrap * 1.045) / ar + m);
+    vec2 u2 = fract((pwrap * 0.955) / ar + m);
+    vec2 dir = normalize(pwrap + 1e-6);
+    vec2 off = dir * (0.0015 + 0.001 * sin(time_f * 1.3)) * vec2(1.0, 1.0 / aspect);
+    float vign = 1.0 - smoothstep(0.75, 1.2, length((TexCoord - m) * ar));
+    vign = mix(0.9, 1.15, vign);
+    vec3 rC = preBlendColor(u0 + off);
+    vec3 gC = preBlendColor(u1);
+    vec3 bC = preBlendColor(u2 - off);
+    vec3 kaleidoRGB = vec3(rC.r, gC.g, bC.b);
+    float ring = smoothstep(0.0, 0.7, sin(log(rD + 1e-3) * 9.5 + time_f * 1.2));
+    ring = ring * pingPong((time_f * PI), 5.0);
+    float pulse = 0.5 + 0.5 * sin(time_f * 2.0 + rD * 28.0 + k * 12.0);
+    vec3 outCol = kaleidoRGB;
+    outCol *= (0.75 + 0.25 * ring) * (0.85 + 0.15 * pulse) * vign;
+    vec3 bloom = outCol * outCol * 0.18 + pow(max(outCol - 0.6, 0.0), vec3(2.0)) * 0.12;
+
+    outCol += bloom;
+    outCol = mix(outCol, baseCol, pingPong(pulse *  PI, 5.0) * 0.18);
+    outCol = clamp(outCol, vec3(0.05), vec3(0.97));
+    vec3 finalRGB = mix(baseTex.rgb, outCol, pingPong(glow * PI, 5.0) * 0.8);
+    color = vec4(finalRGB, baseTex.a);
+}
+)SHD";
+inline const char *src_frac_shader02_dmd9i = R"SHD(#version 300 es
+precision highp float;
+out vec4 color;
+in vec2 TexCoord;
+
+uniform sampler2D textTexture;
+uniform vec2 iResolution;
+uniform float time_f;
+uniform vec4 iMouse;
+)SHD" COMMON_UNIFORMS COLOR_HELPERS R"SHD(
+const float PI = 3.1415926535897932384626433832795;
+
+float pingPong(float x, float length) {
+    float m = mod(x, length * 2.0);
+    return m <= length ? m : length * 2.0 - m;
+}
+
+vec3 hsv2rgb(vec3 c) {
+    vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+
+vec2 rotateUV(vec2 uv, float angle, vec2 c, float aspect) {
+    float s = sin(angle), cc = cos(angle);
+    vec2 p = uv - c;
+    p.x *= aspect;
+    p = mat2(cc, -s, s, cc) * p;
+    p.x /= aspect;
+    return p + c;
+}
+
+vec2 reflectUV(vec2 uv, float segments, vec2 c, float aspect) {
+    vec2 p = uv - c;
+    p.x *= aspect;
+    float ang = atan(p.y, p.x);
+    float rad = length(p);
+    float stepA = 6.28318530718 / sin(segments * pingPong(time_f, 5.0));
+    ang = mod(ang, stepA);
+    ang = abs(ang - stepA * 0.5);
+    vec2 r = vec2(cos(ang), sin(ang)) * rad;
+    r.x /= aspect;
+    return r + c;
+}
+
+vec2 fractalFold(vec2 uv, float zoom, float t, vec2 c, float aspect) {
+    vec2 p = uv;
+    for (int i = 0; i < 6; i++) {
+        p = abs((p - c) * (sin(pingPong(zoom * time_f * PI, 5.0)) + 0.15 * sin(t * 0.35 + float(i)))) - 0.5 + c;
+        p = rotateUV(p, t * 0.12 + float(i) * 0.07, c, aspect);
+    }
+    return p;
+}
+
+vec3 neonPalette(float t) {
+    vec3 pink = vec3(1.0, 0.15, 0.75);
+    vec3 blue = vec3(0.10, 0.55, 1.0);
+    vec3 green = vec3(0.10, 1.00, 0.45);
+    float ph = fract(t * 0.08);
+    vec3 k1 = mix(pink, blue, smoothstep(0.00, 0.33, ph));
+    vec3 k2 = mix(blue, green, smoothstep(0.33, 0.66, ph));
+    vec3 k3 = mix(green, pink, smoothstep(0.66, 1.00, ph));
+    float a = step(ph, 0.33);
+    float b = step(0.33, ph) * step(ph, 0.66);
+    float c = step(0.66, ph);
+    return normalize(a * k1 + b * k2 + c * k3) * 1.05;
+}
+
+vec3 softTone(vec3 c) {
+    c = pow(max(c, 0.0), vec3(0.95));
+    float l = dot(c, vec3(0.299, 0.587, 0.114));
+    c = mix(vec3(l), c, 0.9);
+    return clamp(c, 0.0, 1.0);
+}
+
+vec3 tentBlur3(sampler2D img, vec2 uv, vec2 res) {
+    vec2 ts = 1.0 / res;
+    vec3 s00 = textureGrad(img, uv + ts * vec2(-1.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s10 = textureGrad(img, uv + ts * vec2(0.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s20 = textureGrad(img, uv + ts * vec2(1.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s01 = textureGrad(img, uv + ts * vec2(-1.0, 0.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s11 = textureGrad(img, uv, dFdx(uv), dFdy(uv)).rgb;
+    vec3 s21 = textureGrad(img, uv + ts * vec2(1.0, 0.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s02 = textureGrad(img, uv + ts * vec2(-1.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s12 = textureGrad(img, uv + ts * vec2(0.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s22 = textureGrad(img, uv + ts * vec2(1.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    return (s00 + 2.0 * s10 + s20 + 2.0 * s01 + 4.0 * s11 + 2.0 * s21 + s02 + 2.0 * s12 + s22) / 16.0;
+}
+
+vec3 preBlendColor(vec2 uv) {
+    vec3 tex = tentBlur3(textTexture, uv, iResolution);
+    float aspect = iResolution.x / iResolution.y;
+    vec2 p = (uv - 0.5) * vec2(aspect, 1.0);
+    float r = length(p);
+    float t = time_f;
+    vec3 neon = neonPalette(t + r * 1.3);
+    float neonAmt = smoothstep(0.1, 0.8, r);
+    neonAmt = 0.3 + 0.4 * (1.0 - neonAmt);
+    vec3 grad = mix(tex, neon, neonAmt);
+    grad = mix(grad, tex, 0.2);
+    grad = softTone(grad);
+    return grad;
+}
+
+float diamondRadius(vec2 p) {
+    p = sin(abs(p * (pingPong(time_f * PI, 5.0))));
+    return max(p.x, p.y);
+}
+
+vec2 diamondFold(vec2 uv, vec2 c, float aspect) {
+    vec2 p = (uv - c) * vec2(aspect, 1.0);
+    p = abs(p);
+    if (p.y > p.x) p = p.yx;
+    p.x /= aspect;
+    return p + c;
+}
+
+void main(void) {
+    vec4 baseTex = texture(textTexture, TexCoord);
+    vec2 uv = TexCoord * 2.0 - 1.0;
+    float aspect = iResolution.x / iResolution.y;
+    uv.x *= aspect;
+    float r = pingPong(sin(length(uv) * time_f), 5.0); 
+    float radius = sqrt(aspect * aspect + 1.0) + 0.5;
+    float glow = smoothstep(radius, radius - 0.25, r);
+    vec2 m = (iMouse.z > 0.5) ? (iMouse.xy / iResolution) : vec2(0.5);
+    vec2 ar = vec2(aspect, 1.0);
+    vec3 baseCol = preBlendColor(TexCoord);
+    float seg = 4.0 + 2.0 * sin(time_f * 0.33);
+    vec2 kUV = reflectUV(TexCoord, seg, m, aspect);
+    kUV = diamondFold(kUV, m, aspect);
+    float foldZoom = 1.45 + 0.55 * sin(pingPong(time_f * PI, 25.0) * 0.42);
+    kUV = fractalFold(kUV, foldZoom, time_f, m, aspect);
+    kUV = rotateUV(kUV, time_f * 0.23, m, aspect);
+    kUV = diamondFold(kUV, m, aspect);
+    vec2 p = (kUV - m) * ar;
+    vec2 q = abs(p);
+    if (q.y > q.x) q = q.yx;
+    float base = 1.82 + 0.18 * pingPong(sin(time_f * 0.2) * (PI * time_f), 5.0);
+    float period = log(base) * pingPong(time_f * PI, 5.0);
+    float tz = time_f * 0.65;
+    float rD = diamondRadius(p) + 1e-6;
+    float ang = atan(q.y, q.x) + tz * 0.35 + 0.35 * sin(rD * 18.0 + time_f * 0.6);
+    float k = fract((log(rD) - tz) / period);
+    float rw = exp(k * period);
+    vec2 pwrap = vec2(cos(ang), sin(ang)) * rw;
+    vec2 u0 = fract(pwrap / ar + m);
+    vec2 u1 = fract((pwrap * 1.045) / ar + m);
+    vec2 u2 = fract((pwrap * 0.955) / ar + m);
+    vec2 dir = normalize(pwrap + 1e-6);
+    vec2 off = dir * (0.0015 + 0.001 * sin(time_f * 1.3)) * vec2(1.0, 1.0 / aspect);
+    float vign = 1.0 - smoothstep(0.75, 1.2, length((TexCoord - m) * ar));
+    vign = mix(0.9, 1.15, vign);
+    vec3 rC = preBlendColor(u0 + off);
+    vec3 gC = preBlendColor(u1);
+    vec3 bC = preBlendColor(u2 - off);
+    vec3 kaleidoRGB = vec3(rC.r, gC.g, bC.b);
+    float ring = smoothstep(0.0, 0.7, sin(log(rD + 1e-3) * 9.5 + time_f * 1.2));
+    ring = ring * pingPong((time_f * PI), 5.0);
+    float pulse = 0.5 + 0.5 * sin(time_f * 2.0 + rD * 28.0 + k * 12.0);
+    vec3 outCol = kaleidoRGB;
+    outCol *= (0.75 + 0.25 * ring) * (0.85 + 0.15 * pulse) * vign;
+    vec3 bloom = outCol * outCol * 0.18 + pow(max(outCol - 0.6, 0.0), vec3(2.0)) * 0.12;
+
+    outCol += bloom;
+    outCol = mix(outCol, baseCol, pingPong(pulse *  PI, 5.0) * 0.18);
+    outCol = clamp(outCol, vec3(0.05), vec3(0.97));
+    vec3 finalRGB = mix(baseTex.rgb, outCol, pingPong(glow * PI, 5.0) * 0.8);
+    color = vec4(finalRGB, baseTex.a);
+}
+)SHD";
+inline const char *src_frac_shader02_dmdi_radial = R"SHD(#version 300 es
+precision highp float;
+out vec4 color;
+in vec2 TexCoord;
+
+uniform sampler2D textTexture;
+uniform vec2 iResolution;
+uniform float time_f;
+uniform vec4 iMouse;
+)SHD" COMMON_UNIFORMS COLOR_HELPERS R"SHD(
+uniform float amp;
+uniform float uamp;
+
+const float PI = 3.1415926535897932384626433832795;
+
+float pingPong(float x, float length) {
+    float m = mod(x, length * 2.0);
+    return m <= length ? m : length * 2.0 - m;
+}
+
+vec3 hsv2rgb(vec3 c) {
+    vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+
+vec2 rotateUV(vec2 uv, float angle, vec2 c, float aspect) {
+    float s = sin(angle), cc = cos(angle);
+    vec2 p = uv - c;
+    p.x *= aspect;
+    p = mat2(cc, -s, s, cc) * p;
+    p.x /= aspect;
+    return p + c;
+}
+
+vec2 reflectUV(vec2 uv, float segments, vec2 c, float aspect) {
+    vec2 p = uv - c;
+    p.x *= aspect;
+    float ang = atan(p.y, p.x);
+    float rad = length(p);
+    float stepA = 6.28318530718 / segments;
+    ang = mod(ang, stepA);
+    ang = abs(ang - stepA * 0.5);
+    vec2 r = vec2(cos(ang), sin(ang)) * rad;
+    r.x /= aspect;
+    return r + c;
+}
+
+vec2 fractalFold(vec2 uv, float zoom, float t, vec2 c, float aspect) {
+    vec2 p = uv;
+    for (int i = 0; i < 6; i++) {
+        p = abs((p - c) * (zoom + 0.15 * sin(t * 0.35 + float(i)))) - 0.5 + c;
+        p = rotateUV(p, t * 0.12 + float(i) * 0.07, c, aspect);
+    }
+    return p;
+}
+
+vec3 neonPalette(float t) {
+    vec3 pink = vec3(1.0, 0.15, 0.75);
+    vec3 blue = vec3(0.10, 0.55, 1.0);
+    vec3 green = vec3(0.10, 1.00, 0.45);
+    float ph = fract(t * 0.08);
+    vec3 k1 = mix(pink, blue, smoothstep(0.00, 0.33, ph));
+    vec3 k2 = mix(blue, green, smoothstep(0.33, 0.66, ph));
+    vec3 k3 = mix(green, pink, smoothstep(0.66, 1.00, ph));
+    float a = step(ph, 0.33);
+    float b = step(0.33, ph) * step(ph, 0.66);
+    float c = step(0.66, ph);
+    return normalize(a * k1 + b * k2 + c * k3) * 1.05;
+}
+
+vec3 softTone(vec3 c) {
+    c = pow(max(c, 0.0), vec3(0.95));
+    float l = dot(c, vec3(0.299, 0.587, 0.114));
+    c = mix(vec3(l), c, 0.9);
+    return clamp(c, 0.0, 1.0);
+}
+
+vec3 tentBlur3(sampler2D img, vec2 uv, vec2 res) {
+    vec2 ts = 1.0 / res;
+    vec3 s00 = textureGrad(img, uv + ts * vec2(-1.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s10 = textureGrad(img, uv + ts * vec2(0.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s20 = textureGrad(img, uv + ts * vec2(1.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s01 = textureGrad(img, uv + ts * vec2(-1.0, 0.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s11 = textureGrad(img, uv, dFdx(uv), dFdy(uv)).rgb;
+    vec3 s21 = textureGrad(img, uv + ts * vec2(1.0, 0.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s02 = textureGrad(img, uv + ts * vec2(-1.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s12 = textureGrad(img, uv + ts * vec2(0.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s22 = textureGrad(img, uv + ts * vec2(1.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    return (s00 + 2.0 * s10 + s20 + 2.0 * s01 + 4.0 * s11 + 2.0 * s21 + s02 + 2.0 * s12 + s22) / 16.0;
+}
+
+vec3 preBlendColor(vec2 uv) {
+    vec3 tex = tentBlur3(textTexture, uv, iResolution);
+    float aspect = iResolution.x / iResolution.y;
+    vec2 p = (uv - 0.5) * vec2(aspect, 1.0);
+    float r = length(p);
+    float t = time_f;
+    vec3 neon = neonPalette(t + r * 1.3);
+    float neonAmt = smoothstep(0.1, 0.8, r);
+    neonAmt = 0.3 + 0.4 * (1.0 - neonAmt);
+    vec3 grad = mix(tex, neon, neonAmt);
+    grad = mix(grad, tex, 0.2);
+    grad = softTone(grad);
+    return grad;
+}
+
+float diamondRadius(vec2 p) {
+    p = sin(abs(p));
+    return max(p.x, p.y);
+}
+
+vec2 diamondFold(vec2 uv, vec2 c, float aspect) {
+    vec2 p = (uv - c) * vec2(aspect, 1.0);
+    p = abs(p);
+    if (p.y > p.x) p = p.yx;
+    p.x /= aspect;
+    return p + c;
+}
+
+void main(void) {
+    float aspect = iResolution.x / iResolution.y;
+    vec2 frag = gl_FragCoord.xy / iResolution;
+    vec2 normCoord = (frag * 2.0 - 1.0) * vec2(aspect, 1.0);
+    float distanceFromCenter = length(normCoord);
+    float wave = sin(distanceFromCenter * 12.0 - time_f * 4.0);
+    float aNorm = clamp(amp, 0.0, 1.5);
+    float uNorm = clamp(uamp, 0.0, 1.5);
+    float waveStrength = mix(0.06, 0.30, clamp(uNorm * 0.7, 0.0, 1.0));
+    waveStrength *= 0.8 + 0.4 * aNorm;
+    vec2 waveOffset = normCoord * waveStrength * wave;
+    vec2 tcWave = TexCoord + waveOffset;
+
+    vec4 baseTex = texture(textTexture, tcWave);
+
+    vec2 uv = tcWave * 2.0 - 1.0;
+    uv.x *= aspect;
+    float r = pingPong(sin(length(uv) * time_f), 5.0);
+    float radius = sqrt(aspect * aspect + 1.0) + 0.5;
+    float glow = smoothstep(radius, radius - 0.25, r);
+
+    vec2 m = (iMouse.z > 0.5) ? (iMouse.xy / iResolution) : vec2(0.5);
+    vec2 ar = vec2(aspect, 1.0);
+
+    vec3 baseCol = preBlendColor(tcWave);
+
+    float seg = 4.0 + 2.0 * sin(time_f * 0.33 + uNorm * 0.5);
+    vec2 kUV = reflectUV(tcWave, seg, m, aspect);
+    kUV = diamondFold(kUV, m, aspect);
+    float foldZoom = 1.35 + 0.65 * sin(time_f * 0.42 + uNorm * 0.8);
+    kUV = fractalFold(kUV, foldZoom, time_f, m, aspect);
+    kUV = rotateUV(kUV, time_f * (0.18 + 0.10 * aNorm), m, aspect);
+    kUV = diamondFold(kUV, m, aspect);
+
+    vec2 p = (kUV - m) * ar;
+    vec2 q = abs(p);
+    if (q.y > q.x) q = q.yx;
+
+    float base = 1.75 + 0.25 * pingPong(sin(time_f * 0.2) * (PI * time_f), 5.0);
+    float period = log(base) * pingPong(time_f * PI, 5.0);
+    float tz = time_f * (0.55 + 0.25 * uNorm);
+    float rD = diamondRadius(p) + 1e-6;
+    float ang = atan(q.y, q.x) + tz * 0.35 + 0.35 * sin(rD * 18.0 + time_f * 0.6);
+    float k = fract((log(rD) - tz) / period);
+    float rw = exp(k * period);
+    vec2 pwrap = vec2(cos(ang), sin(ang)) * rw;
+
+    vec2 u0 = fract(pwrap / ar + m);
+    vec2 u1 = fract((pwrap * (1.03 + 0.02 * uNorm)) / ar + m);
+    vec2 u2 = fract((pwrap * (0.97 - 0.02 * uNorm)) / ar + m);
+
+    vec2 dir = normalize(pwrap + 1e-6);
+    vec2 off = dir * (0.0010 + 0.0015 * uNorm) * vec2(1.0, 1.0 / aspect);
+
+    float vign = 1.0 - smoothstep(0.75, 1.2, length((tcWave - m) * ar));
+    vign = mix(0.9, 1.18, vign);
+
+    vec3 rC = preBlendColor(u0 + off);
+    vec3 gC = preBlendColor(u1);
+    vec3 bC = preBlendColor(u2 - off);
+    vec3 kaleidoRGB = vec3(rC.r, gC.g, bC.b);
+
+    float ring = smoothstep(0.0, 0.7, sin(log(rD + 1e-3) * 9.5 + time_f * 1.2));
+    ring *= pingPong(time_f * PI + uNorm * 2.5, 5.0);
+
+    float pulse = 0.5 + 0.5 * sin(time_f * 2.0 + rD * 28.0 + k * 12.0 + aNorm * 1.5);
+
+    vec3 outCol = kaleidoRGB;
+    float gain = 0.7 + 0.3 * uNorm;
+    outCol *= (0.75 + 0.25 * ring * gain) * (0.85 + 0.15 * pulse * gain) * vign;
+
+    vec3 bloom = outCol * outCol * (0.04 + 0.12 * uNorm) +
+                 pow(max(outCol - 0.6, 0.0), vec3(2.0)) * (0.04 + 0.08 * uNorm);
+
+    outCol += bloom;
+
+    outCol = mix(outCol, baseCol, pingPong(pulse * PI, 5.0) * (0.15 + 0.15 * (1.0 - uNorm * 0.5)));
+    outCol = clamp(outCol, vec3(0.04), vec3(0.96));
+
+    float mixK = pingPong(glow * PI, 5.0) * (0.45 + 0.35 * uNorm);
+    vec3 finalRGB = mix(baseTex.rgb, outCol, mixK);
+    finalRGB = clamp(finalRGB, vec3(0.03), vec3(0.97));
+
+    color = vec4(finalRGB, baseTex.a);
+}
+)SHD";
+inline const char *src_frac_shader02_dmdi6i_zoom = R"SHD(#version 300 es
+precision highp float;
+out vec4 color;
+in vec2 TexCoord;
+
+uniform sampler2D textTexture;
+uniform vec2 iResolution;
+uniform float time_f;
+uniform vec4 iMouse;
+)SHD" COMMON_UNIFORMS COLOR_HELPERS R"SHD(
+const float PI = 3.1415926535897932384626433832795;
+
+float pingPong(float x, float length) {
+    float m = mod(x, length * 2.0);
+    return m <= length ? m : length * 2.0 - m;
+}
+
+vec3 hsv2rgb(vec3 c) {
+    vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+
+vec2 rotateUV(vec2 uv, float angle, vec2 c, float aspect) {
+    float s = sin(angle), cc = cos(angle);
+    vec2 p = uv - c;
+    p.x *= aspect;
+    p = mat2(cc, -s, s, cc) * p;
+    p.x /= aspect;
+    return p + c;
+}
+
+vec2 reflectUV(vec2 uv, float segments, vec2 c, float aspect) {
+    vec2 p = uv - c;
+    p.x *= aspect;
+    float ang = atan(p.y, p.x);
+    float rad = length(p);
+    float stepA = 6.28318530718 / segments;
+    ang = mod(ang, stepA);
+    ang = abs(ang - stepA * 0.5);
+    vec2 r = vec2(cos(ang), sin(ang)) * rad;
+    r.x /= aspect;
+    return r + c;
+}
+
+vec2 fractalFold(vec2 uv, float zoom, float t, vec2 c, float aspect) {
+    vec2 p = uv;
+    for (int i = 0; i < 6; i++) {
+        p = abs((p - c) * (zoom + 0.15 * sin(t * 0.35 + float(i)))) - 0.5 + c;
+        p = rotateUV(p, t * 0.12 + float(i) * 0.07, c, aspect);
+    }
+    return p;
+}
+
+vec3 neonPalette(float t) {
+    vec3 pink = vec3(1.0, 0.15, 0.75);
+    vec3 blue = vec3(0.10, 0.55, 1.0);
+    vec3 green = vec3(0.10, 1.00, 0.45);
+    float ph = fract(t * 0.08);
+    vec3 k1 = mix(pink, blue, smoothstep(0.00, 0.33, ph));
+    vec3 k2 = mix(blue, green, smoothstep(0.33, 0.66, ph));
+    vec3 k3 = mix(green, pink, smoothstep(0.66, 1.00, ph));
+    float a = step(ph, 0.33);
+    float b = step(0.33, ph) * step(ph, 0.66);
+    float c = step(0.66, ph);
+    return normalize(a * k1 + b * k2 + c * k3) * 1.05;
+}
+
+vec3 softTone(vec3 c) {
+    c = pow(max(c, 0.0), vec3(0.95));
+    float l = dot(c, vec3(0.299, 0.587, 0.114));
+    c = mix(vec3(l), c, 0.9);
+    return clamp(c, 0.0, 1.0);
+}
+
+vec3 tentBlur3(sampler2D img, vec2 uv, vec2 res) {
+    vec2 ts = 1.0 / res;
+    vec3 s00 = textureGrad(img, uv + ts * vec2(-1.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s10 = textureGrad(img, uv + ts * vec2(0.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s20 = textureGrad(img, uv + ts * vec2(1.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s01 = textureGrad(img, uv + ts * vec2(-1.0, 0.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s11 = textureGrad(img, uv, dFdx(uv), dFdy(uv)).rgb;
+    vec3 s21 = textureGrad(img, uv + ts * vec2(1.0, 0.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s02 = textureGrad(img, uv + ts * vec2(-1.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s12 = textureGrad(img, uv + ts * vec2(0.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec3 s22 = textureGrad(img, uv + ts * vec2(1.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    return (s00 + 2.0 * s10 + s20 + 2.0 * s01 + 4.0 * s11 + 2.0 * s21 + s02 + 2.0 * s12 + s22) / 16.0;
+}
+
+vec3 preBlendColor(vec2 uv) {
+    vec3 tex = tentBlur3(textTexture, uv, iResolution);
+    float aspect = iResolution.x / iResolution.y;
+    vec2 p = (uv - 0.5) * vec2(aspect, 1.0);
+    float r = length(p);
+    float t = time_f;
+    vec3 neon = neonPalette(t + r * 1.3);
+    float neonAmt = smoothstep(0.1, 0.8, r);
+    neonAmt = 0.3 + 0.4 * (1.0 - neonAmt);
+    vec3 grad = mix(tex, neon, neonAmt);
+    grad = mix(grad, tex, 0.2);
+    grad = softTone(grad);
+    return grad;
+}
+
+float diamondRadius(vec2 p) {
+    p = sin(abs(p));
+    return max(p.x, p.y);
+}
+
+vec2 diamondFold(vec2 uv, vec2 c, float aspect) {
+    vec2 p = (uv - c) * vec2(aspect, 1.0);
+    p = abs(p);
+    if (p.y > p.x) p = p.yx;
+    p.x /= aspect;
+    return p + c;
+}
+
+void main(void) {
+    float aspect = iResolution.x / iResolution.y;
+    vec2 m = (iMouse.z > 0.5) ? (iMouse.xy / iResolution) : vec2(0.5);
+    vec2 ar = vec2(aspect, 1.0);
+
+    float zoomPhase = time_f * 0.12;
+    float zCycle = floor(zoomPhase);
+    float zLocal = fract(zoomPhase);
+    float tri = 1.0 - abs(zLocal * 2.0 - 1.0);
+    float sgn = mix(-1.0, 1.0, step(0.5, mod(zCycle, 2.0)));
+    float depth = 1.0 + zCycle * 0.35;
+    float zoomExp = sgn * tri * depth;
+    float zoom = pow(1.45, zoomExp);
+
+    vec2 z = TexCoord - m;
+    z.x *= aspect;
+    z /= zoom;
+    z.x /= aspect;
+    vec2 zoomTC = fract(z + m);
+
+    vec4 baseTex = texture(textTexture, zoomTC);
+
+    vec2 uv = zoomTC * 2.0 - 1.0;
+    uv.x *= aspect;
+    float r = pingPong(sin(length(uv) * time_f), 5.0);
+    float radius = sqrt(aspect * aspect + 1.0) + 0.5;
+    float glow = smoothstep(radius, radius - 0.25, r);
+
+    vec3 baseCol = preBlendColor(zoomTC);
+    float seg = 4.0 + 2.0 * sin(time_f * 0.33);
+    vec2 kUV = reflectUV(zoomTC, seg, m, aspect);
+    kUV = diamondFold(kUV, m, aspect);
+    float foldZoom = 1.45 + 0.55 * sin(time_f * 0.42);
+    kUV = fractalFold(kUV, foldZoom, time_f, m, aspect);
+    kUV = rotateUV(kUV, time_f * 0.23, m, aspect);
+    kUV = diamondFold(kUV, m, aspect);
+
+    vec2 p = (kUV - m) * ar;
+    vec2 q = abs(p);
+    if (q.y > q.x) q = q.yx;
+
+    float base = 1.82 + 0.18 * pingPong(sin(time_f * 0.2) * (PI * time_f), 5.0);
+    float period = log(base) * pingPong(time_f * PI, 5.0);
+    float tz = time_f * 0.65;
+    float rD = diamondRadius(p) + 1e-6;
+    float ang = atan(q.y, q.x) + tz * 0.35 + 0.35 * sin(rD * 18.0 + time_f * 0.6);
+    float k = fract((log(rD) - tz) / period);
+    float rw = exp(k * period);
+    vec2 pwrap = vec2(cos(ang), sin(ang)) * rw;
+
+    vec2 u0 = fract(pwrap / ar + m);
+    vec2 u1 = fract((pwrap * 1.045) / ar + m);
+    vec2 u2 = fract((pwrap * 0.955) / ar + m);
+    vec2 dir = normalize(pwrap + 1e-6);
+    vec2 off = dir * (0.0015 + 0.001 * sin(time_f * 1.3)) * vec2(1.0, 1.0 / aspect);
+
+    float vign = 1.0 - smoothstep(0.75, 1.2, length((zoomTC - m) * ar));
+    vign = mix(0.9, 1.15, vign);
+
+    vec3 rC = preBlendColor(u0 + off);
+    vec3 gC = preBlendColor(u1);
+    vec3 bC = preBlendColor(u2 - off);
+    vec3 kaleidoRGB = vec3(rC.r, gC.g, bC.b);
+
+    float ring = smoothstep(0.0, 0.7, sin(log(rD + 1e-3) * 9.5 + time_f * 1.2));
+    ring = ring * pingPong((time_f * PI), 5.0);
+    float pulse = 0.5 + 0.5 * sin(time_f * 2.0 + rD * 28.0 + k * 12.0);
+
+    vec3 outCol = kaleidoRGB;
+    outCol *= (0.75 + 0.25 * ring) * (0.85 + 0.15 * pulse) * vign;
+
+    vec3 bloom = outCol * outCol * 0.18 + pow(max(outCol - 0.6, 0.0), vec3(2.0)) * 0.12;
+    outCol += bloom;
+
+    outCol = mix(outCol, baseCol, pingPong(pulse * PI, 5.0) * 0.18);
+    outCol = clamp(outCol, vec3(0.05), vec3(0.97));
+    vec3 finalRGB = mix(baseTex.rgb, outCol, pingPong(glow * PI, 5.0) * 0.8);
+
+    color = vec4(finalRGB, baseTex.a);
+}
+)SHD";
 
 #endif

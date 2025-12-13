@@ -10,15 +10,12 @@ GPL v3
 
 #include"mx.hpp"
 #include"argz.hpp"
-
 #ifdef __EMSCRIPTEN__
 #include <emscripten/emscripten.h>
 #include <emscripten/bind.h>
 #include <GLES3/gl3.h>
 #endif
-
 #include<SDL2/SDL_image.h>
-
 #include"gl.hpp"
 #include"loadpng.hpp"
 #include<iostream>
@@ -78,7 +75,62 @@ static const std::vector<ShaderInfo> shaderSources = {
     {"TwistFull", szTwistFull},
     {"BowlByTime", szBowlByTime},
     {"Pebble", szPebble},
-    {"MirrorPutty", szMirrorPutty}
+    {"MirrorPutty", szMirrorPutty},
+    {"frac_shader02_dmdi6i_zoom_xor", src_frac_shader02_dmdi6i_zoom_xor},
+    {"frac_shader02_dmdi6i_zoom_xor_amp", src_frac_shader02_dmdi6i_zoom_xor_amp},
+    {"frac_shader02_dmdXi", src_frac_shader02_dmdXi},
+    {"frac_shader02_dmdXi_amp", src_frac_shader02_dmdXi_amp},
+    {"frac_shader02_dmdXi2", src_frac_shader02_dmdXi2},
+    {"frac_shader02_dmdXi3", src_frac_shader02_dmdXi3},
+    {"frac_shader02_dmdXi3_drain", src_frac_shader02_dmdXi3_drain},
+    {"frac_shader02_dmdXi3_warp", src_frac_shader02_dmdXi3_warp},
+    {"frac_shader02_dmdXi4", src_frac_shader02_dmdXi4},
+    {"frac_shader02_dmdXi5", src_frac_shader02_dmdXi5},
+    {"frac_shader02_prisim", src_frac_shader02_prisim},
+    {"frac_shader03_size", src_frac_shader03_size},
+    {"frac_shader03_wormhole", src_frac_shader03_wormhole},
+    {"frac_shader03_wormhole_amp", src_frac_shader03_wormhole_amp},
+    {"frac_shader03_wormhole2", src_frac_shader03_wormhole2},
+    {"frac_shader03_wormhole3", src_frac_shader03_wormhole3},
+    {"frac_shader03_wormhole4", src_frac_shader03_wormhole4},
+    {"frac_shader04_echo", src_frac_shader04_echo},
+    {"frac_shader04_echo2", src_frac_shader04_echo2},
+    {"frac_shader04_echo3_spin", src_frac_shader04_echo3_spin},
+    {"frac_shader04_grid", src_frac_shader04_grid},
+    {"frac_shader04_julia", src_frac_shader04_julia},
+    {"frac_shader05", src_frac_shader05},
+    {"frac_star1", src_frac_star1},
+    {"frac_zoom1", src_frac_zoom1},
+    {"frac_zoom2", src_frac_zoom2},
+    {"frac_zoom3", src_frac_zoom3},
+    {"frac_zoom4", src_frac_zoom4},
+    {"frac_zoom5", src_frac_zoom5},
+    {"frac_zoom6", src_frac_zoom6},
+    {"frac_zoom7", src_frac_zoom7},
+    {"frac_shader01", src_frac_shader01},
+    {"frac_shader01_dark", src_frac_shader01_dark},
+    {"frac_shader01_smooth", src_frac_shader01_smooth},
+    {"frac_shader01_smooth_neon", src_frac_shader01_smooth_neon},
+    {"frac_shader02_dmd", src_frac_shader02_dmd},
+    {"frac_shader02_dmd_mandella", src_frac_shader02_dmd_mandella},
+    {"frac_shader02_dmd2", src_frac_shader02_dmd2},
+    {"frac_shader02_dmd2_amp", src_frac_shader02_dmd2_amp},
+    {"frac_shader02_dmd3", src_frac_shader02_dmd3},
+    {"frac_shader02_dmd4", src_frac_shader02_dmd4},
+    {"frac_shader02_dmd5", src_frac_shader02_dmd5},
+    {"frac_shader02_dmd6i", src_frac_shader02_dmd6i},
+    {"frac_shader02_dmd6i_air", src_frac_shader02_dmd6i_air},
+    {"frac_shader02_dmd6i_air_twist", src_frac_shader02_dmd6i_air_twist},
+    {"frac_shader02_dmd6i_amp", src_frac_shader02_dmd6i_amp},
+    {"frac_shader02_dmd6i_bowl", src_frac_shader02_dmd6i_bowl},
+    {"frac_shader02_dmd6i_bubble", src_frac_shader02_dmd6i_bubble},
+    {"frac_shader02_dmd6i_neon", src_frac_shader02_dmd6i_neon},
+    {"frac_shader02_dmd6i1", src_frac_shader02_dmd6i1},
+    {"frac_shader02_dmd7i", src_frac_shader02_dmd7i},
+    {"frac_shader02_dmd8i", src_frac_shader02_dmd8i},
+    {"frac_shader02_dmd9i", src_frac_shader02_dmd9i},
+    {"frac_shader02_dmdi_radial", src_frac_shader02_dmdi_radial},
+    {"frac_shader02_dmdi6i_zoom", src_frac_shader02_dmdi6i_zoom}
 };
 
 class About : public gl::GLObject {
