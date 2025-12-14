@@ -758,7 +758,7 @@
             }
         };
     </script>
-    <script src="MX_app.js?v=2.90"></script>
+    <script src="MX_app.js?v=2.91"></script>
     <script>
         const canvas = document.getElementById('canvas');
         const canvasContainer = document.getElementById('canvas-container');
@@ -1246,11 +1246,15 @@ void main(void) {
         }
     });
 
-    // Update keyboard handler with same debounce:
     document.addEventListener('keydown', (e) => {
         if (e.target === shaderCodeTextarea) return;
-        
         const now = Date.now();
+        if (e.key === 's' || e.key === 'S') {
+            e.preventDefault();
+            saveButton.click();
+            return;
+        }   
+
         if (now - lastShaderChangeTime < SHADER_CHANGE_DEBOUNCE) return;
         
         if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
