@@ -1044,18 +1044,6 @@ void main(void) {
         resizeCanvas();
         window.addEventListener('resize', resizeCanvas);
 
-        prevButton.addEventListener('click', () => {
-            if (typeof Module !== 'undefined' && Module.prevShaderWeb) {
-                Module.prevShaderWeb();
-            }
-        });
-
-        nextButton.addEventListener('click', () => {
-            if (typeof Module !== 'undefined' && Module.nextShaderWeb) {
-                Module.nextShaderWeb();
-            }
-        });
-
         saveButton.addEventListener('click', () => {
             console.log('Save button clicked');
             
@@ -1229,24 +1217,56 @@ void main(void) {
             reader.readAsArrayBuffer(file);
             fileInput.value = '';
         });
+        
+    let lastShaderChangeTime = 0;
+    const SHADER_CHANGE_DEBOUNCE = 100; // ms
 
-        document.addEventListener('keydown', (e) => {
-            if (e.target === shaderCodeTextarea) return;
-            
-            if (e.key === 'Escape' && shaderEditorModal.classList.contains('visible')) {
-                shaderEditorModal.classList.remove('visible');
-            } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
-                if (typeof Module !== 'undefined' && Module.prevShaderWeb) {
-                    Module.prevShaderWeb();
-                }
-            } else if (e.key === 'ArrowDown' || e.key === 'ArrowRight' || e.key === ' ') {
-                if (typeof Module !== 'undefined' && Module.nextShaderWeb) {
-                    Module.nextShaderWeb();
-                }
-            } else if (e.key === 's' || e.key === 'S') {
-                saveButton.click();
+    
+    nextButton.addEventListener('click', (e) => {
+        e.preventDefault();
+        const now = Date.now();
+        if (now - lastShaderChangeTime < SHADER_CHANGE_DEBOUNCE) return;
+        lastShaderChangeTime = now;
+        
+        if (typeof Module !== 'undefined' && Module.nextShaderWeb) {
+            Module.nextShaderWeb();
+            setTimeout(updateShaderInfo, 50);
+        }
+    });
+
+    prevButton.addEventListener('click', (e) => {
+        e.preventDefault();
+        const now = Date.now();
+        if (now - lastShaderChangeTime < SHADER_CHANGE_DEBOUNCE) return;
+        lastShaderChangeTime = now;
+        
+        if (typeof Module !== 'undefined' && Module.prevShaderWeb) {
+            Module.prevShaderWeb();
+            setTimeout(updateShaderInfo, 50);
+        }
+    });
+
+    // Update keyboard handler with same debounce:
+    document.addEventListener('keydown', (e) => {
+        if (e.target === shaderCodeTextarea) return;
+        
+        const now = Date.now();
+        if (now - lastShaderChangeTime < SHADER_CHANGE_DEBOUNCE) return;
+        
+        if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
+            lastShaderChangeTime = now;
+            if (typeof Module !== 'undefined' && Module.prevShaderWeb) {
+                Module.prevShaderWeb();
+                setTimeout(updateShaderInfo, 50);
             }
-        });
+        } else if (e.key === 'ArrowDown' || e.key === 'ArrowRight' || e.key === ' ') {
+            lastShaderChangeTime = now;
+            if (typeof Module !== 'undefined' && Module.nextShaderWeb) {
+                Module.nextShaderWeb();
+                setTimeout(updateShaderInfo, 50);
+            }
+        }
+    });
 
         // Uniforms control panel
         const updateUniformsDisplay = () => {
@@ -1304,10 +1324,22 @@ void main(void) {
             }
         });
 
-
+        setTimeout(updateShaderInfo, 500);
         updateUniformsDisplay();
 
-
+        function updateShaderInfo() {
+            if (typeof Module !== 'undefined' && typeof Module.getIndex === 'function') {
+                try {
+                    const currentIndex = Module.getIndex();
+                    const shaderInfo = document.getElementById('shader-info');
+                    if (shaderInfo) {
+                        shaderInfo.innerHTML = `[${currentIndex}] Double-tap to cycle: <a href="/activity/demo/shaders/index.html" target="_blank">List ES3 Shaders</a>`;
+                    }
+                } catch (e) {
+                    console.log('Could not get shader index:', e);
+                }
+            }
+        }
     </script>
 </body>
 </html>

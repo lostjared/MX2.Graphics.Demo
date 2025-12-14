@@ -184,7 +184,9 @@ public:
         }
     }
 
-      void loadNewTexture(SDL_Surface *surface, gl::GLWindow *win) {
+    int getShaderIndex() const { return currentShaderIndex; }
+
+    void loadNewTexture(SDL_Surface *surface, gl::GLWindow *win) {
         if(texture != 0) {
             glDeleteTextures(1, &texture);
             texture = 0;
@@ -1119,6 +1121,11 @@ About *about_ptr = nullptr;
         return 720;
     }
 
+    int getIndex() {
+        if(about_ptr) return about_ptr->getShaderIndex();
+        return 0;
+    }
+
     EMSCRIPTEN_BINDINGS(image_loader) {
         emscripten::function("nextShaderWeb", &nextShaderWeb);
         emscripten::function("prevShaderWeb", &prevShaderWeb);
@@ -1158,6 +1165,7 @@ About *about_ptr = nullptr;
         emscripten::function("getDisplayHeight", &getDisplayHeightWeb);
         emscripten::function("saveImage", &saveImageWeb);
         emscripten::function("resize", &resizeWeb);
+        emscripten::function("getIndex", &getIndex);
     };
 
 #endif
