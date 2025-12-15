@@ -12914,4 +12914,124 @@ void main(void) {
 }
 )SHD";
 
+
+inline const char *color_shader02 = R"SHD(#version 300 es
+precision highp float;
+in vec2 TexCoord;
+out vec4 color;
+
+uniform sampler2D textTexture;
+uniform vec2 iResolution;
+uniform float time_f;
+uniform vec4 iMouse;
+uniform float amp;
+uniform float uamp;
+
+const float PI = 3.14159265359;
+
+vec3 hsv2rgb(vec3 c) {
+    vec4 K = vec4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
+    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+
+
+float hash21(vec2 p) {
+    p = fract(p * vec2(123.34, 456.21));
+    p += dot(p, p + 45.32);
+    return fract(p.x * p.y);
+}
+
+float noise(vec2 p) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+
+    float a = hash21(i);
+    float b = hash21(i + vec2(1.0, 0.0));
+    float c = hash21(i + vec2(0.0, 1.0));
+    float d = hash21(i + vec2(1.0, 1.0));
+
+    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}
+
+
+float fbm(vec2 p) {
+    float v = 0.0;
+    float a = 0.5;
+    mat2 m = mat2(1.6, -1.2, 1.2, 1.6);
+
+    for (int i = 0; i < 6; i++) {
+        v += a * noise(p);
+        p = m * p;
+        a *= 0.5;
+    }
+    return v;
+}
+
+
+vec2 warp(vec2 p, float t) {
+    float n1 = fbm(p + t * 0.15);
+    float n2 = fbm(p + vec2(4.1, 7.3) - t * 0.12);
+    return p + vec2(n1, n2) * 0.8;
+}
+
+float pingPong(float x, float length){
+    float m = mod(x, length*2.0);
+    return m <= length ? m : length*2.0 - m;
+}
+
+
+void main(void) {
+    vec2 tc = TexCoord;
+    vec4 tex = texture(textTexture, tc);
+
+    float aspect = iResolution.x / max(iResolution.y, 1.0);
+    vec2 uv = tc * 2.0 - 1.0;
+    uv.x *= aspect;
+
+    float t = time_f;
+    float aamp = clamp(abs(amp) * 0.8 + abs(uamp) * 0.2, 0.0, 1.0);
+
+    vec2 p = uv * (0.8 + 0.6 * sin(t * 0.07));
+    p = warp(p * 1.2, t);
+
+    float d1 = fbm(p * 1.4 + t * 0.05);
+    float d2 = fbm(p * 2.6 - t * 0.03);
+    float density = mix(d1, d2, 0.5);
+    density = smoothstep(0.2, 0.85, density);
+
+    float hue = fract(
+        0.10 * t +
+        0.35 * density +
+        0.15 * sin(p.x * 1.4 + t * 0.4) +
+        0.15 * sin(p.y * 1.7 - t * 0.3)
+    );
+
+    float sat = 0.85 + 0.15 * sin(t * 0.3 + density * 3.0);
+    float val = 0.6 + 0.8 * density;
+
+    vec3 cloudColor = hsv2rgb(vec3(hue, sat, val));
+
+    vec3 glow = cloudColor * cloudColor * (0.6 + 0.6 * density);
+    cloudColor += glow * 0.8;
+
+    cloudColor += 0.08 * sin(vec3(1.3, 2.1, 3.2) * (density * 4.0 + t));
+
+    float vign = 1.0 - smoothstep(0.7, 1.3, length(uv));
+    cloudColor *= mix(0.85, 1.15, vign);
+
+    float texLum = dot(tex.rgb, vec3(0.299, 0.587, 0.114));
+    vec3 darkTex = mix(tex.rgb * 0.65, vec3(texLum) * 0.55, 0.35);
+
+    float mixAmt = 0.3;
+    vec3 finalRGB = mix(darkTex, cloudColor, mixAmt);
+
+    finalRGB = pow(max(finalRGB, 0.0), vec3(0.85));
+    finalRGB = clamp(finalRGB, 0.0, 1.0);
+
+    color = vec4(finalRGB, tex.a);
+})SHD";
+
+
 #endif

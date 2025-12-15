@@ -130,7 +130,8 @@ static const std::vector<ShaderInfo> shaderSources = {
     {"frac_shader02_dmd8i", src_frac_shader02_dmd8i},
     {"frac_shader02_dmd9i", src_frac_shader02_dmd9i},
     {"frac_shader02_dmdi_radial", src_frac_shader02_dmdi_radial},
-    {"frac_shader02_dmdi6i_zoom", src_frac_shader02_dmdi6i_zoom}
+    {"frac_shader02_dmdi6i_zoom", src_frac_shader02_dmdi6i_zoom},
+    {"color_shader02", color_shader02 }
 };
 
 class About : public gl::GLObject {
