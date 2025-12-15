@@ -11,7 +11,7 @@ A powerful web-based demonstration application featuring real-time shader effect
 
 Uses libmx2 found here: https://github.com/lostjared/libmx2/
 
-### 🎨 38+ Built-in Shaders
+### 🎨 92+ Built-in Shaders
 Explore a diverse collection of visually stunning shader effects including:
 - **Kaleidoscope effects** - Symmetrical fractal patterns with real-time transformations
 - **Distortion effects** - Wave, ripple, twist, and bend distortions
