@@ -60,7 +60,8 @@ vec2 applyZoomRotation(vec2 uv, vec2 center) {
     float c = cos(iRotation);
     float s = sin(iRotation);
     p = mat2(c, -s, s, c) * p;
-    p /= iZoom;
+    float z = max(abs(iZoom), 0.001);
+    p /= z;
     return p + center;
 }
 )"
@@ -881,14 +882,15 @@ mat3 rotZ(float a){float s=sin(a),c=cos(a);return mat3(c,-s,0, s,c,0, 0,0,1);}
 void main(void){
     float time = time_f * iSpeed;
     vec2 tc = applyZoomRotation(TexCoord, vec2(0.5));
-    float aspect=iResolution.x/iResolution.y;
+    
+    float freq = max(iFrequency, 0.001);float aspect=iResolution.x/iResolution.y;
     vec2 ar=vec2(aspect,1.0);
     vec2 m=(iMouse.z>0.5)?(iMouse.xy/iResolution):vec2(0.5);
     vec2 p=(tc-m)*ar;
     vec3 v=vec3(p,1.0);
-    float ax=0.25*sin(time*0.7)*iAmplitude;
-    float ay=0.25*cos(time*0.6)*iAmplitude;
-    float az=0.4*time;
+    float ax=0.25*sin(time*0.7*freq)*iAmplitude;
+    float ay=0.25*cos(time*0.6*freq)*iAmplitude;
+    float az=0.4*time*freq;
     mat3 R=rotZ(az)*rotY(ay)*rotX(ax);
     vec3 r=R*v;
     float persp=0.6;
@@ -1340,15 +1342,16 @@ mat3 rotZ(float a){float s=sin(a),c=cos(a);return mat3(c,-s,0, s,c,0, 0,0,1);}
 void main(void){
     float time = time_f * iSpeed;
     vec2 tc = applyZoomRotation(TexCoord, vec2(0.5));
-    float aspect=iResolution.x/iResolution.y;
+    
+    float freq = max(iFrequency, 0.001);float aspect=iResolution.x/iResolution.y;
     vec2 ar=vec2(aspect,1.0);
     vec2 m=(iMouse.z>0.5)?(iMouse.xy/iResolution):vec2(0.5);
 
     vec2 p=(tc-m)*ar;
     vec3 v=vec3(p,1.0);
-    float ax=0.25*sin(time*0.7)*iAmplitude;
-    float ay=0.25*cos(time*0.6)*iAmplitude;
-    float az=0.4*time;
+    float ax=0.25*sin(time*0.7*freq)*iAmplitude;
+    float ay=0.25*cos(time*0.6*freq)*iAmplitude;
+    float az=0.4*time*freq;
     mat3 R=rotZ(az)*rotY(ay)*rotX(ax);
     vec3 r=R*v;
     float persp=0.6;
@@ -1466,16 +1469,17 @@ mat3 rotZ(float a){float s=sin(a),c=cos(a);return mat3(c,-s,0, s,c,0, 0,0,1);}
 void main(void){
     float time = time_f * iSpeed;
     vec2 tc = applyZoomRotation(TexCoord, vec2(0.5));
-    float aspect=iResolution.x/iResolution.y;
+    
+    float freq = max(iFrequency, 0.001);float aspect=iResolution.x/iResolution.y;
     vec2 ar=vec2(aspect,1.0);
     vec2 m=(iMouse.z>0.5)?(iMouse.xy/iResolution):vec2(0.5);
     vec2 cv = 1.0 - abs(1.0 - 2.0 * tc);
     cv = cv - floor(cv);     
     vec2 p=(cv-m)*ar;
     vec3 v=vec3(p,1.0);
-    float ax=0.25*sin(time*0.7)*iAmplitude;
-    float ay=0.25*cos(time*0.6)*iAmplitude;
-    float az=0.4*time;
+    float ax=0.25*sin(time*0.7*freq)*iAmplitude;
+    float ay=0.25*cos(time*0.6*freq)*iAmplitude;
+    float az=0.4*time*freq;
     mat3 R=rotZ(az)*rotY(ay)*rotX(ax);
     vec3 r=R*v;
     float persp=0.6;
@@ -12968,9 +12972,11 @@ float fbm(vec2 p) {
 }
 
 vec2 warp(vec2 p, float t) {
-    float n1 = fbm(p + t * 0.15);
-    float n2 = fbm(p + vec2(4.1, 7.3) - t * 0.12);
-    return p + vec2(n1, n2) * 0.8;
+    float freq = max(iFrequency, 0.001);
+    float A = clamp(iAmplitude, 0.0, 2.0);
+    float n1 = fbm(p * freq + t * 0.15 * freq);
+    float n2 = fbm(p * freq + vec2(4.1, 7.3) - t * 0.12 * freq);
+    return p + vec2(n1, n2) * (0.8 * A);
 }
 
 float pingPong(float x, float length){
@@ -12986,30 +12992,33 @@ void main(void) {
     vec2 uv = tc * 2.0 - 1.0;
     uv.x *= aspect;
 
+    float freq = max(iFrequency, 0.001);
+    float A = clamp(iAmplitude, 0.0, 2.0);
+
     float t = time_f * iSpeed;
     float aamp = clamp(abs(amp) * 0.8 + abs(uamp) * 0.2, 0.0, 1.0);
 
-    vec2 p = uv * (0.8 + 0.6 * sin(t * 0.07));
-    p = warp(p * 1.2, t);
+    vec2 p = uv * (0.8 + 0.6 * sin(t * 0.07 * freq));
+    p = warp(p * (1.2 * freq), t * freq);
 
-    float d1 = fbm(p * 1.4 + t * 0.05);
-    float d2 = fbm(p * 2.6 - t * 0.03);
+    float d1 = fbm(p * (1.4 * freq) + t * 0.05 * freq);
+    float d2 = fbm(p * (2.6 * freq) - t * 0.03 * freq);
     float density = mix(d1, d2, 0.5);
     density = smoothstep(0.2, 0.85, density);
 
     float hue = fract(
         0.10 * t +
         0.35 * density +
-        0.15 * sin(p.x * 1.4 + t * 0.4) +
-        0.15 * sin(p.y * 1.7 - t * 0.3)
+        0.15 * sin(p.x * 1.4 * freq + t * 0.4 * freq) +
+        0.15 * sin(p.y * 1.7 * freq - t * 0.3 * freq)
     );
 
-    float sat = 0.85 + 0.15 * sin(t * 0.3 + density * 3.0);
+    float sat = 0.85 + 0.15 * sin(t * 0.3 * freq + density * 3.0 * freq);
     float val = 0.6 + 0.8 * density;
 
     vec3 cloudColor = hsv2rgb(vec3(hue, sat, val));
 
-    vec3 glow = cloudColor * cloudColor * (0.6 + 0.6 * density);
+    vec3 glow = cloudColor * (0.6 + 0.4 * A) * cloudColor * (0.6 + 0.6 * density);
     cloudColor += glow * 0.8;
 
     cloudColor += 0.08 * sin(vec3(1.3, 2.1, 3.2) * (density * 4.0 + t));
