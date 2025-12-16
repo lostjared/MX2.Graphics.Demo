@@ -12915,7 +12915,7 @@ void main(void) {
 )SHD";
 
 
-inline const char *color_shader02 = R"SHD(#version 300 es
+inline const char *color_shader02 = R"(#version 300 es
 precision highp float;
 in vec2 TexCoord;
 out vec4 color;
@@ -12928,13 +12928,12 @@ uniform float amp;
 uniform float uamp;
 
 const float PI = 3.14159265359;
-
+)" COMMON_UNIFORMS COLOR_HELPERS R"(
 vec3 hsv2rgb(vec3 c) {
     vec4 K = vec4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
     vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
     return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
 }
-
 
 float hash21(vec2 p) {
     p = fract(p * vec2(123.34, 456.21));
@@ -12955,7 +12954,6 @@ float noise(vec2 p) {
     return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
 }
 
-
 float fbm(vec2 p) {
     float v = 0.0;
     float a = 0.5;
@@ -12969,7 +12967,6 @@ float fbm(vec2 p) {
     return v;
 }
 
-
 vec2 warp(vec2 p, float t) {
     float n1 = fbm(p + t * 0.15);
     float n2 = fbm(p + vec2(4.1, 7.3) - t * 0.12);
@@ -12981,16 +12978,15 @@ float pingPong(float x, float length){
     return m <= length ? m : length*2.0 - m;
 }
 
-
 void main(void) {
-    vec2 tc = TexCoord;
+    vec2 tc = applyZoomRotation(TexCoord, vec2(0.5));
     vec4 tex = texture(textTexture, tc);
 
     float aspect = iResolution.x / max(iResolution.y, 1.0);
     vec2 uv = tc * 2.0 - 1.0;
     uv.x *= aspect;
 
-    float t = time_f;
+    float t = time_f * iSpeed;
     float aamp = clamp(abs(amp) * 0.8 + abs(uamp) * 0.2, 0.0, 1.0);
 
     vec2 p = uv * (0.8 + 0.6 * sin(t * 0.07));
@@ -13028,10 +13024,14 @@ void main(void) {
     vec3 finalRGB = mix(darkTex, cloudColor, mixAmt);
 
     finalRGB = pow(max(finalRGB, 0.0), vec3(0.85));
-    finalRGB = clamp(finalRGB, 0.0, 1.0);
+
+    float bright = 1.0 + aamp * 1.5;
+    finalRGB *= bright;
+
+    finalRGB = applyColorAdjustments(finalRGB);
 
     color = vec4(finalRGB, tex.a);
-})SHD";
-
+}
+)";
 
 #endif
