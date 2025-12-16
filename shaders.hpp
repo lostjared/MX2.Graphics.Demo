@@ -1,3 +1,10 @@
+/*
+
+ LostSideDead Software
+ coded by: Jared Bruni
+
+*/
+
 #ifndef _SHADERS_HPP
 #define _SHADERS_HPP
 
