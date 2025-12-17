@@ -429,8 +429,28 @@ public:
 
     void loadModelFile(const std::string &m_file_path) {
         if(m_file_path.find("quad") != std::string::npos) {
-            is3d = false;
-            return;
+                is3d = false;
+                if (texWidth > 0 && texHeight > 0) {
+                    float imgAspect = static_cast<float>(texWidth) / static_cast<float>(texHeight);
+                    float canvasAspect = static_cast<float>(canvasWidth) / static_cast<float>(canvasHeight);
+                    
+                    if (imgAspect > canvasAspect) {
+                        displayW = canvasWidth;
+                        displayH = static_cast<int>(canvasWidth / imgAspect);
+                        displayX = 0;
+                        displayY = (canvasHeight - displayH) / 2;
+                    } else {
+                        displayH = canvasHeight;
+                        displayW = static_cast<int>(canvasHeight * imgAspect);
+                        displayX = (canvasWidth - displayW) / 2;
+                        displayY = 0;
+                    }
+                    sprite.initSize(canvasWidth, canvasHeight);
+                    if (loadingComplete && loadingWin) {
+                        switchShader(currentShaderIndex, loadingWin);
+                    }
+                }
+                return;
         } else {
             is3d = true;
         }
@@ -451,7 +471,7 @@ public:
         activeShader->setUniform("proj_matrix", glm::mat4(1.0f));
         sprite.setShader(activeShader);
         sprite.setName("textTexture");
-        sprite.draw(texture, 0, 0, win->w, win->h);
+        sprite.draw(texture, displayX, displayY, displayW, displayH);
     }
 
 
@@ -640,7 +660,7 @@ public:
                 shaders2[currentShaderIndex]->setUniform("uamp", 0.5f);
                 shaders2[currentShaderIndex]->setUniform("textTexture", 0);
                 glActiveTexture(GL_TEXTURE0);
-                sprite.initWithTexture(shaders[currentShaderIndex].get(), texture, displayX, displayY, displayW, displayH);
+                sprite.initWithTexture(shaders2[currentShaderIndex].get(), texture, displayX, displayY, displayW, displayH);
             }
         }
     }
@@ -805,8 +825,6 @@ public:
     int getDisplayY() const { return displayY; }
     int getDisplayWidth() const { return displayW; }
     int getDisplayHeight() const { return displayH; }
-
-    
 
     void resize(gl::GLWindow *win) {
         maxWidth = win->w;
