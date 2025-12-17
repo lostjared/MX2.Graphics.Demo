@@ -924,6 +924,11 @@ public:
         int cropY = 0; 
         int cropW = displayW;
         int cropH = displayH;
+   
+        cropX = 0;
+        cropY = 0;
+        cropW = canvasWidth;
+        cropH = canvasHeight;
         
         printf("Crop: x=%d, y=%d, w=%d, h=%d\n", cropX, cropY, cropW, cropH);
         
