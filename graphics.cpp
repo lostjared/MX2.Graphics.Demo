@@ -159,6 +159,7 @@ class About : public gl::GLObject {
     gl::GLSprite sprite;
     float animation = 0.0f;
     std::vector<std::unique_ptr<gl::ShaderProgram>> shaders;
+    std::vector<std::unique_ptr<gl::ShaderProgram>> shaders2;
     size_t currentShaderIndex = 0;
     Uint32 firstTapTime = 0;
     bool firstTapRegistered = false;
@@ -197,6 +198,7 @@ class About : public gl::GLObject {
     bool loadingComplete = false;
     gl::GLWindow* loadingWin = nullptr;
     std::unique_ptr<mx::Model> model;
+    bool is3d = false;
 public:
     About() = default;
     virtual ~About() override {
@@ -275,7 +277,8 @@ public:
             
             auto shader = std::make_unique<gl::ShaderProgram>();
             bool success = shader->loadProgramFromText(sz3DVertex, info.source);
-            
+            auto shader2 = std::make_unique<gl::ShaderProgram>();
+            bool success2 = shader2->loadProgramFromText(gl::vSource, info.source);
 #ifdef __EMSCRIPTEN__
             EM_ASM({
                 if (typeof window.addLoadingMessage === 'function') {
@@ -294,7 +297,10 @@ public:
                 shader->setSilent(true);
                 shaders.push_back(std::move(shader));
             }
-            
+            if(success2) {
+                shader2->setSilent(true);
+                shaders2.push_back(std::move(shader2));
+            }
             loadingShaderIndex++;
             
             
@@ -375,7 +381,7 @@ public:
         canvasWidth = win->w;
         canvasHeight = win->h;
         loadingWin = win;
-        loadModelFile(win->util.getFilePath("data/compressed/diamond.mxmod.z"));
+        loadModelFile(win->util.getFilePath("data/compressed/quad.mxmod.z"));
         glViewport(0, 0, canvasWidth, canvasHeight);
         
 #ifdef __EMSCRIPTEN__
@@ -399,9 +405,14 @@ public:
 #else
         for (const auto& info : shaderSources) {
             auto shader = std::make_unique<gl::ShaderProgram>();
-            if (shader->loadProgramFromText(gl::vSource, info.source)) {
+            if (shader->loadProgramFromText(sz3DVertex, info.source)) {
                 shader->setSilent(true);
                 shaders.push_back(std::move(shader));
+            }
+            auto shader2 = std::make_unique<gl::ShaderProgram>();
+            if (shader2->loadProgramFromText(gl::vSource, info.source)) {
+                shader2->setSilent(true);
+                shaders2.push_back(std::move(shader2));
             }
         }
         finishLoading();
@@ -417,11 +428,32 @@ public:
     float movementSpeed = 0.01f;
 
     void loadModelFile(const std::string &m_file_path) {
+        if(m_file_path.find("quad") != std::string::npos) {
+            is3d = false;
+            return;
+        } else {
+            is3d = true;
+        }
         model.reset(new mx::Model());
         if(!model->openModel(m_file_path)) {
             throw mx::Exception("Could not open model: " + m_file_path);
         }
     }
+
+    void drawModel2D(gl::GLWindow *win) {
+        if (currentShaderIndex >= shaders2.size()) {
+            printf("Error: shaders2 index %zu out of bounds (size: %zu)\n", currentShaderIndex, shaders2.size());
+            return;
+        }
+        glDisable(GL_DEPTH_TEST);
+        gl::ShaderProgram *activeShader = shaders2[currentShaderIndex].get();
+        activeShader->setUniform("mv_matrix", glm::mat4(1.0f));
+        activeShader->setUniform("proj_matrix", glm::mat4(1.0f));
+        sprite.setShader(activeShader);
+        sprite.setName("textTexture");
+        sprite.draw(texture, 0, 0, win->w, win->h);
+    }
+
 
     void drawModel(gl::GLWindow *win) {
         glEnable(GL_DEPTH_TEST);
@@ -530,46 +562,86 @@ public:
     void switchShader(size_t index, gl::GLWindow *win) {
         if(index < shaders.size()) {
             currentShaderIndex = index;
-            shaders[currentShaderIndex]->useProgram();
-            shaders[currentShaderIndex]->setUniform("time_f", animation);
-            shaders[currentShaderIndex]->setUniform("iTime", animation);
-            shaders[currentShaderIndex]->setUniform("iTimeDelta", 0.0f);
-            shaders[currentShaderIndex]->setUniform("iFrame", static_cast<float>(frameCount));
-            shaders[currentShaderIndex]->setUniform("iSeconds", iSeconds);
-            shaders[currentShaderIndex]->setUniform("iMinutes", iMinutes);
-            shaders[currentShaderIndex]->setUniform("iHours", iHours);
-            shaders[currentShaderIndex]->setUniform("iResolution", glm::vec2(displayW, displayH));
-            glm::vec4 adjMouse = mouse;
-            adjMouse.x -= displayX;
-            adjMouse.y -= displayY;
-            shaders[currentShaderIndex]->setUniform("iMouse", adjMouse);
-            shaders[currentShaderIndex]->setUniform("iMouseNormalized", glm::vec2(adjMouse.x / displayW, 1.0f - adjMouse.y / displayH));
-            shaders[currentShaderIndex]->setUniform("iMouseActive", mouse.z > 0.5f ? 1.0f : 0.0f);
-            shaders[currentShaderIndex]->setUniform("iMouseVelocity", iMouseVelocity);
-            shaders[currentShaderIndex]->setUniform("iMouseClick", iMouseClick);
-            shaders[currentShaderIndex]->setUniform("iAspectRatio", static_cast<float>(displayW) / static_cast<float>(displayH));
-            shaders[currentShaderIndex]->setUniform("iSpeed", iSpeed);
-            shaders[currentShaderIndex]->setUniform("iFrequency", iFrequency);
-            shaders[currentShaderIndex]->setUniform("iAmplitude", iAmplitude);
-            shaders[currentShaderIndex]->setUniform("iHueShift", iHueShift);
-            shaders[currentShaderIndex]->setUniform("iSaturation", iSaturation);
-            shaders[currentShaderIndex]->setUniform("iBrightness", iBrightness);
-            shaders[currentShaderIndex]->setUniform("iContrast", iContrast);
-            shaders[currentShaderIndex]->setUniform("iZoom", iZoom);
-            shaders[currentShaderIndex]->setUniform("iRotation", iRotation);
-            shaders[currentShaderIndex]->setUniform("iCameraPos", iCameraPos);
-            shaders[currentShaderIndex]->setUniform("iBeat", beatValue);
-            shaders[currentShaderIndex]->setUniform("iAudioLevel", audioLevel);
-            shaders[currentShaderIndex]->setUniform("iDebugMode", iDebugMode);
-            shaders[currentShaderIndex]->setUniform("iQuality", iQuality);
-            shaders[currentShaderIndex]->setUniform("alpha", 1.0f);
-            shaders[currentShaderIndex]->setUniform("amp", 0.5f);
-            shaders[currentShaderIndex]->setUniform("uamp", 0.5f);
-            shaders[currentShaderIndex]->setUniform("textTexture", 0);
-            glActiveTexture(GL_TEXTURE0);
-            model->setShaderProgram(shaders[currentShaderIndex].get());
-            sprite.initWithTexture(shaders[currentShaderIndex].get(), texture, displayX, displayY, displayW, displayH);
-
+            if(is3d) {
+                shaders[currentShaderIndex]->useProgram();
+                shaders[currentShaderIndex]->setUniform("time_f", animation);
+                shaders[currentShaderIndex]->setUniform("iTime", animation);
+                shaders[currentShaderIndex]->setUniform("iTimeDelta", 0.0f);
+                shaders[currentShaderIndex]->setUniform("iFrame", static_cast<float>(frameCount));
+                shaders[currentShaderIndex]->setUniform("iSeconds", iSeconds);
+                shaders[currentShaderIndex]->setUniform("iMinutes", iMinutes);
+                shaders[currentShaderIndex]->setUniform("iHours", iHours);
+                shaders[currentShaderIndex]->setUniform("iResolution", glm::vec2(displayW, displayH));
+                glm::vec4 adjMouse = mouse;
+                adjMouse.x -= displayX;
+                adjMouse.y -= displayY;
+                shaders[currentShaderIndex]->setUniform("iMouse", adjMouse);
+                shaders[currentShaderIndex]->setUniform("iMouseNormalized", glm::vec2(adjMouse.x / displayW, 1.0f - adjMouse.y / displayH));
+                shaders[currentShaderIndex]->setUniform("iMouseActive", mouse.z > 0.5f ? 1.0f : 0.0f);
+                shaders[currentShaderIndex]->setUniform("iMouseVelocity", iMouseVelocity);
+                shaders[currentShaderIndex]->setUniform("iMouseClick", iMouseClick);
+                shaders[currentShaderIndex]->setUniform("iAspectRatio", static_cast<float>(displayW) / static_cast<float>(displayH));
+                shaders[currentShaderIndex]->setUniform("iSpeed", iSpeed);
+                shaders[currentShaderIndex]->setUniform("iFrequency", iFrequency);
+                shaders[currentShaderIndex]->setUniform("iAmplitude", iAmplitude);
+                shaders[currentShaderIndex]->setUniform("iHueShift", iHueShift);
+                shaders[currentShaderIndex]->setUniform("iSaturation", iSaturation);
+                shaders[currentShaderIndex]->setUniform("iBrightness", iBrightness);
+                shaders[currentShaderIndex]->setUniform("iContrast", iContrast);
+                shaders[currentShaderIndex]->setUniform("iZoom", iZoom);
+                shaders[currentShaderIndex]->setUniform("iRotation", iRotation);
+                shaders[currentShaderIndex]->setUniform("iCameraPos", iCameraPos);
+                shaders[currentShaderIndex]->setUniform("iBeat", beatValue);
+                shaders[currentShaderIndex]->setUniform("iAudioLevel", audioLevel);
+                shaders[currentShaderIndex]->setUniform("iDebugMode", iDebugMode);
+                shaders[currentShaderIndex]->setUniform("iQuality", iQuality);
+                shaders[currentShaderIndex]->setUniform("alpha", 1.0f);
+                shaders[currentShaderIndex]->setUniform("amp", 0.5f);
+                shaders[currentShaderIndex]->setUniform("uamp", 0.5f);
+                shaders[currentShaderIndex]->setUniform("textTexture", 0);
+                glActiveTexture(GL_TEXTURE0);
+                model->setShaderProgram(shaders[currentShaderIndex].get());
+                sprite.initWithTexture(shaders[currentShaderIndex].get(), texture, displayX, displayY, displayW, displayH);
+            } else  {
+                shaders2[currentShaderIndex]->useProgram();
+                shaders2[currentShaderIndex]->setUniform("time_f", animation);
+                shaders2[currentShaderIndex]->setUniform("iTime", animation);
+                shaders2[currentShaderIndex]->setUniform("iTimeDelta", 0.0f);
+                shaders2[currentShaderIndex]->setUniform("iFrame", static_cast<float>(frameCount));
+                shaders2[currentShaderIndex]->setUniform("iSeconds", iSeconds);
+                shaders2[currentShaderIndex]->setUniform("iMinutes", iMinutes);
+                shaders2[currentShaderIndex]->setUniform("iHours", iHours);
+                shaders2[currentShaderIndex]->setUniform("iResolution", glm::vec2(displayW, displayH));
+                glm::vec4 adjMouse = mouse;
+                adjMouse.x -= displayX;
+                adjMouse.y -= displayY;
+                shaders2[currentShaderIndex]->setUniform("iMouse", adjMouse);
+                shaders2[currentShaderIndex]->setUniform("iMouseNormalized", glm::vec2(adjMouse.x / displayW, 1.0f - adjMouse.y / displayH));
+                shaders2[currentShaderIndex]->setUniform("iMouseActive", mouse.z > 0.5f ? 1.0f : 0.0f);
+                shaders2[currentShaderIndex]->setUniform("iMouseVelocity", iMouseVelocity);
+                shaders2[currentShaderIndex]->setUniform("iMouseClick", iMouseClick);
+                shaders2[currentShaderIndex]->setUniform("iAspectRatio", static_cast<float>(displayW) / static_cast<float>(displayH));
+                shaders2[currentShaderIndex]->setUniform("iSpeed", iSpeed);
+                shaders2[currentShaderIndex]->setUniform("iFrequency", iFrequency);
+                shaders2[currentShaderIndex]->setUniform("iAmplitude", iAmplitude);
+                shaders2[currentShaderIndex]->setUniform("iHueShift", iHueShift);
+                shaders2[currentShaderIndex]->setUniform("iSaturation", iSaturation);
+                shaders2[currentShaderIndex]->setUniform("iBrightness", iBrightness);
+                shaders2[currentShaderIndex]->setUniform("iContrast", iContrast);
+                shaders2[currentShaderIndex]->setUniform("iZoom", iZoom);
+                shaders2[currentShaderIndex]->setUniform("iRotation", iRotation);
+                shaders2[currentShaderIndex]->setUniform("iCameraPos", iCameraPos);
+                shaders2[currentShaderIndex]->setUniform("iBeat", beatValue);
+                shaders2[currentShaderIndex]->setUniform("iAudioLevel", audioLevel);
+                shaders2[currentShaderIndex]->setUniform("iDebugMode", iDebugMode);
+                shaders2[currentShaderIndex]->setUniform("iQuality", iQuality);
+                shaders2[currentShaderIndex]->setUniform("alpha", 1.0f);
+                shaders2[currentShaderIndex]->setUniform("amp", 0.5f);
+                shaders2[currentShaderIndex]->setUniform("uamp", 0.5f);
+                shaders2[currentShaderIndex]->setUniform("textTexture", 0);
+                glActiveTexture(GL_TEXTURE0);
+                sprite.initWithTexture(shaders[currentShaderIndex].get(), texture, displayX, displayY, displayW, displayH);
+            }
         }
     }
     void nextShader(gl::GLWindow *win) {
@@ -605,49 +677,92 @@ public:
         iMouseVelocity = currentMousePos - prevMousePos;
         prevMousePos = currentMousePos;
         iMouseClick = mouse.z > 0.5f ? 1.0f : 0.0f;
-        shaders[currentShaderIndex]->useProgram();
-        shaders[currentShaderIndex]->setUniform("time_f", animation);
-        shaders[currentShaderIndex]->setUniform("iTime", animation);
-        shaders[currentShaderIndex]->setUniform("iTimeDelta", deltaTime);
-        shaders[currentShaderIndex]->setUniform("iFrame", static_cast<float>(frameCount));
-        shaders[currentShaderIndex]->setUniform("iSeconds", iSeconds);
-        shaders[currentShaderIndex]->setUniform("iMinutes", iMinutes);
-        shaders[currentShaderIndex]->setUniform("iHours", iHours);
-        shaders[currentShaderIndex]->setUniform("iResolution", glm::vec2(displayW, displayH));
-        glm::vec4 adjMouse = mouse;
-        adjMouse.x -= displayX;
-        adjMouse.y -= displayY;
-        shaders[currentShaderIndex]->setUniform("iMouse", adjMouse);
-        shaders[currentShaderIndex]->setUniform("iMouseNormalized", glm::vec2(adjMouse.x / displayW, 1.0f - adjMouse.y / displayH));
-        
-        shaders[currentShaderIndex]->setUniform("iMouseActive", iMouseClick);
-        shaders[currentShaderIndex]->setUniform("iMouseVelocity", iMouseVelocity);
-        shaders[currentShaderIndex]->setUniform("iMouseClick", iMouseClick);
-        shaders[currentShaderIndex]->setUniform("iAspectRatio", static_cast<float>(displayW) / static_cast<float>(displayH));
-        shaders[currentShaderIndex]->setUniform("iSpeed", iSpeed);
-        shaders[currentShaderIndex]->setUniform("iFrequency", iFrequency);
-        shaders[currentShaderIndex]->setUniform("iAmplitude", iAmplitude);
-        shaders[currentShaderIndex]->setUniform("iHueShift", iHueShift);
-        shaders[currentShaderIndex]->setUniform("iSaturation", iSaturation);
-        shaders[currentShaderIndex]->setUniform("iBrightness", iBrightness);
-        shaders[currentShaderIndex]->setUniform("iContrast", iContrast);
-        shaders[currentShaderIndex]->setUniform("iZoom", iZoom);
-        shaders[currentShaderIndex]->setUniform("iRotation", iRotation);
-        shaders[currentShaderIndex]->setUniform("iCameraPos", iCameraPos);
-        shaders[currentShaderIndex]->setUniform("iBeat", beatValue);
-        shaders[currentShaderIndex]->setUniform("iAudioLevel", audioLevel);
-        shaders[currentShaderIndex]->setUniform("iDebugMode", iDebugMode);
-        shaders[currentShaderIndex]->setUniform("iQuality", iQuality);
-        
-        shaders[currentShaderIndex]->setUniform("alpha", 1.0f);
-        shaders[currentShaderIndex]->setUniform("amp", 0.5f);
-        shaders[currentShaderIndex]->setUniform("uamp", 0.5f);
-        shaders[currentShaderIndex]->setUniform("textTexture", 0);
+        if(is3d) {
+            shaders[currentShaderIndex]->useProgram();
+            shaders[currentShaderIndex]->setUniform("time_f", animation);
+            shaders[currentShaderIndex]->setUniform("iTime", animation);
+            shaders[currentShaderIndex]->setUniform("iTimeDelta", deltaTime);
+            shaders[currentShaderIndex]->setUniform("iFrame", static_cast<float>(frameCount));
+            shaders[currentShaderIndex]->setUniform("iSeconds", iSeconds);
+            shaders[currentShaderIndex]->setUniform("iMinutes", iMinutes);
+            shaders[currentShaderIndex]->setUniform("iHours", iHours);
+            shaders[currentShaderIndex]->setUniform("iResolution", glm::vec2(displayW, displayH));
+            glm::vec4 adjMouse = mouse;
+            adjMouse.x -= displayX;
+            adjMouse.y -= displayY;
+            shaders[currentShaderIndex]->setUniform("iMouse", adjMouse);
+            shaders[currentShaderIndex]->setUniform("iMouseNormalized", glm::vec2(adjMouse.x / displayW, 1.0f - adjMouse.y / displayH));
+            
+            shaders[currentShaderIndex]->setUniform("iMouseActive", iMouseClick);
+            shaders[currentShaderIndex]->setUniform("iMouseVelocity", iMouseVelocity);
+            shaders[currentShaderIndex]->setUniform("iMouseClick", iMouseClick);
+            shaders[currentShaderIndex]->setUniform("iAspectRatio", static_cast<float>(displayW) / static_cast<float>(displayH));
+            shaders[currentShaderIndex]->setUniform("iSpeed", iSpeed);
+            shaders[currentShaderIndex]->setUniform("iFrequency", iFrequency);
+            shaders[currentShaderIndex]->setUniform("iAmplitude", iAmplitude);
+            shaders[currentShaderIndex]->setUniform("iHueShift", iHueShift);
+            shaders[currentShaderIndex]->setUniform("iSaturation", iSaturation);
+            shaders[currentShaderIndex]->setUniform("iBrightness", iBrightness);
+            shaders[currentShaderIndex]->setUniform("iContrast", iContrast);
+            shaders[currentShaderIndex]->setUniform("iZoom", iZoom);
+            shaders[currentShaderIndex]->setUniform("iRotation", iRotation);
+            shaders[currentShaderIndex]->setUniform("iCameraPos", iCameraPos);
+            shaders[currentShaderIndex]->setUniform("iBeat", beatValue);
+            shaders[currentShaderIndex]->setUniform("iAudioLevel", audioLevel);
+            shaders[currentShaderIndex]->setUniform("iDebugMode", iDebugMode);
+            shaders[currentShaderIndex]->setUniform("iQuality", iQuality);
+            
+            shaders[currentShaderIndex]->setUniform("alpha", 1.0f);
+            shaders[currentShaderIndex]->setUniform("amp", 0.5f);
+            shaders[currentShaderIndex]->setUniform("uamp", 0.5f);
+            shaders[currentShaderIndex]->setUniform("textTexture", 0);
+        }  else {
+            shaders2[currentShaderIndex]->useProgram();
+            shaders2[currentShaderIndex]->setUniform("time_f", animation);
+            shaders2[currentShaderIndex]->setUniform("iTime", animation);
+            shaders2[currentShaderIndex]->setUniform("iTimeDelta", deltaTime);
+            shaders2[currentShaderIndex]->setUniform("iFrame", static_cast<float>(frameCount));
+            shaders2[currentShaderIndex]->setUniform("iSeconds", iSeconds);
+            shaders2[currentShaderIndex]->setUniform("iMinutes", iMinutes);
+            shaders2[currentShaderIndex]->setUniform("iHours", iHours);
+            shaders2[currentShaderIndex]->setUniform("iResolution", glm::vec2(displayW, displayH));
+            glm::vec4 adjMouse = mouse;
+            adjMouse.x -= displayX;
+            adjMouse.y -= displayY;
+            shaders2[currentShaderIndex]->setUniform("iMouse", adjMouse);
+            shaders2[currentShaderIndex]->setUniform("iMouseNormalized", glm::vec2(adjMouse.x / displayW, 1.0f - adjMouse.y / displayH));
+            shaders2[currentShaderIndex]->setUniform("iMouseActive", iMouseClick);
+            shaders2[currentShaderIndex]->setUniform("iMouseVelocity", iMouseVelocity);
+            shaders2[currentShaderIndex]->setUniform("iMouseClick", iMouseClick);
+            shaders2[currentShaderIndex]->setUniform("iAspectRatio", static_cast<float>(displayW) / static_cast<float>(displayH));
+            shaders2[currentShaderIndex]->setUniform("iSpeed", iSpeed);
+            shaders2[currentShaderIndex]->setUniform("iFrequency", iFrequency);
+            shaders2[currentShaderIndex]->setUniform("iAmplitude", iAmplitude);
+            shaders2[currentShaderIndex]->setUniform("iHueShift", iHueShift);
+            shaders2[currentShaderIndex]->setUniform("iSaturation", iSaturation);
+            shaders2[currentShaderIndex]->setUniform("iBrightness", iBrightness);
+            shaders2[currentShaderIndex]->setUniform("iContrast", iContrast);
+            shaders2[currentShaderIndex]->setUniform("iZoom", iZoom);
+            shaders2[currentShaderIndex]->setUniform("iRotation", iRotation);
+            shaders2[currentShaderIndex]->setUniform("iCameraPos", iCameraPos);
+            shaders2[currentShaderIndex]->setUniform("iBeat", beatValue);
+            shaders2[currentShaderIndex]->setUniform("iAudioLevel", audioLevel);
+            shaders2[currentShaderIndex]->setUniform("iDebugMode", iDebugMode);
+            shaders2[currentShaderIndex]->setUniform("iQuality", iQuality);
+            shaders2[currentShaderIndex]->setUniform("alpha", 1.0f);
+            shaders2[currentShaderIndex]->setUniform("amp", 0.5f);
+            shaders2[currentShaderIndex]->setUniform("uamp", 0.5f);
+            shaders2[currentShaderIndex]->setUniform("textTexture", 0);
+        }
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, texture);
         update(deltaTime);
         sprite.initSize(canvasWidth, canvasHeight);
-        drawModel(win);
+        if(is3d)
+            drawModel(win);
+        else
+            drawModel2D(win);
+
         if (captureNextFrame) {
             captureNextFrame = false;
             captureFrame();
@@ -925,10 +1040,12 @@ public:
         int cropW = displayW;
         int cropH = displayH;
    
-        cropX = 0;
-        cropY = 0;
-        cropW = canvasWidth;
-        cropH = canvasHeight;
+        if(is3d) {
+            cropX = 0;
+            cropY = 0;
+            cropW = canvasWidth;
+            cropH = canvasHeight;
+        }
         
         printf("Crop: x=%d, y=%d, w=%d, h=%d\n", cropX, cropY, cropW, cropH);
         
