@@ -45,25 +45,28 @@
             left: 50%;
             transform: translateX(-50%);
             display: flex;
-            gap: 10px;
+            gap: 8px;
             align-items: center;
             z-index: 100;
             background: rgba(0, 0, 0, 0.7);
-            padding: 10px 20px;
+            padding: 10px 15px;
             border-radius: 8px;
             flex-wrap: wrap;
             justify-content: center;
+            max-width: 95vw;
+            box-sizing: border-box;
         }
 
         #controls button {
-            padding: 8px 16px;
-            font-size: 14px;
+            padding: 6px 12px;
+            font-size: 13px;
             cursor: pointer;
             background: #333;
             color: #fff;
             border: 1px solid #555;
             border-radius: 4px;
             transition: background 0.2s;
+            white-space: nowrap;
         }
 
         #controls button:hover {
@@ -75,14 +78,15 @@
         }
 
         #file-label {
-            padding: 8px 16px;
-            font-size: 14px;
+            padding: 6px 12px;
+            font-size: 13px;
             cursor: pointer;
             background: #2196F3;
             color: #fff;
             border: 1px solid #1976D2;
             border-radius: 4px;
             transition: background 0.2s;
+            white-space: nowrap;
         }
 
         #file-label:hover {
@@ -109,8 +113,11 @@
 
         #shader-info {
             color: #aaa;
-            font-size: 12px;
-            margin-left: 10px;
+            font-size: 11px;
+            margin-left: 5px;
+            text-align: center;
+            flex-basis: 100%;
+            order: 99;
         }
 
         /* Shader Editor Modal */
@@ -200,6 +207,8 @@
             resize: vertical;
             line-height: 1.4;
             box-sizing: border-box;
+            z-index: 10000;  
+            position: relative;
         }
 
         #shader-code-textarea:focus {
@@ -572,6 +581,50 @@
             0%, 50% { opacity: 1; }
             51%, 100% { opacity: 0; }
         }
+
+        @media (max-width: 768px) {
+    #controls {
+        max-width: 90vw;
+        flex-wrap: wrap;
+        gap: 5px;
+        padding: 8px 15px;
+    }
+    
+    #model-selector {
+        min-width: 100px;
+        max-width: 150px;
+        font-size: 11px;
+        padding: 6px;
+        flex-shrink: 1;
+    }
+    
+    #shader-info {
+        font-size: 10px;
+        margin-left: 5px;
+        flex-basis: 100%;
+        order: -1;
+    }
+}
+
+@media (max-width: 480px) {
+    #controls {
+        bottom: 5px;
+        padding: 5px 10px;
+        max-width: 95vw;
+    }
+    
+    #model-selector {
+        min-width: 80px;
+        max-width: 120px;
+        font-size: 10px;
+        padding: 4px;
+    }
+    
+    #shader-info {
+        font-size: 9px;
+        margin-left: 0;
+    }
+}
     </style>
 </head>
 <body>
@@ -599,9 +652,65 @@
         </select>
         <button id="shader-editor-btn">✏️ Custom Shader</button>
         <button id="uniforms-btn" title="Uniform Controls">⚙️</button>
-        <span id="shader-info">Double-tap to cycle: <a href="/activity/demo/shaders/index.html" target="_blank">List ES3 Shaders</a></span>
-    </div>
-
+        <span id="shader-info">Double-tap to cycle: <a href="/activity/demo/shaders/index.html" target="_blank">List ES3 Shaders</a></span>        
+        <select id="model-selector" style="padding: 8px; font-size: 12px; background: #333; color: #fff; border: 1px solid #555; border-radius: 4px; cursor: pointer; flex-shrink: 0; min-width: 120px; max-width: 200px;">
+        <option value="">-- Models --</option>
+        <option value="">-- Select 3D Model --</option>
+        <option value="3dstar.mxmod.z">3dstar</option>
+        <option value="bird.mxmod.z">bird</option>
+        <option value="cigar_tube.mxmod.z">cigar_tube</option>
+        <option value="cigar_tunnel.mxmod.z">cigar_tunnel</option>
+        <option value="cone.mxmod.z">cone</option>
+        <option value="cube.mxmod.z">cube</option>
+        <option value="diamond.mxmod.z">diamond</option>
+        <option value="dome.mxmod.z">dome</option>
+        <option value="g_ufo.mxmod.z">g_ufo</option>
+        <option value="glob.mxmod.z">glob</option>
+        <option value="globe.mxmod.z">globe</option>
+        <option value="hour_glass.mxmod.z">hour_glass</option>
+        <option value="hourglass.mxmod.z">hourglass</option>
+        <option value="kaleidoscope.mxmod.z">kaleidoscope</option>
+        <option value="large_cylinder.mxmod.z">large_cylinder</option>
+        <option value="large_hex.mxmod.z">large_hex</option>
+        <option value="large_sphere.mxmod.z">large_sphere</option>
+        <option value="moon.mxmod.z">moon</option>
+        <option value="new_cube6x.mxmod.z">new_cube6x</option>
+        <option value="new_diamond.mxmod.z">new_diamond</option>
+        <option value="object.mxmod.z">object</option>
+        <option value="octahedron.mxmod.z">octahedron</option>
+        <option value="octopus.mxmod.z">octopus</option>
+        <option value="pentagon.mxmod.z">pentagon</option>
+        <option value="pillar.mxmod.z">pillar</option>
+        <option value="prism.mxmod.z">prism</option>
+        <option value="prism_hex.mxmod.z">prism_hex</option>
+        <option value="quad.mxmod.z">quad</option>
+        <option value="saturn.mxmod.z">saturn</option>
+        <option value="scube.mxmod.z">scube</option>
+        <option value="ship.mxmod.z">ship</option>
+        <option value="ship1.mxmod.z">ship1</option>
+        <option value="ship2.mxmod.z">ship2</option>
+        <option value="ship3.mxmod.z">ship3</option>
+        <option value="sky.mxmod.z">sky</option>
+        <option value="skybox1.mxmod.z">skybox1</option>
+        <option value="skybox_cross.mxmod.z">skybox_cross</option>
+        <option value="skybox_hex.mxmod.z">skybox_hex</option>
+        <option value="skybox_pyramid_top.mxmod.z">skybox_pyramid_top</option>
+        <option value="skybox_star.mxmod.z">skybox_star</option>
+        <option value="smooth.mxmod.z">smooth</option>
+        <option value="sphere_pillar.mxmod.z">sphere_pillar</option>
+        <option value="star.mxmod.z">star</option>
+        <option value="star_skybox.mxmod.z">star_skybox</option>
+        <option value="torus.mxmod.z">torus</option>
+        <option value="trapezoid.mxmod.z">trapezoid</option>
+        <option value="tree.mxmod.z">tree</option>
+        <option value="tube.mxmod.z">tube</option>
+        <option value="UFO3.mxmod.z">UFO3</option>
+        <option value="ufo.mxmod.z">ufo</option>
+        <option value="ufo_model.mxmod.z">ufo_model</option>
+        <option value="ufox.mxmod.z">ufox</option>
+        <option value="uv_sphere.mxmod.z">uv_sphere</option>
+        </select>
+        </div>
     <div id="shader-editor-modal">
         <div id="shader-editor-container">
             <div id="shader-editor-header">
@@ -1257,7 +1366,7 @@ void main(void) {
     document.addEventListener('keydown', (e) => {
         if (e.target === shaderCodeTextarea) return;
         const now = Date.now();
-        if (e.key === 's' || e.key === 'S') {
+        if (e.key === 'z' || e.key === 'Z') {
             e.preventDefault();
             saveButton.click();
             return;
@@ -1352,6 +1461,29 @@ void main(void) {
                 }
             }
         }
+
+        const modelSelector = document.getElementById('model-selector');
+        modelSelector.addEventListener('change', (e) => {
+            const selectedModel = e.target.value;
+            if (selectedModel) {
+                loadModel(selectedModel);
+            }
+        });
+
+        function loadModel(modelFile) {
+            console.log('Loading model:', modelFile);
+            if (typeof Module !== 'undefined' && Module.loadModel) {
+                try {
+                    Module.loadModel(modelFile);
+                } catch (error) {
+                    console.error('Error loading model:', error);
+                    alert('Failed to load model: ' + modelFile);
+                }
+            } else {
+                console.log('Module.loadModel not available yet');
+            }
+        }
+
     </script>
 </body>
 </html>

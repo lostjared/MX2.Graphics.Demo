@@ -23,6 +23,7 @@ GPL v3
 #include<cstdint>
 #include<algorithm>
 #include"shaders.hpp"
+#include"model.hpp"
 #define CHECK_GL_ERROR() \
 { GLenum err = glGetError(); \
 if (err != GL_NO_ERROR) \
@@ -36,6 +37,24 @@ struct ShaderInfo {
     const char* name;
     const char* source;
 };
+
+const char *sz3DVertex = R"(#version 300 es
+layout (location = 0) in vec3 position;
+layout (location = 1) in vec3 normal;
+layout (location = 2) in vec2 texCoord;
+
+out vec3 vNormal;
+out vec2 TexCoord;
+
+uniform mat4 mv_matrix;
+uniform mat4 proj_matrix;
+
+void main() {
+    gl_Position = proj_matrix * mv_matrix * vec4(position, 1.0);
+    vNormal = normal;
+    TexCoord = texCoord;
+})";
+
 
 static const std::vector<ShaderInfo> shaderSources = {
     {"Bubble", srcShader1},
@@ -177,6 +196,7 @@ class About : public gl::GLObject {
     int loadingShaderIndex = 0;
     bool loadingComplete = false;
     gl::GLWindow* loadingWin = nullptr;
+    std::unique_ptr<mx::Model> model;
 public:
     About() = default;
     virtual ~About() override {
@@ -254,7 +274,7 @@ public:
 #endif
             
             auto shader = std::make_unique<gl::ShaderProgram>();
-            bool success = shader->loadProgramFromText(gl::vSource, info.source);
+            bool success = shader->loadProgramFromText(sz3DVertex, info.source);
             
 #ifdef __EMSCRIPTEN__
             EM_ASM({
@@ -355,7 +375,7 @@ public:
         canvasWidth = win->w;
         canvasHeight = win->h;
         loadingWin = win;
-        
+        loadModelFile(win->util.getFilePath("data/compressed/diamond.mxmod.z"));
         glViewport(0, 0, canvasWidth, canvasHeight);
         
 #ifdef __EMSCRIPTEN__
@@ -386,6 +406,125 @@ public:
         }
         finishLoading();
 #endif
+    }
+
+    float cameraYaw = 270.0f;   
+    float cameraPitch = 0.0f; 
+    const float cameraRotationSpeed = 5.0f; 
+    bool viewRotationActive = false; 
+    bool oscillateScale = false;
+    float cameraDistance = 0.0f;
+    float movementSpeed = 0.01f;
+
+    void loadModelFile(const std::string &m_file_path) {
+        model.reset(new mx::Model());
+        if(!model->openModel(m_file_path)) {
+            throw mx::Exception("Could not open model: " + m_file_path);
+        }
+    }
+
+    void drawModel(gl::GLWindow *win) {
+        glEnable(GL_DEPTH_TEST);
+        glDepthFunc(GL_LESS);
+        glDepthMask(GL_TRUE);
+        glDisable(GL_CULL_FACE);  
+
+        static float rotation = 0.0f;
+        rotation = fmod(rotation + 0.5f, 360.0f);
+        
+        const Uint8* keystate = SDL_GetKeyboardState(NULL);
+        if (!oscillateScale) {
+
+            if(keystate[SDL_SCANCODE_B]) {
+                movementSpeed += 0.01f;
+                mx::system_out << "acmx2: movement increased: " << movementSpeed << "\n";
+                fflush(stdout);
+            }
+
+            if(keystate[SDL_SCANCODE_N]) {
+                movementSpeed -= 0.01f;
+                mx::system_out << "acmx2: movement decreased: " << movementSpeed << "\n";
+                fflush(stdout);
+            }
+
+            if (keystate[SDL_SCANCODE_EQUALS] || keystate[SDL_SCANCODE_KP_PLUS]) {
+                cameraDistance += movementSpeed;
+                mx::system_out << "acmx2: cameraDistance increased: " << cameraDistance << "\n";
+                fflush(stdout);
+            }
+            if (keystate[SDL_SCANCODE_MINUS] || keystate[SDL_SCANCODE_KP_MINUS]) {
+                cameraDistance -= movementSpeed;
+                mx::system_out << "acmx2: cameraDistance decreased: " << cameraDistance << "\n";
+                fflush(stdout);
+            }
+        }
+        static float t = 0.0f;
+        float oscOffset = 0.0f;
+        if (oscillateScale) {
+            t += 0.016f;
+            oscOffset = 0.3f * std::sin(t);
+        }
+
+        glm::mat4 modelMatrix = glm::mat4(1.0f);
+        glm::vec3 cameraPosBase = glm::vec3(0.0f, 0.0f, 0.0f);
+        glm::vec3 lookDirection;
+    
+        if (!viewRotationActive) {
+            if (keystate[SDL_SCANCODE_W]) {
+                cameraPitch += cameraRotationSpeed * 0.3f;
+                if (cameraPitch > 89.0f) cameraPitch = 89.0f;
+            }
+            if (keystate[SDL_SCANCODE_S]) {
+                cameraPitch -= cameraRotationSpeed * 0.33f;
+                if (cameraPitch < -89.0f) cameraPitch = -89.0;
+            }
+            if (keystate[SDL_SCANCODE_A]) {
+                cameraYaw -= cameraRotationSpeed * 0.3f;
+                cameraYaw = fmod(cameraYaw + 360.0f, 360.0f);
+            }
+            if (keystate[SDL_SCANCODE_D]) {
+                cameraYaw += cameraRotationSpeed * 0.3f;
+                cameraYaw = fmod(cameraYaw, 360.0f);
+            }
+        }
+        if (viewRotationActive) {
+            static float viewRotation = 0.0f;
+            viewRotation = fmod(viewRotation + 0.3f, 360.0f);
+            float lookX = 0.48f * sin(glm::radians(viewRotation));
+            float lookY = 0.48f * sin(glm::radians(viewRotation * 0.7f));
+            float lookZ = 0.48f * cos(glm::radians(viewRotation));
+            lookDirection = glm::vec3(lookX, lookY, lookZ);
+        } else {
+            lookDirection.x = cos(glm::radians(cameraPitch)) * cos(glm::radians(cameraYaw));
+            lookDirection.y = sin(glm::radians(cameraPitch));
+            lookDirection.z = cos(glm::radians(cameraPitch)) * sin(glm::radians(cameraYaw));
+            lookDirection = glm::normalize(lookDirection) * 0.48f;
+        }
+
+        float finalOffset = oscillateScale ? oscOffset : cameraDistance;
+        glm::vec3 cameraPos = cameraPosBase - glm::normalize(lookDirection) * finalOffset;
+        glm::vec3 cameraTarget = cameraPos + lookDirection;
+        glm::vec3 cameraUp = glm::vec3(0.0f, 1.0f, 0.0f);
+        glm::mat4 viewMatrix = glm::lookAt(cameraPos, cameraTarget, cameraUp);
+        glm::mat4 projectionMatrix = glm::perspective(
+            glm::radians(120.0f),
+            static_cast<float>(win->w) / static_cast<float>(win->h),
+            0.01f,
+            1000.0f
+        );
+        glm::mat4 mvMatrix = viewMatrix * modelMatrix;
+        gl::ShaderProgram *activeShader;
+        activeShader = shaders[currentShaderIndex].get();
+        activeShader->setUniform("mv_matrix", mvMatrix);
+        activeShader->setUniform("proj_matrix", projectionMatrix);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, texture);
+        glUniform1i(glGetUniformLocation(activeShader->id(), "textTexture"), 0);
+        model->setShaderProgram(activeShader);    
+        for(auto &m : model->meshes) {
+            m.draw();
+        }
+        glFrontFace(GL_CCW);
     }
   
     void switchShader(size_t index, gl::GLWindow *win) {
@@ -428,7 +567,9 @@ public:
             shaders[currentShaderIndex]->setUniform("uamp", 0.5f);
             shaders[currentShaderIndex]->setUniform("textTexture", 0);
             glActiveTexture(GL_TEXTURE0);
+            model->setShaderProgram(shaders[currentShaderIndex].get());
             sprite.initWithTexture(shaders[currentShaderIndex].get(), texture, displayX, displayY, displayW, displayH);
+
         }
     }
     void nextShader(gl::GLWindow *win) {
@@ -506,7 +647,7 @@ public:
         glBindTexture(GL_TEXTURE_2D, texture);
         update(deltaTime);
         sprite.initSize(canvasWidth, canvasHeight);
-        sprite.draw();
+        drawModel(win);
         if (captureNextFrame) {
             captureNextFrame = false;
             captureFrame();
@@ -894,6 +1035,10 @@ About *about_ptr = nullptr;
 
 #ifdef __EMSCRIPTEN__
 
+    void loadModel(const std::string &info) {
+        about_ptr->loadModelFile("data/compressed/"+info);
+    }
+
     void resizeWeb() {
         if (about_ptr && main_w) {
             int w, h;
@@ -1167,6 +1312,7 @@ About *about_ptr = nullptr;
         emscripten::function("saveImage", &saveImageWeb);
         emscripten::function("resize", &resizeWeb);
         emscripten::function("getIndex", &getIndex);
+        emscripten::function("loadModel", &loadModel);
     };
 
 #endif
