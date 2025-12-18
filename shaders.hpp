@@ -75,7 +75,7 @@ vec2 applyZoomRotation(vec2 uv, vec2 center) {
 vec2 _mx_mirror_dudx = vec2(0.0);
 vec2 _mx_mirror_dudy = vec2(0.0);
 bool _mx_mirror_hasGrad = false;
-
+/*
 vec2 mirrorCoord(vec2 uv) {
     vec2 u = fract(uv);
     vec2 flip = step(vec2(0.5), u);
@@ -85,6 +85,11 @@ vec2 mirrorCoord(vec2 uv) {
     _mx_mirror_dudy = dFdy(uv) * signv;
     _mx_mirror_hasGrad = true;
     return m;
+}*/
+
+vec2 mirrorCoord(vec2 uv) {
+    vec2 m = mod(uv, 2.0);
+    return mix(m, 2.0 - m, step(1.0, m));
 }
 
 vec4 mxTexture(sampler2D tex, vec2 uv) {
