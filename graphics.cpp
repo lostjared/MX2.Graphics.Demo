@@ -313,8 +313,16 @@ public:
             
             auto shader = std::make_unique<gl::ShaderProgram>();
             bool success = shader->loadProgramFromText(sz3DVertex, info.source);
+
+            if(success) {
+                std::cout << "Compiled: " << info.name << " [OK]\n";
+            }
+
             auto shader2 = std::make_unique<gl::ShaderProgram>();
             bool success2 = shader2->loadProgramFromText(gl::vSource, info.source);
+            if(success2) {
+                std::cout << "Compiled: " << info.name << " [OK]\n";
+            }
 #ifdef __EMSCRIPTEN__
             EM_ASM({
                 if (typeof window.addLoadingMessage === 'function') {
@@ -439,20 +447,6 @@ public:
             self->loadNextShader();
         }, this, 50);  
 #else
-        for (const auto& info : shaderSources) {
-            auto shader = std::make_unique<gl::ShaderProgram>();
-            if (shader->loadProgramFromText(sz3DVertex, info.source)) {
-                std::cout << "Compiled: " << info.name << "\n";
-                shader->setSilent(true);
-                shaders.push_back(std::move(shader));
-            }
-            auto shader2 = std::make_unique<gl::ShaderProgram>();
-            if (shader2->loadProgramFromText(gl::vSource, info.source)) {
-                std::cout << "Compiled: " << info.name << "\n";
-                shader2->setSilent(true);
-                shaders2.push_back(std::move(shader2));
-            }
-        }
         finishLoading();
 #endif
     }
