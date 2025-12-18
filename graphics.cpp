@@ -245,12 +245,46 @@ public:
     int getShaderIndex() const { return currentShaderIndex; }
     void setShaderIndex(int index) { currentShaderIndex = index; }
 
+    GLuint createTexture(SDL_Surface *surface, bool flip) {
+        if (!surface) {
+            throw mx::Exception("Surface is null: Unable to load PNG file.");
+        }
+        GLuint texture = 0;
+        glGenTextures(1, &texture);
+        glBindTexture(GL_TEXTURE_2D, texture);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        SDL_Surface *converted = SDL_ConvertSurfaceFormat(surface, SDL_PIXELFORMAT_RGBA32, 0);
+        if(!converted) {
+            glDeleteTextures(1, &texture);
+            throw mx::Exception("Failed to convert surface.");
+        }
+
+        if(flip) {
+            SDL_Surface *flipped = mx::Texture::flipSurface(converted);
+            if (!flipped) {
+                glDeleteTextures(1, &texture);
+                SDL_FreeSurface(converted);
+                glBindTexture(GL_TEXTURE_2D, 0);
+                throw mx::Exception("Failed to flip surface.");
+            }
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, flipped->w, flipped->h, 0, GL_RGBA, GL_UNSIGNED_BYTE, flipped->pixels);
+        } else {
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, converted->w, converted->h, 0, GL_RGBA, GL_UNSIGNED_BYTE, converted->pixels);    
+        }
+        glBindTexture(GL_TEXTURE_2D, 0);
+        SDL_FreeSurface(converted);
+        return texture;
+    }
+
     void loadNewTexture(SDL_Surface *surface, gl::GLWindow *win) {
         if(texture != 0) {
             glDeleteTextures(1, &texture);
             texture = 0;
         }
-        texture = gl::createTexture(surface, true);
+        texture = createTexture(surface, true);
         texWidth = surface->w;
         texHeight = surface->h;
         
@@ -265,7 +299,6 @@ public:
         float canvasAspect = static_cast<float>(canvasWidth) / static_cast<float>(canvasHeight);
         
         if (imgAspect > canvasAspect) {
-            
             displayW = canvasWidth;
             displayH = static_cast<int>(canvasWidth / imgAspect);
             displayX = 0;
