@@ -230,6 +230,7 @@ class About : public gl::GLObject {
     gl::GLWindow* loadingWin = nullptr;
     std::unique_ptr<mx::Model> model;
     bool is3d = false;
+    bool is3d_comp = false;
 public:
     About() = default;
     virtual ~About() override {
@@ -238,7 +239,11 @@ public:
         }
     }
 
+    void set3DMode(bool is3d_m) {
+        is3d_comp = is3d_m;
+    }
     int getShaderIndex() const { return currentShaderIndex; }
+    void setShaderIndex(int index) { currentShaderIndex = index; }
 
     void loadNewTexture(SDL_Surface *surface, gl::GLWindow *win) {
         if(texture != 0) {
@@ -987,7 +992,11 @@ public:
         }
         
         GLuint vertShader = glCreateShader(GL_VERTEX_SHADER);
-        glShaderSource(vertShader, 1, &gl::vSource, nullptr);
+        if(!is3d_comp) {
+            glShaderSource(vertShader, 1, &gl::vSource, nullptr);
+        } else {
+            glShaderSource(vertShader, 1, &sz3DVertex, nullptr);
+        }
         glCompileShader(vertShader);
         
         glGetShaderiv(vertShader, GL_COMPILE_STATUS, &success);
@@ -1019,9 +1028,18 @@ public:
         glDeleteProgram(program);
         
         auto customShader = std::make_unique<gl::ShaderProgram>();
-        if(!customShader->loadProgramFromText(gl::vSource, fragmentSource.c_str())) {
-            return "ERROR: Failed to create shader program.";
+
+        if(!is3d_comp) {
+            if(!customShader->loadProgramFromText(gl::vSource, fragmentSource.c_str())) {
+                return "ERROR: Failed to create shader program.";
+            
+            }
+        } else {
+            if(!customShader->loadProgramFromText(sz3DVertex, fragmentSource.c_str())) {
+                return "ERROR: Failed to create shader program.";
+            }
         }
+
         customShader->setSilent(true);
         
         static bool hasCustomShader = false;
@@ -1206,8 +1224,22 @@ About *about_ptr = nullptr;
 
 #ifdef __EMSCRIPTEN__
 
+    void setShaderIndex(int index) {
+        if(about_ptr) {
+            about_ptr->setShaderIndex(index);
+        }
+    }
+
+    void set3D(bool value) {
+        if(about_ptr) {
+            about_ptr->set3DMode(value);
+        }
+    }
+
     void loadModel(const std::string &info) {
-        about_ptr->loadModelFile("data/compressed/"+info);
+        if(about_ptr) {
+            about_ptr->loadModelFile("data/compressed/"+info);
+        }
     }
 
     void resizeWeb() {
@@ -1484,6 +1516,8 @@ About *about_ptr = nullptr;
         emscripten::function("resize", &resizeWeb);
         emscripten::function("getIndex", &getIndex);
         emscripten::function("loadModel", &loadModel);
+        emscripten::function("setShader3DMode", &set3D);
+        emscripten::function("setShaderIndex", &setShaderIndex);
     };
 
 #endif
