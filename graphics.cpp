@@ -361,16 +361,18 @@ public:
                 if (typeof window.addLoadingMessage === 'function') {
                     var name = UTF8ToString($0);
                     var ok = $1;
-                    if (ok) {
-                        window.addLoadingMessage('    OK: ' + name, 'success');
+                    var ok2 = $2;
+                    if (ok && ok2) {
+                        window.addLoadingMessage('    ✓ ' + name + ' - OK', 'success');
+                    } else if (ok || ok2) {
+                        window.addLoadingMessage('    ⚠ ' + name + ' - Partial', 'info');
                     } else {
-                        window.addLoadingMessage('    FAILED: ' + name, 'error');
+                        window.addLoadingMessage('    ✗ ' + name + ' - FAILED', 'error');
                     }
                 }
-            }, info.name, success ? 1 : 0);
+            }, info.name, success ? 1 : 0, success2 ? 1 : 0);
 #endif
-            
-            if (success) {
+             if (success) {
                 shader->setSilent(true);
                 shaders.push_back(std::move(shader));
             }

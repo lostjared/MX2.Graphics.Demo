@@ -557,6 +557,10 @@
             width: 100%;
         }
 
+        #loading-output span {
+            display: inline;
+        }
+
         #loading-output .success {
             color: #0f0;
         }
@@ -569,17 +573,8 @@
             color: #0ff;
         }
 
-        #loading-cursor {
-            display: inline-block;
-            width: 10px;
-            height: 18px;
-            background-color: #fff;
-            animation: blink 1s step-end infinite;
-        }
-
-        @keyframes blink {
-            0%, 50% { opacity: 1; }
-            51%, 100% { opacity: 0; }
+        #loading-output .normal {
+            color: #fff;
         }
 
         @media (max-width: 768px) {
@@ -1129,23 +1124,30 @@
     </div>
     <script>
         (function() {
-            var content = document.getElementById('loading-content');
-            if (content) {
-                content.innerHTML = '<div class="info">Initializing WebGL...</div>' +
-                                   '<div class="normal">Loading MX2 Graphics Demo...</div>' +
-                                   '<div class="normal"></div>';
+            var output = document.getElementById('loading-output');
+            if (output) {
+                output.innerHTML = '<span class="info">Initializing WebGL...</span>\n' +
+                                   '<span class="normal">Loading MX2 Graphics Demo...</span>\n';
             }
         })();
         
         
         window.addLoadingMessage = function(message, type) {
-            var content = document.getElementById('loading-content');
-            if (content) {
-                var line = document.createElement('div');
-                line.className = type || 'normal';
-                line.textContent = message;
-                content.appendChild(line);
-                content.scrollTop = content.scrollHeight;
+            var output = document.getElementById('loading-output');
+            if (output) {
+                var span = document.createElement('span');
+                span.className = type || 'normal';
+                span.textContent = message;
+                output.appendChild(span);
+                output.appendChild(document.createTextNode('\n'));
+                output.scrollTop = output.scrollHeight;
+            }
+        };
+
+        window.forceLoadingUpdate = function() {
+            var output = document.getElementById('loading-output');
+            if (output) {
+                output.offsetHeight; 
             }
         };
         
@@ -1155,7 +1157,7 @@
                 overlay.style.transition = 'opacity 0.5s';
                 overlay.style.opacity = '0';
                 setTimeout(function() {
-                    overlay.style.display = 'none';
+                    overlay.classList.add('hidden');
                 }, 500);
             }
         };
@@ -1163,9 +1165,26 @@
         window.showLoadingScreen = function() {
             var overlay = document.getElementById('loading-overlay');
             if (overlay) {
-                overlay.style.display = 'flex';
+                overlay.classList.remove('hidden');
                 overlay.style.opacity = '1';
             }
+        };
+
+        // Add shader compilation status
+        window.onShaderCompileStart = function(shaderName) {
+            window.addLoadingMessage('Compiling shader: ' + shaderName + '...', 'info');
+        };
+
+        window.onShaderCompileSuccess = function(shaderName) {
+            window.addLoadingMessage('✓ ' + shaderName + ' compiled successfully', 'success');
+        };
+
+        window.onShaderCompileError = function(shaderName, error) {
+            window.addLoadingMessage('✗ ' + shaderName + ' failed: ' + error, 'error');
+        };
+
+        window.onAllShadersCompiled = function(count) {
+            window.addLoadingMessage('All ' + count + ' shaders compiled!', 'success');
         };
     </script>
     <script>
@@ -1180,7 +1199,7 @@
             }
         };
     </script>
-    <script src="MX_app.js?v=3.600221"></script>
+    <script src="MX_app.js?v=3.7"></script>
     <script>
         const canvas = document.getElementById('canvas');
         const canvasContainer = document.getElementById('canvas-container');
