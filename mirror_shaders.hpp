@@ -27,8 +27,7 @@ void main(void) {
     float aspect = iResolution.x / iResolution.y;
     vec2 ar = vec2(aspect, 1.0);
     vec2 m = (iMouse.z > 0.5) ? (iMouse.xy / iResolution) : vec2(0.5);
-    vec2 uv = 1.0 - abs(1.0 - 2.0 * tc);
-    uv = uv - floor(uv);
+    vec2 uv = safeMirror(tc, textTexture);
     vec2 p2 = (uv - m) * ar;
     float ax = 0.25 * sin(time_f * 0.7);
     float ay = 0.25 * cos(time_f * 0.6);
@@ -178,8 +177,7 @@ vec2 diamondFold(vec2 uv, vec2 c, float aspect) {
 void main(void) {
     vec2 tc = applyZoomRotation(TexCoord, vec2(0.5));
 
-	  vec2 uv = 1.0 - abs(1.0 - 2.0 * tc);
-    uv = uv - floor(uv);     
+    vec2 uv = safeMirror(tc, textTexture);
     vec4 baseTex = mxTexture(textTexture, tc);
     float aspect = iResolution.x / iResolution.y;
     uv.x *= aspect;
@@ -297,8 +295,8 @@ void main(void){
     a=abs(a-stepA*0.5);
     vec2 kdir=vec2(cos(a),sin(a));
     vec2 kaleido=kdir*length(qwrap);
-    kaleido = 1.0 - abs(1.0 - 2.0 * kaleido);
-		 kaleido = fract(kaleido);
+    vec2 km = mod(kaleido, 2.0);
+    kaleido = mix(km, 2.0 - km, step(1.0, km));
     vec2 uv=kaleido/ar+m;
     uv=fract(uv);
     color=mxTexture(textTexture,sin(uv * (PI * pingPong(fract(time_f), 1.0))));
@@ -329,8 +327,7 @@ float pingPong(float x, float length) {
 void main(void) {
     vec2 tc = applyZoomRotation(TexCoord, vec2(0.5));
 
-    vec2 uv = 1.0 - abs(1.0 - 2.0 * tc);
-    uv = uv - floor(uv);     
+    vec2 uv = safeMirror(tc, textTexture);
     float len = length(uv);
     float time_t = pingPong(time_f, 10.0);
     float bubble = smoothstep(0.8, 1.0, 1.0 - len);
@@ -369,8 +366,7 @@ void main(void){
     float U=clamp(uamp,0.0,1.0);
     float time_z=pingPong(time_f,4.0)+0.5;
 
-    vec2 uv = 1.0 - abs(1.0 - 2.0 * tc);
-    uv = uv - floor(uv);     
+    vec2 uv = safeMirror(tc, textTexture);
     vec2 center=(iMouse.z>0.5||iMouse.w>0.5)?(iMouse.xy/iResolution):vec2(0.5);
     vec2 normPos=(uv-center)*vec2(iResolution.x/iResolution.y,1.0);
 
@@ -413,8 +409,7 @@ uniform float uamp;
 void main(void) {
     vec2 tc = applyZoomRotation(TexCoord, vec2(0.5));
 
-    vec2 uv = 1.0 - abs(1.0 - 2.0 * tc);
-    uv = uv - floor(uv);     
+    vec2 uv = safeMirror(tc, textTexture);
     color = mxTexture(textTexture, uv);
     float radius = 1.0;
     vec2 center = iResolution * 0.5;
@@ -474,8 +469,7 @@ vec2 rot(vec2 v,float a){float c=cos(a),s=sin(a);return vec2(c*v.x-s*v.y,s*v.x+c
 void main(void){
     vec2 tc = applyZoomRotation(TexCoord, vec2(0.5));
 
-    vec2 uv = 1.0 - abs(1.0 - 2.0 * tc);
-    uv = uv - floor(uv);
+    vec2 uv = safeMirror(tc, textTexture);
     float a=clamp(amp,0.0,1.0);
     float ua=clamp(uamp,0.0,1.0);
     float t=time_f;
@@ -564,8 +558,7 @@ float pingPong(float x, float length) {
 void main(void) {
     vec2 tc = applyZoomRotation(TexCoord, vec2(0.5));
 
-	  	vec2 uv = 1.0 - abs(1.0 - 2.0 * tc);
-    uv = uv - floor(uv);    
+    vec2 uv = safeMirror(tc, textTexture);
     vec2 normCoord = (uv * 2.0 - 1.0) * vec2(iResolution.x / iResolution.y, 1.0);
     float dist = length(normCoord);
     float maxRippleRadius = 25.0;
@@ -602,8 +595,7 @@ void main(void) {
     vec2 tc = applyZoomRotation(TexCoord, vec2(0.5));
 
 
-    vec2 uv = 1.0 - abs(1.0 - 2.0 * tc);
-    uv = uv - floor(uv);  
+    vec2 uv = safeMirror(tc, textTexture);
 
     float timeVar = time_f * 0.5;
     vec2 noise = vec2(
@@ -658,8 +650,7 @@ void main(void){
     vec2 p0 = vec2(0.15) + h2(t0)*0.7;
     vec2 p1 = vec2(0.15) + h2(t0+1.0)*0.7;
     vec2 center = mix(p0, p1, w);
-    vec2 uv = 1.0 - abs(1.0 - 2.0 * tc);
-    uv = uv - floor(uv);  
+    vec2 uv = safeMirror(tc, textTexture);
     vec2 p = uv - center;
     float r = length(p);
     float ang = atan(p.y, p.x);
@@ -725,9 +716,8 @@ vec2 fractalZoom(vec2 uv, float zoom, float time, vec2 center) {
 void main() {
     vec2 tc = applyZoomRotation(TexCoord, vec2(0.5));
 
-    vec2 uv = 1.0 - abs(1.0 - 2.0 * tc);
-    uv = uv - floor(uv);   
-		 uv = uv * iResolution / vec2(iResolution.y);
+    vec2 uv = safeMirror(tc, textTexture);
+    uv = uv * iResolution / vec2(iResolution.y);
     vec2 m = (iMouse.z > 0.5) ? (iMouse.xy / iResolution) : vec2(0.5);
     vec2 center = m * iResolution / vec2(iResolution.y);
 
@@ -786,8 +776,7 @@ vec4 xor_RGB(vec4 icolor, vec4 source) {
 void main(void) {
     vec2 tc = applyZoomRotation(TexCoord, vec2(0.5));
 
-    vec2 uv = 1.0 - abs(1.0 - 2.0 * tc);
-    uv = uv - floor(uv);
+    vec2 uv = safeMirror(tc, textTexture);
     vec2 warp = uv + vec2(
         sin(uv.y * 10.0 + time_f) * 0.1,
         sin(uv.x * 20.0 + time_f) * 0.1
@@ -828,8 +817,7 @@ void main(void) {
     float loopDuration = 25.0;
     float t = mod(time_f, loopDuration);
     vec2 aspect = vec2(iResolution.x / iResolution.y, 1.0);
-  		vec2 uv = 1.0 - abs(1.0 - 2.0 * tc);
-    uv = uv - floor(uv);
+    vec2 uv = safeMirror(tc, textTexture);
     vec2 nc = (uv * 2.0 - 1.0) * sin(aspect * time_f);
     nc.x = abs(nc.x);
     float d = length(nc);
@@ -923,8 +911,7 @@ void main(void){
     float t = time_f;
 
     vec2 center = vec2(0.5, 0.5);
-			vec2 cv = 1.0 - abs(1.0 - 2.0 * tc);
-    cv = cv - floor(cv);     
+    vec2 cv = safeMirror(tc, textTexture);
     vec2 baseUV = cv;
     vec2 offset = baseUV - center;
     float maxRadius = length(vec2(0.5, 0.5));
@@ -1033,8 +1020,7 @@ float pingPong(float x, float length) {
 void main() {
     vec2 tc = applyZoomRotation(TexCoord, vec2(0.5));
 
-    vec2 uv = 1.0 - abs(1.0 - 2.0 * tc);
-    uv = uv - floor(uv);  
+    vec2 uv = safeMirror(tc, textTexture);
     vec2 centeredUV = uv * 2.0 - 1.0;
     float angle = atan(centeredUV.y, centeredUV.x);
     float radius = length(centeredUV);
@@ -1082,8 +1068,7 @@ void main(void){
     vec2 ar=vec2(aspect,1.0);
     vec2 m=(iMouse.z>0.5)?(iMouse.xy/iResolution):vec2(0.5);
 
-    vec2 cv = 1.0 - abs(1.0 - 2.0 * tc);
-    cv = cv - floor(cv);     
+    vec2 cv = safeMirror(tc, textTexture);
     vec2 p=(cv-m)*ar;
     vec3 v=vec3(p,1.0);
     float ax=0.25*sin(time_f*0.7);
@@ -1144,8 +1129,7 @@ void main(void) {
     vec2 tc = applyZoomRotation(TexCoord, vec2(0.5));
 
     vec2 center = vec2(0.5);
-    vec2 uv = 1.0 - abs(1.0 - 2.0 * tc);
-    uv = uv - floor(uv); 
+    vec2 uv = safeMirror(tc, textTexture);
     uv = uv - center;
     float r = length(uv);
     float t = time_f;
@@ -1198,8 +1182,7 @@ float s2(float x){return x*x*(3.0-2.0*x);}
 void main(void){
     vec2 tc = applyZoomRotation(TexCoord, vec2(0.5));
 
-		 vec2 uv = 1.0 - abs(1.0 - 2.0 * tc);
-    uv = uv - floor(uv);     
+    vec2 uv = safeMirror(tc, textTexture);
     float a = clamp(amp,0.0,1.0);
     float ua = clamp(uamp,0.0,1.0);
 
@@ -1257,8 +1240,7 @@ void main(void)
     vec2 tc = applyZoomRotation(TexCoord, vec2(0.5));
 
 
-		 vec2 uv = 1.0 - abs(1.0 - 2.0 * tc);
-    uv = uv - floor(uv);     
+    vec2 uv = safeMirror(tc, textTexture);
     vec2 normCoord = ((tc.xy / iResolution.xy) * 2.0 - 1.0) * vec2(iResolution.x / iResolution.y, 1.0);
 
     float distanceFromCenter = length(normCoord);
@@ -1298,8 +1280,7 @@ void main(void) {
     vec2 tc = applyZoomRotation(TexCoord, vec2(0.5));
 
     vec2 m = (iMouse.z > 0.5 ? iMouse.xy : 0.5 * iResolution) / iResolution;
-    vec2 uv = 1.0 - abs(1.0 - 2.0 * tc);
-    uv = uv - floor(uv);  
+    vec2 uv = safeMirror(tc, textTexture);
     uv = (uv - m) * vec2(iResolution.x / iResolution.y, 1.0);
     float t = time_f * 0.5;
     float radius = length(uv);
@@ -1344,8 +1325,7 @@ void main(void) {
     vec2 tc = applyZoomRotation(TexCoord, vec2(0.5));
 
     vec2 m = (iMouse.z > 0.5 ? iMouse.xy : 0.5 * iResolution) / iResolution;
-		vec2 uv = 1.0 - abs(1.0 - 2.0 * tc);
-    uv = uv - floor(uv);     
+    vec2 uv = safeMirror(tc, textTexture);
     uv = (uv - m) * vec2(iResolution.x / iResolution.y, 1.0);
     float t = time_f * 0.5;
     float radius = length(uv);
@@ -1413,8 +1393,7 @@ float noise(vec2 p) {
 void main(void) {
     vec2 tc = applyZoomRotation(TexCoord, vec2(0.5));
 
-		 vec2 cv = 1.0 - abs(1.0 - 2.0 * tc);
-    cv = cv - floor(cv);     
+    vec2 cv = safeMirror(tc, textTexture);
     vec2 m = (iMouse.z > 0.5) ? (iMouse.xy / iResolution) : vec2(0.5);
     vec2 uv = (cv - m) * vec2(iResolution.x / iResolution.y, 1.0);
 
@@ -1482,9 +1461,8 @@ void main(void) {
     float speed = 2.0;
 
     float ripple = sin((r / waveLength - time_f * speed) * 6.2831853);
-		 vec2 uv = 1.0 - abs(1.0 - 2.0 * tc);
-    uv = uv - floor(uv);     
-		 uv = uv + dir * ripple * amplitude;
+    vec2 uv = safeMirror(tc, textTexture);
+    uv = uv + dir * ripple * amplitude;
     color = mxTexture(textTexture, uv);
 
     color.rgb = applyColorAdjustments(color.rgb);
@@ -1535,8 +1513,7 @@ void main(void) {
     float rot = dir * modulatedTime;
 
     vec2 center = vec2(0.5) + shift;
-			vec2 uv = 1.0 - abs(1.0 - 2.0 * tc);
-    uv = uv - floor(uv);
+    vec2 uv = safeMirror(tc, textTexture);
     vec2 d = uv - center;
     float ang = atan(d.y, d.x) + rot;
     float r = length(d)/scale;
@@ -1571,8 +1548,7 @@ float pingPong(float x, float length) {
 void main(void) {
     vec2 tc = applyZoomRotation(TexCoord, vec2(0.5));
 
-			vec2 uv = 1.0 - abs(1.0 - 2.0 * tc);
-    uv = uv - floor(uv);
+    vec2 uv = safeMirror(tc, textTexture);
     float angle1 = atan(uv.y - 0.5, uv.x - 0.5);
     float modulatedTime1 = pingPong(time_f, 3.0);
     angle1 += modulatedTime1;
@@ -1614,8 +1590,7 @@ uniform float uamp;
 void main() {
     vec2 tc = applyZoomRotation(TexCoord, vec2(0.5));
 
-		 vec2 uv = 1.0 - abs(1.0 - 2.0 * tc);
-    uv = uv - floor(uv);     
+    vec2 uv = safeMirror(tc, textTexture);
     float angle = atan(uv.y, uv.x);
     float radius = length(uv);
     
@@ -1688,8 +1663,7 @@ void main(void) {
     vec2 tc = applyZoomRotation(TexCoord, vec2(0.5));
 
     vec2 center = vec2(0.5, 0.5);
-    vec2 uv = 1.0 - abs(1.0 - 2.0 * tc);
-    uv = uv - floor(uv);    
+    vec2 uv = safeMirror(tc, textTexture);
     float dist = length(uv);
     float angle = time_f * 2.0 + dist * 5.0;
     float s = sin(angle);
@@ -1730,8 +1704,7 @@ float pingPong(float x, float length) {
 void main(void) {
     vec2 tc = applyZoomRotation(TexCoord, vec2(0.5));
 
-		 vec2 uv = 1.0 - abs(1.0 - 2.0 * tc);
-    uv = uv - floor(uv);    
+    vec2 uv = safeMirror(tc, textTexture);
     float angle = time_f * 0.5;
     float radius = length(uv - 0.5);
     float twist = radius * 5.0;
@@ -1806,8 +1779,7 @@ vec4 enhancedBlur(sampler2D image, vec2 uv, vec2 resolution) {
 void main(void) {
     vec2 tc = applyZoomRotation(TexCoord, vec2(0.5));
 
-    vec2 uv = 1.0 - abs(1.0 - 2.0 * tc);
-    uv = uv - floor(uv);
+    vec2 uv = safeMirror(tc, textTexture);
     uv.x += sin(uv.y * 20.0 + time_f * 2.0) * 0.005;
     uv.y += cos(uv.x * 20.0 + time_f * 2.0) * 0.005;
     vec4 tcolor = enhancedBlur(textTexture, uv, iResolution);
@@ -1850,8 +1822,8 @@ vec2 h2(float n){ return fract(sin(vec2(n, n+1.0))*vec2(43758.5453,22578.1459));
 void main(void){
     vec2 tc = applyZoomRotation(TexCoord, vec2(0.5));
 
-		 vec2 uv = 1.0 - abs(1.0 - 2.0 * tc);
-    uv = uv - floor(uv);     
+    vec2 uv = safeMirror(tc, textTexture);
+    
     float rate = 0.6;
     float t = time_f * rate;
     float t0 = floor(t);
@@ -1906,7 +1878,7 @@ float pingPong(float x, float length) {
 
 void main(void) {
     vec2 tc = applyZoomRotation(TexCoord, vec2(0.5));
-    vec2 uv = mirrorCoord(tc);
+    vec2 uv = safeMirror(tc, textTexture);
     vec2 center = vec2(0.5, 0.5);
     vec2 offset = uv - center;
     float maxRadius = length(vec2(0.5, 0.5));

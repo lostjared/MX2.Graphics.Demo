@@ -256,6 +256,7 @@ public:
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        
         SDL_Surface *converted = SDL_ConvertSurfaceFormat(surface, SDL_PIXELFORMAT_RGBA32, 0);
         if(!converted) {
             glDeleteTextures(1, &texture);
@@ -266,7 +267,6 @@ public:
             SDL_Surface *flipped = mx::Texture::flipSurface(converted);
             if (!flipped) {
                 glDeleteTextures(1, &texture);
-                SDL_FreeSurface(converted);
                 glBindTexture(GL_TEXTURE_2D, 0);
                 throw mx::Exception("Failed to flip surface.");
             }
@@ -274,7 +274,7 @@ public:
         } else {
             glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, converted->w, converted->h, 0, GL_RGBA, GL_UNSIGNED_BYTE, converted->pixels);    
         }
-        glBindTexture(GL_TEXTURE_2D, 0);
+        
         SDL_FreeSurface(converted);
         return texture;
     }
@@ -536,6 +536,12 @@ public:
         gl::ShaderProgram *activeShader = shaders2[currentShaderIndex].get();
         activeShader->setUniform("mv_matrix", glm::mat4(1.0f));
         activeShader->setUniform("proj_matrix", glm::mat4(1.0f));
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, texture);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         sprite.setShader(activeShader);
         sprite.setName("textTexture");
         sprite.draw(texture, displayX, displayY, displayW, displayH);
@@ -638,9 +644,19 @@ public:
         activeShader->setUniform("proj_matrix", projectionMatrix);
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, texture);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         glUniform1i(glGetUniformLocation(activeShader->id(), "textTexture"), 0);
         model->setShaderProgram(activeShader);    
         for(auto &m : model->meshes) {
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, texture);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);    
             m.draw();
         }
         glFrontFace(GL_CCW);
@@ -747,6 +763,15 @@ public:
         if (!loadingComplete) {
             return;
         }
+        if (texture != 0) {
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, texture);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        }
+        
         glDisable(GL_DEPTH_TEST);
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -897,6 +922,19 @@ public:
     int getDisplayWidth() const { return displayW; }
     int getDisplayHeight() const { return displayH; }
 
+    void forceTextureRebind() {
+
+        if (texture != 0) {
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, texture);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            printf("Texture parameters reapplied\n");
+        }
+    }
+
     void resize(gl::GLWindow *win) {
         maxWidth = win->w;
         maxHeight = win->h;
@@ -904,7 +942,7 @@ public:
         canvasHeight = win->h;
         
         glViewport(0, 0, canvasWidth, canvasHeight);
-        
+        forceTextureRebind();
         
         if (texWidth > 0 && texHeight > 0) {
             float imgAspect = static_cast<float>(texWidth) / static_cast<float>(texHeight);
@@ -1233,6 +1271,12 @@ About *about_ptr = nullptr;
         }
     }
 
+    void forceTextureRebindWeb() {
+        if (about_ptr) {
+            about_ptr->forceTextureRebind();
+        }
+    }
+
     void saveImageWeb(int scale) {
         if (about_ptr) {
             about_ptr->saveImage(scale);
@@ -1494,6 +1538,7 @@ About *about_ptr = nullptr;
         emscripten::function("getDisplayHeight", &getDisplayHeightWeb);
         emscripten::function("saveImage", &saveImageWeb);
         emscripten::function("resize", &resizeWeb);
+        emscripten::function("forceTextureRebind", &forceTextureRebindWeb);
         emscripten::function("getIndex", &getIndex);
         emscripten::function("loadModel", &loadModel);
         emscripten::function("setShader3DMode", &set3D);

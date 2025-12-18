@@ -2,6 +2,9 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <title>MX2 - Graphics Demo</title>
     <style>
         body {
@@ -791,6 +794,7 @@
     </style>
 </head>
 <body>
+
     <div id="loading-overlay">
         <div id="loading-title">MX2 Graphics Demo - Initializing...</div>
         <div id="loading-output"></div>
@@ -1190,19 +1194,159 @@
     <script>
       var Module = {
             onRuntimeInitialized: function() {
-                console.log('Module ready, calling resize');
+                console.log('Module ready, calling resize and texture rebind');
+                if (typeof Module.forceTextureRebind === 'function') {
+                    Module.forceTextureRebind();
+                }
                 setTimeout(function() {
                     if (typeof Module.resize === 'function') {
                         Module.resize();
+                    }
+                    if (typeof Module.forceTextureRebind === 'function') {
+                        Module.forceTextureRebind();
                     }
                 }, 100);
             }
         };
     </script>
-    <script src="MX_app.js?v=3.71"></script>
+    <script>
+    (function() {
+        const script = document.createElement('script');
+        script.src = 'MX_app.js?v=' + Date.now();
+        document.head.appendChild(script);
+    })();
+    </script>
     <script>
         const canvas = document.getElementById('canvas');
         const canvasContainer = document.getElementById('canvas-container');
+        
+        // Handle WebGL context loss/restoration to prevent seams on browser reopen
+        canvas.addEventListener('webglcontextlost', (e) => {
+            console.warn('WebGL context lost');
+            e.preventDefault();
+        }, false);
+        
+        canvas.addEventListener('webglcontextrestored', () => {
+            console.log('WebGL context restored - reinitializing');
+            if (typeof Module !== 'undefined' && Module.resize) {
+                // Force reinitialization by triggering resize
+                setTimeout(() => {
+                    Module.resize();
+                    console.log('Context restoration complete');
+                }, 100);
+            }
+        }, false);
+        
+        window.addEventListener('pageshow', (event) => {
+            console.log('pageshow event - persisted:', event.persisted);
+            // Always force rebind on pageshow, regardless of persisted state
+            // This handles browser back/forward and tab reopen
+            setTimeout(() => {
+                if (typeof Module !== 'undefined') {
+                    if (Module.forceTextureRebind) {
+                        Module.forceTextureRebind();
+                        console.log('Texture rebind on pageshow');
+                    }
+                    if (Module.resize) {
+                        Module.resize();
+                    }
+                    // Triple-tap for stubborn browsers
+                    setTimeout(() => {
+                        if (Module.forceTextureRebind) {
+                            Module.forceTextureRebind();
+                        }
+                    }, 100);
+                    setTimeout(() => {
+                        if (Module.forceTextureRebind) {
+                            Module.forceTextureRebind();
+                        }
+                    }, 300);
+                }
+            }, 50);
+        });
+        
+        
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden) {
+                console.log('Tab became visible - forcing complete texture reset');
+                setTimeout(() => {
+                    if (typeof Module !== 'undefined') {
+                        // Force multiple reapplications to override any cached state
+                        if (Module.forceTextureRebind) {
+                            Module.forceTextureRebind();
+                        }
+                        if (Module.resize) {
+                            Module.resize();
+                        }
+                        // Second pass after a delay
+                        setTimeout(() => {
+                            if (Module.forceTextureRebind) {
+                                Module.forceTextureRebind();
+                            }
+                        }, 100);
+                    }
+                }, 50);
+            }
+        });
+        
+        let wasHidden = false;
+        window.addEventListener('blur', () => {
+            wasHidden = true;
+        });
+        
+        window.addEventListener('focus', () => {
+            if (wasHidden) {
+                console.log('Window focused after being hidden - forcing complete texture reset');
+                wasHidden = false;
+                setTimeout(() => {
+                    if (typeof Module !== 'undefined') {
+                        if (Module.forceTextureRebind) {
+                            Module.forceTextureRebind();
+                        }
+                        if (Module.resize) {
+                            Module.resize();
+                        }
+                        
+                        setTimeout(() => {
+                            if (Module.forceTextureRebind) {
+                                Module.forceTextureRebind();
+                            }
+                        }, 100);
+                    }
+                }, 50);
+            }
+        });
+
+        (function forceImmediateRebind() {
+            let attempts = 0;
+            const maxAttempts = 50;
+            const interval = setInterval(() => {
+                attempts++;
+                if (typeof Module !== 'undefined' && Module.forceTextureRebind) {
+                    Module.forceTextureRebind();
+                    console.log('Immediate texture rebind successful');
+                    clearInterval(interval);
+                } else if (attempts >= maxAttempts) {
+                    clearInterval(interval);
+                    console.log('Texture rebind timeout - Module not ready');
+                }
+            }, 50);
+        })();
+        
+        const originalSetStatus = Module.setStatus;
+        Module.setStatus = function(text) {
+            if (originalSetStatus) originalSetStatus(text);
+            if (!text || text === '') {
+                console.log('Module loaded - forcing immediate texture rebind');
+                setTimeout(() => {
+                    if (Module.forceTextureRebind) {
+                        Module.forceTextureRebind();
+                        console.log('Initial texture rebind complete');
+                    }
+                }, 200);
+            }
+        };
+        
         const fileInput = document.getElementById('file-input');
         const prevButton = document.getElementById('prev-shader');
         const nextButton = document.getElementById('next-shader');
@@ -1868,6 +2012,8 @@ void main(void) {
                 console.log('Module.selectShader not available yet');
             }
         });
+
+        
     </script>
 </body>
 </html>

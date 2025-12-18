@@ -92,6 +92,15 @@ vec2 mirrorCoord(vec2 uv) {
     return mix(m, 2.0 - m, step(1.0, m));
 }
 
+// Safe mirror function that avoids seams at boundaries
+vec2 safeMirror(vec2 tc, sampler2D tex) {
+    vec2 m = mod(tc, 2.0);
+    vec2 uv = mix(m, 2.0 - m, step(1.0, m));
+    vec2 ts = vec2(textureSize(tex, 0));
+    vec2 eps = 0.5 / ts;
+    return clamp(uv, eps, 1.0 - eps);
+}
+
 vec4 mxTexture(sampler2D tex, vec2 uv) {
     vec2 ts = vec2(textureSize(tex, 0));
     vec2 eps = 0.5 / ts;
