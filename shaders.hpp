@@ -75,6 +75,7 @@ vec2 applyZoomRotation(vec2 uv, vec2 center) {
 
 inline const char *srcShader1 = R"(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 FragColor;
 in vec2 TexCoord;
 
@@ -100,6 +101,7 @@ void main(void) {
 
 inline const char *srcShader3 = R"(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 
@@ -285,6 +287,7 @@ void main(void) {
 
 inline const char *srcShader4 = R"(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 
@@ -314,6 +317,7 @@ void main(void) {
 
 inline const char *srcShader5 = R"(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 
@@ -359,6 +363,7 @@ void main(void) {
 
 inline const char *srcShader2 = R"(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 uniform sampler2D textTexture;
@@ -535,6 +540,7 @@ void main(void) {
 
 inline const char *szShader = R"(#version 300 es
 precision highp float;
+precision highp int;
 in vec2 TexCoord;
 out vec4 color;
 uniform float time_f;
@@ -570,6 +576,7 @@ void main(void) {
 
 inline const char *szShader2 = R"(#version 300 es
 precision highp float;
+precision highp int;
 in vec2 TexCoord;
 out vec4 color;
 
@@ -608,6 +615,7 @@ void main(void) {
 
 inline const char *szTwist = R"(#version 300 es
 precision highp float;
+precision highp int;
 in vec2 TexCoord;
 out vec4 color;
 uniform sampler2D textTexture;
@@ -640,6 +648,7 @@ void main(void) {
 
 inline const char *szTime = R"(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 
@@ -692,6 +701,7 @@ void main(void){
 
 inline const char *szBend = R"(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 
@@ -727,6 +737,7 @@ void main(void) {
 
 inline const char *szPong = R"(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 
@@ -767,6 +778,7 @@ void main(void){
 
 inline const char *psychWave = R"(#version 300 es
 precision highp float;
+precision highp int;
 in vec2 TexCoord;
 out vec4 color;
 uniform float time_f;
@@ -790,6 +802,7 @@ void main(void)
 
 inline const char *crystalBall = R"(#version 300 es
 precision highp float;
+precision highp int;
 in vec2 TexCoord;
 out vec4 color;
 uniform sampler2D textTexture;
@@ -873,6 +886,7 @@ void main(void) {
 
 inline const char *szZoomMouse = R"(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 
@@ -929,6 +943,7 @@ void main(void){
 
 inline const char *szDrain = R"(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 uniform sampler2D textTexture;
@@ -958,6 +973,7 @@ void main(void) {
 
 inline const char *szUfo = R"(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 
@@ -1004,6 +1020,7 @@ void main(void) {
 
 inline const char *szWave = R"(#version 300 es
 precision highp float;
+precision highp int;
 in vec2 TexCoord;
 out vec4 color;
 uniform float time_f;
@@ -1029,6 +1046,7 @@ void main(void) {
 
 inline const char *szUfoWarp = R"(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 
@@ -1072,6 +1090,7 @@ void main(void) {
 
 inline const char *szByMouse = R"(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 
@@ -1135,6 +1154,7 @@ void main(void) {
 
 inline const char *szDeform = R"(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 uniform sampler2D textTexture;
@@ -1159,6 +1179,7 @@ void main(void) {
 
 inline const char *szGeo = R"(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 uniform sampler2D textTexture;
@@ -1193,6 +1214,7 @@ void main(void) {
 
 inline const char *szSmooth = R"(#version 300 es
 precision highp float;
+precision highp int;
 in vec2 TexCoord;
 out vec4 color;
 uniform sampler2D textTexture;
@@ -1256,6 +1278,7 @@ void main(void) {
 
 inline const char *szHue = R"(#version 300 es
 precision highp float;
+precision highp int;
 in vec2 TexCoord;
 out vec4 color;
 
@@ -1333,6 +1356,7 @@ void main() {
 
 inline const char *szkMouse = R"(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 
@@ -1392,6 +1416,7 @@ void main(void){
 
 inline const char *szDrum = R"(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 uniform sampler2D textTexture;
@@ -1419,6 +1444,7 @@ void main(void) {
 
 inline const char *szColorSwirl = R"(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 
@@ -1460,6 +1486,7 @@ void main(void) {
 
 inline const char *szMouseZoom = R"(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 
@@ -1517,6 +1544,7 @@ void main(void){
 
 inline const char *szRev2 = R"(#version 300 es
 precision highp float;
+precision highp int;
 in vec2 TexCoord;
 uniform sampler2D textTexture;
 uniform float time_f;
@@ -1557,6 +1585,7 @@ void main() {
 
 inline const char *szFish = R"(#version 300 es
 precision highp float;
+precision highp int;
 in vec2 TexCoord;
 out vec4 color;
 uniform sampler2D textTexture;
@@ -1601,6 +1630,7 @@ void main(void){
 
 inline const char *szRipplePrism = R"(#version 300 es
 precision highp float;
+precision highp int;
 in vec2 TexCoord;
 out vec4 color;
 uniform float time_f;
@@ -1649,6 +1679,7 @@ void main(void){
 
 inline const char *szMirrorMouse = R"(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 
@@ -1718,6 +1749,7 @@ void main() {
 
 inline const char *szFracMouse = R"(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 
@@ -1829,6 +1861,7 @@ void main(){
 
 inline const char *szCats = R"(#version 300 es
 precision highp float;
+precision highp int;
 in vec2 TexCoord;
 out vec4 color;
 uniform float time_f;
@@ -1916,6 +1949,7 @@ void main(void) {
 
 inline const char *szColorMouse = R"(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 uniform sampler2D textTexture;
@@ -1969,6 +2003,7 @@ void main(void) {
 
 inline const char *szTwistFull = R"(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 uniform sampler2D textTexture;
@@ -2019,6 +2054,7 @@ void main(void) {
 
 inline const char *szBowlByTime = R"(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 uniform sampler2D textTexture;
@@ -2071,6 +2107,7 @@ void main(void) {
 
 inline const char *szPebble = R"(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 uniform sampler2D textTexture;
@@ -2129,6 +2166,7 @@ void main(void) {
 
 inline const char *szMirrorPutty = R"(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 uniform sampler2D textTexture;
@@ -2198,6 +2236,7 @@ void main(void) {
 
 inline const char *src_frac_shader02_dmdi6i_zoom_xor = R"SHD(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 
@@ -2432,6 +2471,7 @@ void main(void) {
 )SHD";
 inline const char *src_frac_shader02_dmdi6i_zoom_xor_amp = R"SHD(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 
@@ -2685,6 +2725,7 @@ void main(void) {
 )SHD";
 inline const char *src_frac_shader02_dmdXi = R"SHD(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 
@@ -2814,6 +2855,7 @@ void main(void){
 )SHD";
 inline const char *src_frac_shader02_dmdXi_amp = R"SHD(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 
@@ -3008,6 +3050,7 @@ void main(void){
 )SHD";
 inline const char *src_frac_shader02_dmdXi2 = R"SHD(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 
@@ -3137,6 +3180,7 @@ void main(void){
 )SHD";
 inline const char *src_frac_shader02_dmdXi3 = R"SHD(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 
@@ -3267,6 +3311,7 @@ void main(void){
 )SHD";
 inline const char *src_frac_shader02_dmdXi3_drain = R"SHD(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 
@@ -3436,6 +3481,7 @@ void main(void){
 )SHD";
 inline const char *src_frac_shader02_dmdXi3_warp = R"SHD(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 
@@ -3598,6 +3644,7 @@ void main(void){
 )SHD";
 inline const char *src_frac_shader02_dmdXi4 = R"SHD(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 
@@ -3767,6 +3814,7 @@ void main(void){
 )SHD";
 inline const char *src_frac_shader02_dmdXi5 = R"SHD(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 
@@ -4029,6 +4077,7 @@ void main(void){
 )SHD";
 inline const char *src_frac_shader02_prisim = R"SHD(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 
@@ -4223,6 +4272,7 @@ void main(void){
 )SHD";
 inline const char *src_frac_shader03_size = R"SHD(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 
@@ -4414,6 +4464,7 @@ void main(){
 )SHD";
 inline const char *src_frac_shader03_wormhole = R"SHD(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 
@@ -4613,6 +4664,7 @@ void main(void) {
 )SHD";
 inline const char *src_frac_shader03_wormhole_amp = R"SHD(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 
@@ -4878,6 +4930,7 @@ void main(void) {
 )SHD";
 inline const char *src_frac_shader03_wormhole2 = R"SHD(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 
@@ -5083,6 +5136,7 @@ void main(void) {
 )SHD";
 inline const char *src_frac_shader03_wormhole3 = R"SHD(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 
@@ -5276,6 +5330,7 @@ void main(void) {
 )SHD";
 inline const char *src_frac_shader03_wormhole4 = R"SHD(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 
@@ -5478,6 +5533,7 @@ void main(void) {
 )SHD";
 inline const char *src_frac_shader04_echo = R"SHD(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 
@@ -5623,6 +5679,7 @@ void main(void){
 )SHD";
 inline const char *src_frac_shader04_echo2 = R"SHD(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 
@@ -5772,6 +5829,7 @@ void main(void){
 )SHD";
 inline const char *src_frac_shader04_echo3_spin = R"SHD(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 
@@ -5924,6 +5982,7 @@ void main(void){
 )SHD";
 inline const char *src_frac_shader04_grid = R"SHD(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 
@@ -6067,6 +6126,7 @@ void main(){
 )SHD";
 inline const char *src_frac_shader04_julia = R"SHD(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 
@@ -6237,6 +6297,7 @@ void main(){
 )SHD";
 inline const char *src_frac_shader05 = R"SHD(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 
@@ -6319,6 +6380,7 @@ void main(){
 )SHD";
 inline const char *src_frac_star1 = R"SHD(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 
@@ -6454,6 +6516,7 @@ void main(){
 )SHD";
 inline const char *src_frac_zoom1 = R"SHD(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 
@@ -6655,6 +6718,7 @@ void main(void) {
 )SHD";
 inline const char *src_frac_zoom2 = R"SHD(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 
@@ -6870,6 +6934,7 @@ void main(void) {
 )SHD";
 inline const char *src_frac_zoom3 = R"SHD(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 
@@ -7085,6 +7150,7 @@ void main(void) {
 )SHD";
 inline const char *src_frac_zoom4 = R"SHD(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 
@@ -7298,6 +7364,7 @@ void main(void) {
 )SHD";
 inline const char *src_frac_zoom5 = R"SHD(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 
@@ -7501,6 +7568,7 @@ void main(void) {
 )SHD";
 inline const char *src_frac_zoom6 = R"SHD(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 
@@ -7709,6 +7777,7 @@ void main(void) {
 )SHD";
 inline const char *src_frac_zoom7 = R"SHD(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 
@@ -7879,6 +7948,7 @@ void main(void) {
 )SHD";
 inline const char *src_frac_shader01 = R"SHD(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 
@@ -8018,6 +8088,7 @@ void main(){
 )SHD";
 inline const char *src_frac_shader01_dark = R"SHD(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 
@@ -8240,6 +8311,7 @@ void main(){
 )SHD";
 inline const char *src_frac_shader01_smooth = R"SHD(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 
@@ -8461,6 +8533,7 @@ void main(){
 )SHD";
 inline const char *src_frac_shader01_smooth_neon = R"SHD(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 
@@ -8706,6 +8779,7 @@ void main(){
 )SHD";
 inline const char *src_frac_shader02_dmd = R"SHD(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 
@@ -8870,6 +8944,7 @@ void main(){
 )SHD";
 inline const char *src_frac_shader02_dmd_mandella = R"SHD(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 
@@ -9231,6 +9306,7 @@ void main(void) {
 )SHD";
 inline const char *src_frac_shader02_dmd2 = R"SHD(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 
@@ -9400,6 +9476,7 @@ void main(void) {
 )SHD";
 inline const char *src_frac_shader02_dmd2_amp = R"SHD(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 
@@ -9638,6 +9715,7 @@ void main(void) {
 )SHD";
 inline const char *src_frac_shader02_dmd3 = R"SHD(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 
@@ -9807,6 +9885,7 @@ void main(void) {
 )SHD";
 inline const char *src_frac_shader02_dmd4 = R"SHD(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 
@@ -9977,6 +10056,7 @@ void main(void) {
 )SHD";
 inline const char *src_frac_shader02_dmd5 = R"SHD(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 
@@ -10149,6 +10229,7 @@ void main(void) {
 )SHD";
 inline const char *src_frac_shader02_dmd6i = R"SHD(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 
@@ -10320,6 +10401,7 @@ void main(void) {
 )SHD";
 inline const char *src_frac_shader02_dmd6i_air = R"SHD(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 
@@ -10605,6 +10687,7 @@ void main(void) {
 )SHD";
 inline const char *src_frac_shader02_dmd6i_air_twist = R"SHD(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 
@@ -10912,6 +10995,7 @@ void main(void) {
 )SHD";
 inline const char *src_frac_shader02_dmd6i_amp = R"SHD(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 
@@ -11120,6 +11204,7 @@ void main(void) {
 )SHD";
 inline const char *src_frac_shader02_dmd6i_bowl = R"SHD(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 
@@ -11398,6 +11483,7 @@ void main(void){
 )SHD";
 inline const char *src_frac_shader02_dmd6i_bubble = R"SHD(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 
@@ -11630,6 +11716,7 @@ void main(void) {
 )SHD";
 inline const char *src_frac_shader02_dmd6i_neon = R"SHD(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 
@@ -11838,6 +11925,7 @@ void main(void) {
 )SHD";
 inline const char *src_frac_shader02_dmd6i1 = R"SHD(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 
@@ -12009,6 +12097,7 @@ void main(void) {
 )SHD";
 inline const char *src_frac_shader02_dmd7i = R"SHD(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 
@@ -12180,6 +12269,7 @@ void main(void) {
 )SHD";
 inline const char *src_frac_shader02_dmd8i = R"SHD(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 
@@ -12351,6 +12441,7 @@ void main(void) {
 )SHD";
 inline const char *src_frac_shader02_dmd9i = R"SHD(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 
@@ -12522,6 +12613,7 @@ void main(void) {
 )SHD";
 inline const char *src_frac_shader02_dmdi_radial = R"SHD(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 
@@ -12728,6 +12820,7 @@ void main(void) {
 )SHD";
 inline const char *src_frac_shader02_dmdi6i_zoom = R"SHD(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 
@@ -12928,6 +13021,7 @@ void main(void) {
 
 inline const char *color_shader02 = R"(#version 300 es
 precision highp float;
+precision highp int;
 in vec2 TexCoord;
 out vec4 color;
 
@@ -13052,6 +13146,7 @@ void main(void) {
 
 inline const char *mirror_ufo_wrap = R"SHD1(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 uniform sampler2D textTexture;
@@ -13102,6 +13197,7 @@ void main(void) {
 
 inline const char *mirror_wrap_dmd6i = R"SHD1(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 uniform sampler2D textTexture;
@@ -13282,6 +13378,7 @@ void main(void) {
 
 inline const char *mirror_zoom = R"SHD1(#version 300 es
 precision highp float;
+precision highp int;
 
 out vec4 color;
 in vec2 TexCoord;
@@ -13353,6 +13450,7 @@ void main(void){
 
 inline const char *mirror_bubble = R"SHD1(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 uniform sampler2D textTexture;
@@ -13389,6 +13487,7 @@ void main(void) {
 
 inline const char *mirror_geometric = R"SHD1(#version 300 es
 precision highp float;
+precision highp int;
 in vec2 TexCoord;
 out vec4 color;
 uniform float time_f;
@@ -13440,6 +13539,7 @@ void main(void){
 
 inline const char *mirror_prism = R"SHD1(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 uniform sampler2D textTexture;
@@ -13496,6 +13596,7 @@ void main(void) {
 
 inline const char *mirror_airshader1 = R"SHD1(#version 300 es
 precision highp float;
+precision highp int;
 in vec2 TexCoord;
 out vec4 color;
 uniform sampler2D textTexture;
@@ -13584,6 +13685,7 @@ void main(void){
 
 inline const char *mirror_pebble = R"SHD1(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 uniform sampler2D textTexture;
@@ -13620,6 +13722,7 @@ void main(void) {
 
 inline const char *mirror_putty = R"SHD1(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 uniform sampler2D textTexture;
@@ -13665,6 +13768,7 @@ void main(void) {
 
 inline const char *mirror_bowl_by_time = R"SHD1(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 uniform sampler2D textTexture;
@@ -13716,6 +13820,7 @@ void main(void){
 
 inline const char *mirror_comb_mouse = R"SHD1(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 uniform sampler2D textTexture;
@@ -13790,6 +13895,7 @@ void main() {
 
 inline const char *mirror_grad = R"SHD1(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 uniform sampler2D textTexture;
@@ -13845,6 +13951,7 @@ void main(void) {
 
 inline const char *mirror_mandella = R"SHD1(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 uniform sampler2D textTexture;
@@ -13928,6 +14035,7 @@ void main(void) {
 
 inline const char *mirror_air_bowl = R"SHD1(#version 300 es
 precision highp float;
+precision highp int;
 in vec2 TexCoord;
 out vec4 color;
 uniform sampler2D textTexture;
@@ -14044,6 +14152,7 @@ void main(void){
 
 inline const char *mirror_sin_osc = R"SHD1(#version 300 es
 precision highp float;
+precision highp int;
 in vec2 TexCoord;
 uniform sampler2D textTexture;
 uniform float time_f;
@@ -14090,6 +14199,7 @@ void main() {
 
 inline const char *mirror_bubble_zoom_mouse = R"SHD1(#version 300 es
 precision highp float;
+precision highp int;
 
 out vec4 color;
 in vec2 TexCoord;
@@ -14154,6 +14264,7 @@ void main(void){
 
 inline const char *mirror_goofy = R"SHD1(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 uniform sampler2D textTexture;
@@ -14210,6 +14321,7 @@ void main(void) {
 
 inline const char *mirror_twist_gpt = R"SHD1(#version 300 es
 precision highp float;
+precision highp int;
 in vec2 TexCoord;
 out vec4 color;
 
@@ -14270,6 +14382,7 @@ void main(void){
 
 inline const char *mirror_psyce_wave_all = R"SHD1(#version 300 es
 precision highp float;
+precision highp int;
 in vec2 TexCoord;
 out vec4 color;
 uniform float time_f;
@@ -14303,6 +14416,7 @@ void main(void)
 
 inline const char *mirror_color_swirl = R"SHD1(#version 300 es
 precision highp float;
+precision highp int;
 
 out vec4 color;
 in vec2 TexCoord;
@@ -14348,6 +14462,7 @@ void main(void) {
 
 inline const char *mirror_color_o1 = R"SHD1(#version 300 es
 precision highp float;
+precision highp int;
 
 out vec4 color;
 in vec2 TexCoord;
@@ -14392,6 +14507,7 @@ void main(void) {
 
 inline const char *color_o1 = R"SHD1(#version 300 es
 precision highp float;
+precision highp int;
 uniform sampler2D textTexture;
 uniform vec2 iResolution;
 uniform float time_f;
@@ -14405,6 +14521,7 @@ uniform float uamp;
 
 inline const char *mirror_color_mouse = R"SHD1(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 uniform sampler2D textTexture;
@@ -14481,6 +14598,7 @@ void main(void) {
 
 inline const char *mirror_swirly = R"SHD1(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 uniform sampler2D textTexture;
@@ -14516,6 +14634,7 @@ void main(void) {
 
 inline const char *mirror_pong2 = R"SHD1(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 uniform sampler2D textTexture;
@@ -14573,6 +14692,7 @@ void main(void) {
 
 inline const char *mirror_pong = R"SHD1(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 uniform sampler2D textTexture;
@@ -14620,6 +14740,7 @@ void main(void) {
 
 inline const char *mirror_spiral_aura = R"SHD1(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 uniform sampler2D textTexture;
@@ -14656,6 +14777,7 @@ void main() {
 
 inline const char *spiral_aura = R"SHD1(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 uniform sampler2D textTexture;
@@ -14691,6 +14813,7 @@ void main() {
 
 inline const char *mirror_center = R"SHD1(#version 300 es
 precision highp float;
+precision highp int;
 in vec2 TexCoord;
 out vec4 color;
 uniform sampler2D textTexture;
@@ -14728,6 +14851,7 @@ void main(void) {
 
 inline const char *mirror_twisted = R"SHD1(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 uniform sampler2D textTexture;
@@ -14771,6 +14895,7 @@ void main(void) {
 
 inline const char *mirror_gpt = R"SHD1(#version 300 es
 precision highp float;
+precision highp int;
 in vec2 TexCoord;
 out vec4 color;
 uniform sampler2D textTexture;
@@ -14843,6 +14968,7 @@ void main(void) {
 
 inline const char *mirror_bowl = R"SHD1(#version 300 es
 precision highp float;
+precision highp int;
 out vec4 color;
 in vec2 TexCoord;
 uniform sampler2D textTexture;
@@ -14901,6 +15027,7 @@ void main(void){
 
 inline const char *mirror_atan = R"SHD1(#version 300 es
 precision highp float;
+precision highp int;
 
 out vec4 color;
 in vec2 TexCoord;
