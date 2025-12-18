@@ -22,7 +22,7 @@ GPL v3
 #include<vector>
 #include<cstdint>
 #include<algorithm>
-#include"shaders.hpp"
+#include"mirror_shaders.hpp"
 #include"model.hpp"
 #define CHECK_GL_ERROR() \
 { GLenum err = glGetError(); \
@@ -442,11 +442,13 @@ public:
         for (const auto& info : shaderSources) {
             auto shader = std::make_unique<gl::ShaderProgram>();
             if (shader->loadProgramFromText(sz3DVertex, info.source)) {
+                std::cout << "Compiled: " << info.name << "\n";
                 shader->setSilent(true);
                 shaders.push_back(std::move(shader));
             }
             auto shader2 = std::make_unique<gl::ShaderProgram>();
             if (shader2->loadProgramFromText(gl::vSource, info.source)) {
+                std::cout << "Compiled: " << info.name << "\n";
                 shader2->setSilent(true);
                 shaders2.push_back(std::move(shader2));
             }
@@ -976,72 +978,17 @@ public:
 
 
     std::string compileCustomShader(const std::string &fragmentSource, gl::GLWindow *win) {
-        GLuint fragShader = glCreateShader(GL_FRAGMENT_SHADER);
-        const char *src = fragmentSource.c_str();
-        glShaderSource(fragShader, 1, &src, nullptr);
-        glCompileShader(fragShader);
-        
-        GLint success;
-        glGetShaderiv(fragShader, GL_COMPILE_STATUS, &success);
-        
-        if (!success) {
-            GLchar infoLog[1024];
-            glGetShaderInfoLog(fragShader, 1024, nullptr, infoLog);
-            glDeleteShader(fragShader);
-            return std::string("ERROR: Fragment shader compilation failed:\n") + infoLog;
-        }
-        
-        GLuint vertShader = glCreateShader(GL_VERTEX_SHADER);
-        if(!is3d_comp) {
-            glShaderSource(vertShader, 1, &gl::vSource, nullptr);
-        } else {
-            glShaderSource(vertShader, 1, &sz3DVertex, nullptr);
-        }
-        glCompileShader(vertShader);
-        
-        glGetShaderiv(vertShader, GL_COMPILE_STATUS, &success);
-        if (!success) {
-            GLchar infoLog[1024];
-            glGetShaderInfoLog(vertShader, 1024, nullptr, infoLog);
-            glDeleteShader(fragShader);
-            glDeleteShader(vertShader);
-            return std::string("ERROR: Vertex shader compilation failed:\n") + infoLog;
-        }
-        
-        GLuint program = glCreateProgram();
-        glAttachShader(program, vertShader);
-        glAttachShader(program, fragShader);
-        glLinkProgram(program);
-        
-        glGetProgramiv(program, GL_LINK_STATUS, &success);
-        if (!success) {
-            GLchar infoLog[1024];
-            glGetProgramInfoLog(program, 1024, nullptr, infoLog);
-            glDeleteShader(fragShader);
-            glDeleteShader(vertShader);
-            glDeleteProgram(program);
-            return std::string("ERROR: Shader program linking failed:\n") + infoLog;
-        }
-        
-        glDeleteShader(fragShader);
-        glDeleteShader(vertShader);
-        glDeleteProgram(program);
-        
         auto customShader = std::make_unique<gl::ShaderProgram>();
-
         if(!is3d_comp) {
             if(!customShader->loadProgramFromText(gl::vSource, fragmentSource.c_str())) {
                 return "ERROR: Failed to create shader program.";
-            
             }
         } else {
             if(!customShader->loadProgramFromText(sz3DVertex, fragmentSource.c_str())) {
                 return "ERROR: Failed to create shader program.";
             }
         }
-
         customShader->setSilent(true);
-        
         static bool hasCustomShader = false;
         if(hasCustomShader && !shaders.empty()) {
             shaders.back() = std::move(customShader);
