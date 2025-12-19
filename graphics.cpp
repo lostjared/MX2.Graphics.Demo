@@ -191,6 +191,7 @@ class About : public gl::GLObject {
     float animation = 0.0f;
     std::vector<std::unique_ptr<gl::ShaderProgram>> shaders;
     std::vector<std::unique_ptr<gl::ShaderProgram>> shaders2;
+    std::vector<std::string> shader_names;
     size_t currentShaderIndex = 0;
     Uint32 firstTapTime = 0;
     bool firstTapRegistered = false;
@@ -244,6 +245,12 @@ public:
     }
     int getShaderIndex() const { return currentShaderIndex; }
     void setShaderIndex(int index) { currentShaderIndex = index; }
+    int getShaderCount() { return static_cast<int>(shader_names.size());  }
+    std::string getShaderNameAt(int index) {
+        if(index >= 0 && index < shader_names.size())
+            return shader_names[index];
+        return "";
+    }
 
     GLuint createTexture(SDL_Surface *surface, bool flip) {
         if (!surface) {
@@ -349,13 +356,16 @@ public:
 
             if(success) {
                 std::cout << "Compiled: " << info.name << " [OK]\n";
-            }
+            } 
 
             auto shader2 = std::make_unique<gl::ShaderProgram>();
             bool success2 = shader2->loadProgramFromText(gl::vSource, info.source);
             if(success2) {
                 std::cout << "Compiled: " << info.name << " [OK]\n";
             }
+
+
+
 #ifdef __EMSCRIPTEN__
             EM_ASM({
                 if (typeof window.addLoadingMessage === 'function') {
@@ -372,15 +382,21 @@ public:
                 }
             }, info.name, success ? 1 : 0, success2 ? 1 : 0);
 #endif
-             if (success) {
-                shader->setSilent(true);
-                shaders.push_back(std::move(shader));
-            }
-            if(success2) {
-                shader2->setSilent(true);
-                shaders2.push_back(std::move(shader2));
-            }
-            loadingShaderIndex++;
+
+            if(success && success2) {
+                if (success) {
+                    shader->setSilent(true);
+                    shaders.push_back(std::move(shader));
+                    
+                }
+                if(success2) {
+                    shader2->setSilent(true);
+                    shaders2.push_back(std::move(shader2));
+                }
+
+                shader_names.push_back(info.name);
+                loadingShaderIndex++;
+        }
             
             
 #ifdef __EMSCRIPTEN__
@@ -407,6 +423,9 @@ public:
                 window.addLoadingMessage('Compiled ' + $0 + ' shaders successfully!', 'success');
                 window.addLoadingMessage(' ', 'normal');
                 window.addLoadingMessage('Loading texture...', 'info');
+            }
+            if (typeof window.onAllShadersCompiled === 'function') {
+                window.onAllShadersCompiled($0);
             }
         }, (int)shaders.size());
 #endif
@@ -1353,6 +1372,20 @@ About *about_ptr = nullptr;
         return "ERROR: Application not initialized";
     }
 
+    std::string getShaderNameAt(int i) {
+        if(about_ptr) {
+            return about_ptr->getShaderNameAt(i);
+        }
+        return "";
+    }
+
+    int getShaderCount() {
+        if(about_ptr) {
+            return about_ptr->getShaderCount();
+        }
+        return 0;
+    }
+
     void resetToDefaultShaderWeb() {
         if(about_ptr && main_w) {
             about_ptr->resetToDefaultShader(main_w);
@@ -1545,6 +1578,8 @@ About *about_ptr = nullptr;
         emscripten::function("loadModel", &loadModel);
         emscripten::function("setShader3DMode", &set3D);
         emscripten::function("setShaderIndex", &setShaderIndex);
+        emscripten::function("getShaderCount", &getShaderCount);
+        emscripten::function("getShaderNameAt", &getShaderNameAt);
     };
 
 #endif
