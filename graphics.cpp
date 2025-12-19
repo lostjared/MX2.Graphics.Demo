@@ -704,6 +704,7 @@ public:
                 shaders[currentShaderIndex]->setUniform("textTexture", 0);
                 glActiveTexture(GL_TEXTURE0);
                 model->setShaderProgram(shaders[currentShaderIndex].get());
+                forceTextureRebind();
                 sprite.initWithTexture(shaders[currentShaderIndex].get(), texture, displayX, displayY, displayW, displayH);
             } else  {
                 shaders2[currentShaderIndex]->useProgram();
@@ -965,6 +966,7 @@ public:
             
             sprite.initSize(canvasWidth, canvasHeight);
             switchShader(currentShaderIndex, win);
+            forceTextureRebind();
         }
     }
 
