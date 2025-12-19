@@ -1109,8 +1109,6 @@
     <script>
         const canvas = document.getElementById('canvas');
         const canvasContainer = document.getElementById('canvas-container');
-        
-        // Handle WebGL context loss/restoration to prevent seams on browser reopen
         canvas.addEventListener('webglcontextlost', (e) => {
             console.warn('WebGL context lost');
             e.preventDefault();
@@ -1119,7 +1117,6 @@
         canvas.addEventListener('webglcontextrestored', () => {
             console.log('WebGL context restored - reinitializing');
             if (typeof Module !== 'undefined' && Module.resize) {
-                // Force reinitialization by triggering resize
                 setTimeout(() => {
                     Module.resize();
                     console.log('Context restoration complete');
@@ -1129,8 +1126,6 @@
         
         window.addEventListener('pageshow', (event) => {
             console.log('pageshow event - persisted:', event.persisted);
-            // Always force rebind on pageshow, regardless of persisted state
-            // This handles browser back/forward and tab reopen
             setTimeout(() => {
                 if (typeof Module !== 'undefined') {
                     if (Module.forceTextureRebind) {
@@ -1140,7 +1135,6 @@
                     if (Module.resize) {
                         Module.resize();
                     }
-                    // Triple-tap for stubborn browsers
                     setTimeout(() => {
                         if (Module.forceTextureRebind) {
                             Module.forceTextureRebind();
@@ -1161,14 +1155,12 @@
                 console.log('Tab became visible - forcing complete texture reset');
                 setTimeout(() => {
                     if (typeof Module !== 'undefined') {
-                        // Force multiple reapplications to override any cached state
                         if (Module.forceTextureRebind) {
                             Module.forceTextureRebind();
                         }
                         if (Module.resize) {
                             Module.resize();
                         }
-                        // Second pass after a delay
                         setTimeout(() => {
                             if (Module.forceTextureRebind) {
                                 Module.forceTextureRebind();
@@ -1740,7 +1732,7 @@ void main(void) {
         }
     });
 
-    // Also update the keyboard handler to sync the select
+    
     document.addEventListener('keydown', (e) => {
         if (e.target === shaderCodeTextarea) return;
         const now = Date.now();
@@ -1773,7 +1765,7 @@ void main(void) {
         }
     });
 
-        // Uniforms control panel
+    
         const updateUniformsDisplay = () => {
             if (typeof Module === 'undefined') return;
             
