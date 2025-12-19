@@ -395,8 +395,8 @@ public:
                 }
 
                 shader_names.push_back(info.name);
-                loadingShaderIndex++;
         }
+        loadingShaderIndex++;
             
             
 #ifdef __EMSCRIPTEN__
@@ -1070,22 +1070,24 @@ public:
 
 
     std::string compileCustomShader(const std::string &fragmentSource, gl::GLWindow *win) {
-        auto customShader = std::make_unique<gl::ShaderProgram>();
-        if(!is3d_comp) {
-            if(!customShader->loadProgramFromText(gl::vSource, fragmentSource.c_str())) {
-                return "ERROR: Failed to create shader program.";
-            }
-        } else {
-            if(!customShader->loadProgramFromText(sz3DVertex, fragmentSource.c_str())) {
-                return "ERROR: Failed to create shader program.";
-            }
+        auto customShader1 = std::make_unique<gl::ShaderProgram>();
+        auto customShader2 = std::make_unique<gl::ShaderProgram>();
+        if(!customShader1->loadProgramFromText(sz3DVertex, fragmentSource.c_str())) {
+            return "ERROR: Failed to create shader program.";
         }
-        customShader->setSilent(true);
+        if(!customShader2->loadProgramFromText(gl::vSource, fragmentSource.c_str())) {
+            return "ERROR: Failed to create shader program.";
+        }
+        
+        customShader1->setSilent(true);
+        customShader2->setSilent(true);
         static bool hasCustomShader = false;
-        if(hasCustomShader && !shaders.empty()) {
-            shaders.back() = std::move(customShader);
+        if(hasCustomShader && !shaders.empty() && !shaders2.empty()) {
+            shaders.back() = std::move(customShader1);
+            shaders2.back() = std::move(customShader2);
         } else {
-            shaders.push_back(std::move(customShader));
+            shaders.push_back(std::move(customShader1));
+            shaders2.push_back(std::move(customShader2));
             hasCustomShader = true;
         }   
         currentShaderIndex = shaders.size() - 1;
