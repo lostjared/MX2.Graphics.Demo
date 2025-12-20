@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ACMX2 Graphics Demo v1.0 Release</title>
+    <style>
+              * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #f0f0f0;
+            background: linear-gradient(135deg, #1a1a1a 0%, #2d0000 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: #0d0d0d;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+            overflow: hidden;
+            border: 1px solid #330000;
+        }
+
+        header {
+            background: linear-gradient(135deg, #cc0000 0%, #660000 100%);
+            color: white;
+            padding: 50px 20px;
+            text-align: center;
+        }
+
+        header h1 {
+            font-size: 3em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+        }
+
+        header p {
+            font-size: 1.2em;
+            opacity: 0.95;
+        }
+
+        .content {
+            padding: 40px;
+        }
+
+        h2 {
+            color: #ff4444;
+            margin-top: 40px;
+            margin-bottom: 20px;
+            border-bottom: 3px solid #cc0000;
+            padding-bottom: 10px;
+        }
+
+        h2:first-of-type {
+            margin-top: 0;
+        }
+
+        h3 {
+            color: #ff6666;
+            margin-top: 25px;
+            margin-bottom: 15px;
+        }
+
+        p {
+            margin-bottom: 15px;
+            text-align: justify;
+            color: #e0e0e0;
+        }
+
+        ul, ol {
+            margin-left: 30px;
+            margin-bottom: 15px;
+        }
+
+        li {
+            margin-bottom: 10px;
+            color: #e0e0e0;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            background: #1a1a1a;
+        }
+
+        table th {
+            background: #cc0000;
+            color: white;
+            padding: 12px;
+            text-align: left;
+        }
+
+        table td {
+            padding: 12px;
+            border-bottom: 1px solid #333333;
+            color: #e0e0e0;
+        }
+
+        table tr:hover {
+            background: #262626;
+        }
+
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+            margin: 30px 0;
+        }
+
+        .feature-box {
+            background: linear-gradient(135deg, #cc0000 0%, #660000 100%);
+            color: white;
+            padding: 25px;
+            border-radius: 8px;
+            box-shadow: 0 5px 15px rgba(204, 0, 0, 0.3);
+            transition: transform 0.3s ease;
+            border: 1px solid #990000;
+        }
+
+        .feature-box:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px rgba(204, 0, 0, 0.5);
+        }
+
+        .feature-box h4 {
+            font-size: 1.3em;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .feature-box p {
+            font-size: 0.95em;
+            line-height: 1.5;
+            text-align: left;
+            margin: 0;
+        }
+
+        code {
+            background: #1a1a1a;
+            border-left: 3px solid #cc0000;
+            padding: 10px 15px;
+            border-radius: 4px;
+            display: block;
+            overflow-x: auto;
+            margin: 15px 0;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            color: #ff6666;
+        }
+
+        .code-inline {
+            background: #1a1a1a;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            color: #ff6666;
+        }
+
+        a {
+            color: #ff4444;
+            text-decoration: none;
+            transition: color 0.3s ease;
+        }
+
+        a:hover {
+            color: #ff8888;
+            text-decoration: underline;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 15px;
+            margin-top: 30px;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            display: inline-block;
+            padding: 12px 30px;
+            background: linear-gradient(135deg, #cc0000 0%, #660000 100%);
+            color: white;
+            text-decoration: none;
+            border-radius: 6px;
+            transition: all 0.3s ease;
+            border: 1px solid #990000;
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: 600;
+        }
+
+        .btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 20px rgba(204, 0, 0, 0.6);
+        }
+
+        .btn-secondary {
+            background: linear-gradient(135deg, #ff4444 0%, #990000 100%);
+            border: 1px solid #660000;
+        }
+
+        .btn-secondary:hover {
+            box-shadow: 0 8px 20px rgba(255, 68, 68, 0.6);
+        }
+
+        .highlight-box {
+            background: #1a1a1a;
+            border-left: 4px solid #cc0000;
+            padding: 20px;
+            border-radius: 6px;
+            margin: 20px 0;
+            color: #e0e0e0;
+        }
+
+        .highlight-box strong {
+            color: #ff4444;
+        }
+
+        footer {
+            background: #1a1a1a;
+            padding: 30px;
+            text-align: center;
+            color: #999999;
+            border-top: 1px solid #330000;
+        }
+
+        footer p {
+            margin: 10px 0;
+            text-align: center;
+        }
+
+        .emoji {
+            margin-right: 5px;
+        }
+
+        @media (max-width: 768px) {
+            header h1 {
+                font-size: 2em;
+            }
+
+            .content {
+                padding: 20px;
+            }
+
+            h2 {
+                font-size: 1.5em;
+            }
+
+            .feature-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .btn-group {
+                flex-direction: column;
+            }
+
+            .btn {
+                width: 100%;
+                text-align: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>ACMX2</h1>
+            <p>v1.0 Release - Interactive Shader Visualizer</p>
+        </header>
+
+        <div class="content">
+            <h2>Project Overview</h2>
+            <p>
+                I'm excited to announce the release of <strong>ACMX2 Graphics Demo v1.0</strong> — a powerful, 
+                web-based interactive shader visualization platform that brings real-time graphics effects 
+                directly to your browser.
+            </p>
+
+            <h2>What is ACMX2?</h2>
+            <p>
+                ACMX2 is a comprehensive graphics demonstration application built on top of 
+                <a href="https://github.com/lostjared/libmx2/" target="_blank">libmx2</a>, showcasing advanced 
+                shader effects and interactive visual programming.
+            </p>
+
+            <div class="feature-grid">
+                <div class="feature-box">
+                    <h4><span class="emoji">✨</span>92+ Built-in Shaders</h4>
+                    <p>A diverse collection of stunning visual effects including kaleidoscopic patterns, psychedelic waves, 3D transformations, and distortion effects.</p>
+                </div>
+
+                <div class="feature-box">
+                    <h4><span class="emoji">✏️</span>Custom Shader Editor</h4>
+                    <p>Write your own GLSL ES 3.0 fragment shaders with real-time compilation and instant visual feedback.</p>
+                </div>
+
+                <div class="feature-box">
+                    <h4><span class="emoji">🎮</span>Interactive Controls</h4>
+                    <p>Intuitive parameter adjustment with live uniform controls for speed, color, transform, and quality settings.</p>
+                </div>
+
+                <div class="feature-box">
+                    <h4><span class="emoji">🗿</span>3D Model Support</h4>
+                    <p>Load and apply shader effects to dozens of pre-included 3D models.</p>
+                </div>
+
+                <div class="feature-box">
+                    <h4><span class="emoji">🖼️</span>Image Loading</h4>
+                    <p>Apply any shader effect to your own PNG or JPG images instantly.</p>
+                </div>
+
+                <div class="feature-box">
+                    <h4><span class="emoji">📸</span>Screenshot Capture</h4>
+                    <p>Save high-quality rendered output at multiple scales (1x to 4x resolution).</p>
+                </div>
+            </div>
+
+            <h2>Technology Stack</h2>
+            <p>Built with modern web technologies:</p>
+            <ul>
+                <li><strong>WebGL 2.0</strong> - Hardware-accelerated graphics rendering</li>
+                <li><strong>Emscripten</strong> - C++ compiled to WebAssembly for native performance</li>
+                <li><strong>GLSL ES 3.0</strong> - Modern shader language for fragment effects</li>
+                <li><strong>SDL2</strong> - Cross-platform windowing and input handling</li>
+                <li><strong>libmx2</strong> - Custom graphics and math libraries</li>
+            </ul>
+
+            <h2>Key Features</h2>
+
+            <h3>🎨 Shader Effects Library</h3>
+            <p>
+                From bubble distortions and kaleidoscopic reflections to VHS effects and fractal patterns, explore 
+                dozens of professionally crafted shader effects. Each effect includes interactive parameters controlled 
+                through mouse, time, and user-adjustable uniforms.
+            </p>
+
+            <h3>✏️ Custom Shader Development</h3>
+            <p>The integrated shader editor allows you to write and test your own fragment shaders with:</p>
+            <ul>
+                <li>Real-time syntax validation</li>
+                <li>Detailed compilation error messages</li>
+                <li>Pre-built shader templates to get started quickly</li>
+                <li>Live preview of effects as you code</li>
+            </ul>
+
+            <h3>🖼️ Content Management</h3>
+            <ul>
+                <li>Load your own images (PNG/JPG) and apply effects to them</li>
+                <li>Switch between pre-loaded 3D models</li>
+                <li>Apply any shader to any content seamlessly</li>
+            </ul>
+
+            <h3>⚙️ Uniform Control Panel</h3>
+            <p>Fine-tune effects with an elegant control panel featuring:</p>
+            <ul>
+                <li><strong>Animation controls</strong> - Speed, amplitude, frequency</li>
+                <li><strong>Color adjustments</strong> - Brightness, contrast, saturation, hue shift</li>
+                <li><strong>Transform parameters</strong> - Zoom, rotation</li>
+                <li><strong>Quality settings</strong> - Performance optimization and debug mode</li>
+            </ul>
+
+            <h3>💾 Asset Management</h3>
+            <p>
+                The project includes compressed 3D models covering a wide range of geometry types: spheres, cubes, 
+                toruses, pyramids, ships, UFOs, fractals, and more.
+            </p>
+
+            <h2>Keyboard & Mouse Controls</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Action</th>
+                        <th>Control</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Next Shader</td>
+                        <td><span class="code-inline">↓</span> or <span class="code-inline">Space</span></td>
+                    </tr>
+                    <tr>
+                        <td>Previous Shader</td>
+                        <td><span class="code-inline">↑</span> or <span class="code-inline">Backspace</span></td>
+                    </tr>
+                    <tr>
+                        <td>Save Screenshot</td>
+                        <td><span class="code-inline">S</span> or Button Click</td>
+                    </tr>
+                    <tr>
+                        <td>Load Image</td>
+                        <td>Button or file selection</td>
+                    </tr>
+                    <tr>
+                        <td>Mouse Interaction</td>
+                        <td>Move/click for interactive effects</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h2>Getting Started</h2>
+
+            <h3>Web Version</h3>
+            <p>
+                The demo runs directly in modern browsers (Chrome, Firefox, Edge). Simply open 
+                <span class="code-inline">index.html</span> in a local web server:
+            </p>
+            <code>python3 -m http.server 3000
+# Navigate to http://localhost:3000</code>
+
+            <h3>Building from Source</h3>
+            <p>Requires Emscripten:</p>
+            <code>make -f Makefile.em</code>
+
+            <h2>Performance</h2>
+            <ul>
+                <li>Targets 60 FPS on modern hardware</li>
+                <li>Real-time shader compilation</li>
+                <li>Supports up to 4K image resolution</li>
+                <li>Optimized WebGL 2.0 rendering pipeline</li>
+            </ul>
+
+            <h2>What's Included</h2>
+            <ul>
+                <li><strong>92+ optimized shader effects</strong> with full source code</li>
+                <li><strong>3D models</strong> in compressed format</li>
+                <li><strong>Complete shader editor</strong> with templates and examples</li>
+                <li><strong>Responsive UI</strong> optimized for desktop and tablet</li>
+                <li><strong>Documentation and examples</strong> for custom shader development</li>
+            </ul>
+
+            <h2>v1.0 Highlights</h2>
+            <div class="highlight-box">
+                <p>
+                    <strong>This initial release represents a complete, production-ready visualization platform.</strong> 
+                    The codebase is well-organized, thoroughly tested on multiple browsers, and includes comprehensive 
+                    error handling for shader compilation and asset loading.
+                </p>
+            </div>
+
+            <h2>Open Source</h2>
+            <p>
+                ACMX2 is released under the <strong>GPL v3 license</strong>. The full source code, including all 
+                shaders and the web interface, is available for learning, modification, and distribution in 
+                accordance with the license terms.
+            </p>
+
+            <h2>Looking Forward</h2>
+            <p>
+                This release marks the beginning of an exciting journey. Whether you're interested in learning 
+                shader programming, creating stunning visual effects, or integrating advanced graphics into your 
+                own projects, ACMX2 provides a solid foundation.
+            </p>
+
+            <div class="highlight-box">
+                <p>
+                    <strong>Ready to explore?</strong> Load the demo, try out the effects, and dive into shader 
+                    programming with the custom editor. Happy creating!
+                </p>
+            </div>
+
+            <div class="btn-group">
+                <a href="/visualizer/" class="btn">🚀 Launch Demo</a>
+                <a href="https://github.com/lostjared/MX2.Graphics.Demo" target="_blank" class="btn btn-secondary">📦 View on GitHub</a>
+            </div>
+        </div>
+
+        <footer>
+            <p><strong>ACMX2 Graphics Demo v1.0</strong> is now available</p>
+            <p>Part of the <a href="https://github.com/lostjared/libmx2" target="_blank">libmx2</a> graphics library collection</p>
+            <p style="font-size: 0.9em; margin-top: 20px; color: #999;">© 2025 | GPL v3 License</p>
+        </footer>
+    </div>
+</body>
+</html>
