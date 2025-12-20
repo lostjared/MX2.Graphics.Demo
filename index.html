@@ -5,7 +5,7 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
-    <title>MX2 - Graphics Demo</title>
+    <title>ACMX2 - Interactive Visualizer</title>
     <style>
         body {
             display: flex;
@@ -794,12 +794,10 @@
     </style>
 </head>
 <body>
-
     <div id="loading-overlay">
-        <div id="loading-title">MX2 Graphics Demo - Initializing...</div>
+        <div id="loading-title">ACMX2 Interactive Visualizer - Initializing...</div>
         <div id="loading-output"></div>
     </div>
-
     <div id="canvas-container">
         <canvas id="canvas"></canvas>
     </div>
@@ -1007,7 +1005,7 @@
             var output = document.getElementById('loading-output');
             if (output) {
                 output.innerHTML = '<span class="info">Initializing WebGL...</span>\n' +
-                                   '<span class="normal">Loading MX2 Graphics Demo...</span>\n';
+                                   '<span class="normal">Loading ACMX2...</span>\n';
             }
         })();
         

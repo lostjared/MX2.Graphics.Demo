@@ -1237,7 +1237,7 @@ public:
 
 class MainWindow : public gl::GLWindow {
 public:
-    MainWindow(std::string path, int tw, int th) : gl::GLWindow("MX2 - Interactive Graphics Demo", tw, th) {
+    MainWindow(std::string path, int tw, int th) : gl::GLWindow("ACMX2 - Interactive Visualizer", tw, th) {
         setPath(path);
         setObject(new About());
         object->load(this);
