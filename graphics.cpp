@@ -181,7 +181,8 @@ static const std::vector<ShaderInfo> shaderSources = {
     {"mirror_twisted", mirror_twisted},
     {"mirror_gpt", mirror_gpt},
     {"mirror_bowl", mirror_bowl},
-    {"mirror_atan", mirror_atan}
+    {"mirror_atan", mirror_atan},
+    {"gpt_halluc", gpt_halluc}
 };
 
 class About : public gl::GLObject {
