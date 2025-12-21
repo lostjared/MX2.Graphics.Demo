@@ -124,7 +124,7 @@
             order: 99;
         }
 
-        /* Shader Editor Modal */
+        
         #shader-editor-modal {
             display: none;
             position: fixed;
@@ -335,7 +335,7 @@
             position: relative;
         }
 
-        /* Uniforms Control Panel */
+        
         #uniforms-modal {
             display: none;
             position: fixed;
@@ -523,7 +523,6 @@
             transform: translateY(-2px);
         }
 
-        /* Loading Screen */
         #loading-overlay {
             position: fixed;
             top: 0;
@@ -681,7 +680,7 @@
     }
 }
 
-/* Add this CSS to style all select boxes consistently */
+
 
 #shader,
 #model-selector,
@@ -731,7 +730,7 @@
     max-width: 70px;
 }
 
-/* Responsive styles for all select boxes */
+
 @media (max-width: 900px) {
     #shader,
     #model-selector,
@@ -794,7 +793,7 @@
     }
 }
 
-/* ========== MOBILE-SPECIFIC STYLES ========== */
+
 body.mobile-mode {
     touch-action: none;
     -webkit-touch-callout: none;
@@ -810,7 +809,7 @@ body.mobile-mode #controls {
     display: none;
 }
 
-/* Mobile Control Panel */
+
 #mobile-controls {
     display: none;
     position: fixed;
@@ -899,7 +898,7 @@ body.mobile-mode #mobile-controls {
     padding: 10px;
 }
 
-/* Touch Control Overlay */
+
 #touch-overlay {
     display: none;
     position: fixed;
@@ -915,7 +914,6 @@ body.mobile-mode #touch-overlay {
     display: block;
 }
 
-/* Touch indicator */
 #touch-indicator {
     position: fixed;
     top: 10px;
@@ -934,7 +932,6 @@ body.mobile-mode #touch-indicator {
     display: block;
 }
 
-/* Mobile shader info */
 #mobile-shader-info {
     color: #aaa;
     font-size: 12px;
@@ -942,7 +939,6 @@ body.mobile-mode #touch-indicator {
     padding: 5px;
 }
 
-/* Mobile modal styles */
 body.mobile-mode #shader-editor-container {
     width: 95%;
     max-width: none;
@@ -964,7 +960,6 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
     height: 24px;
 }
 
-/* Gesture hint */
 #gesture-hint {
     position: fixed;
     top: 50%;
@@ -1006,7 +1001,6 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
     cursor: pointer;
 }
 
-/* Landscape orientation for mobile */
 @media (max-height: 500px) and (orientation: landscape) {
     body.mobile-mode #canvas-container {
         height: calc(100% - 100px);
