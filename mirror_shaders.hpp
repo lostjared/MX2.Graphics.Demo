@@ -2040,4 +2040,115 @@ void main(void) {
 }
 )SHD1";
 
+inline static const char *szBlock = R"SHD1(#version 300 es
+precision highp float;
+precision highp int;
+
+out vec4 color;
+in vec2 TexCoord;
+
+uniform sampler2D textTexture;
+uniform float time_f;
+uniform vec2 iResolution;
+uniform vec4 iMouse;
+
+)SHD1" COMMON_UNIFORMS COLOR_HELPERS R"SHD1(
+
+vec2 rotate2D(vec2 p, float a) {
+    float c = cos(a);
+    float s = sin(a);
+    return mat2(c, -s, s, c) * p;
+}
+
+vec2 aspectCorrect(vec2 uv) {
+    float ar = iResolution.x / iResolution.y;
+    uv -= 0.5;
+    uv.x *= ar;
+    return uv;
+}
+
+vec2 aspectUncorrect(vec2 p) {
+    float ar = iResolution.x / iResolution.y;
+    p.x /= ar;
+    return p + 0.5;
+}
+
+void main(void) {
+    vec2 uv = TexCoord;
+    float t = time_f * (0.25 + iSpeed * 1.5);
+    vec2 g = uv - 0.5;
+    g = rotate2D(g, iRotation);
+    float z = max(iZoom, 0.001);
+    g /= z;
+    uv = g + 0.5;
+
+    float splitX = 0.52;
+    
+    vec2 swirlCenter = vec2(0.30, 0.55);
+    if (iMouse.z > 0.0) {
+        swirlCenter = iMouse.xy / iResolution;
+    }
+
+    
+    vec2 uvL = uv;
+    vec2 pL = aspectCorrect(uvL - swirlCenter);
+
+    float r  = length(pL);
+    float ang = atan(pL.y, pL.x);
+
+    float swirlAmount = (2.5 + iFrequency * 4.0) * exp(-r * 1.5);
+    swirlAmount *= (0.4 + iAmplitude * 1.6);
+
+    ang += swirlAmount * sin(t * 0.7 + r * 6.0);
+
+    vec2 sw = vec2(cos(ang), sin(ang)) * (r + 0.05 * sin(r * 40.0 + t * 2.5));
+    sw = aspectUncorrect(sw) + swirlCenter - 0.5;
+
+    sw.y += 0.08 * sin(sw.x * 18.0 - t * 3.0);
+
+    uvL = sw;
+
+    vec2 uvR = uv;
+
+    float horizonY = 0.48;
+    float dy = uvR.y - horizonY;
+
+    float waveAmp = 0.015 + 0.03 * iAmplitude;
+    float waveFreq = 12.0 + iFrequency * 24.0;
+
+    float wave = waveAmp * exp(-abs(dy) * 8.0) *
+                 sin(uvR.x * waveFreq - t * 2.0);
+
+    uvR.y += wave;
+
+    // Blend a bit more motion near the split so it feels like a vortex boundary
+    float splitMask = smoothstep(splitX - 0.12, splitX + 0.02, uvR.x);
+    uvR.y += splitMask * 0.03 * sin(uvR.y * 30.0 + t * 3.5);
+
+    // --- Pick which UV to use based on side ---
+    float leftSide = step(uv.x, splitX);
+    vec2 sampleUV = uvR * (1.0 - leftSide) + uvL * leftSide;
+
+    // Tile a bit so extreme warping stays “filled”
+    sampleUV = fract(sampleUV);
+
+    vec4 texColor = texture(textTexture, sampleUV);
+
+    // Vertical glowing seam between worlds
+    float seam = smoothstep(splitX - 0.004, splitX, uv.x)
+               - smoothstep(splitX, splitX + 0.004, uv.x);
+    vec3 seamCol = vec3(0.75, 0.95, 1.0);
+    texColor.rgb = mix(texColor.rgb, seamCol, seam * 0.9);
+
+    // Slight vignette to focus center
+    vec2 v = uv - 0.5;
+    float vig = smoothstep(0.8, 0.2, length(v));
+    texColor.rgb *= mix(0.85, 1.1, vig);
+
+    // Apply your global color controls
+    texColor.rgb = applyColorAdjustments(texColor.rgb);
+    color = texColor;
+}
+)SHD1";
+
 #endif

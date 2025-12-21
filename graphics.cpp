@@ -186,7 +186,8 @@ static std::vector<ShaderInfo> shaderSources = {
     {"mirror_gpt", mirror_gpt},
     {"mirror_bowl", mirror_bowl},
     {"mirror_atan", mirror_atan},
-    {"gpt_halluc", gpt_halluc}
+    {"gpt_halluc", gpt_halluc},
+    {"psych_block", szBlock}
 };
 
 class ShaderLibrary {
@@ -212,11 +213,10 @@ public:
     }
 
     void init(gl::GLWindow *win, const std::string &filename) {
-        auto filedata = mx::readFile(filename);
+        std::string value = mx::readFileToString(filename);
         char c = 0;
         int index = 0;
         std::string token;
-        const std::string &value = filedata.data();
         std::vector<std::string> values = tokenize(value);
         for(size_t i = 0; i < values.size(); ++i)  {
             auto shader_contents =  mx::readFileToString(win->util.getFilePath("data/shaders/" + values[i]));
@@ -402,6 +402,10 @@ public:
         if (loadingShaderIndex < static_cast<int>(shaderSources.size())) {
             const auto& info = shaderSources[loadingShaderIndex];
             
+            if(info.name == "block") {
+                std::cout << info.source << "\n";
+            }
+
 #ifdef __EMSCRIPTEN__
             EM_ASM({
                 if (typeof window.addLoadingMessage === 'function') {
@@ -415,6 +419,7 @@ public:
             
             auto shader = std::make_unique<gl::ShaderProgram>();
             bool success = shader->loadProgramFromText(sz3DVertex, info.source);
+            
 
             if(success) {
                 std::cout << "Compiled: " << info.name << " [OK]\n";
@@ -556,6 +561,9 @@ public:
 #endif
         loadingShaderIndex = 0;
         loadingComplete = false;
+
+
+
 #ifdef __EMSCRIPTEN__   
         currentFileIndex = 0;
         library.init(win, win->util.getFilePath("data/shaders/index.txt"));
