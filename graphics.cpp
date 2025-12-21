@@ -22,6 +22,10 @@ GPL v3
 #include<vector>
 #include<cstdint>
 #include<algorithm>
+#include<fstream>
+#include<sstream>
+#include<string>
+
 #include"mirror_shaders.hpp"
 #include"model.hpp"
 #define CHECK_GL_ERROR() \
@@ -34,8 +38,8 @@ printf("OpenGL Error: %d at %s:%d\n", err, __FILE__, __LINE__); }
 #endif
 
 struct ShaderInfo {
-    const char* name;
-    const char* source;
+    std::string name;
+    std::string source;
 };
 
 const char *sz3DVertex = R"(#version 300 es
@@ -56,7 +60,7 @@ void main() {
 })";
 
 
-static const std::vector<ShaderInfo> shaderSources = {
+static std::vector<ShaderInfo> shaderSources = {
     {"Bubble", srcShader1},
     {"Kaleidoscope", srcShader2},
     {"KaleidoscopeAlt", srcShader3},
@@ -185,6 +189,61 @@ static const std::vector<ShaderInfo> shaderSources = {
     {"gpt_halluc", gpt_halluc}
 };
 
+class ShaderLibrary {
+public:
+    ShaderLibrary() = default;
+    std::vector<std::string> tokenize(const std::string &input) {
+        std::vector<std::string> values;
+        size_t index = 0;
+        std::string token;
+        while(index <  input.size()) {
+            char c = input.at(index);
+            if(c == '\n') {
+                values.push_back(token);
+                token = "";
+                index ++;
+                continue;
+            } else {
+                token += input.at(index);
+                index++;
+            }
+        }
+        return values;
+    }
+
+    void init(gl::GLWindow *win, const std::string &filename) {
+        auto filedata = mx::readFile(filename);
+        char c = 0;
+        int index = 0;
+        std::string token;
+        const std::string &value = filedata.data();
+        std::vector<std::string> values = tokenize(value);
+        for(size_t i = 0; i < values.size(); ++i)  {
+            auto shader_contents =  mx::readFileToString(win->util.getFilePath("data/shaders/" + values[i]));
+            if(!shader_contents.empty())
+                shaders.push_back(std::make_pair(values[i], shader_contents));
+        }
+    }
+    void print() {
+    
+        for(const auto &i : shaders) {
+            std::cout << i.first <<":" << i.second << "\n";
+        }
+    }
+    bool empty() const {
+        return (shaders.empty());
+    }
+    std::string getNameAt(int i) const {
+        return shaders.at(i).first;
+    }
+    std::string getShaderAt(int i) const {
+        return shaders.at(i).second;
+    }
+    size_t getSize() const { return shaders.size(); }
+protected:
+    std::vector<std::pair<std::string, std::string>> shaders;
+};
+
 class About : public gl::GLObject {
     GLuint texture = 0;
     gl::ShaderProgram shader;
@@ -233,6 +292,8 @@ class About : public gl::GLObject {
     std::unique_ptr<mx::Model> model;
     bool is3d = false;
     bool is3d_comp = false;
+    ShaderLibrary library;
+    int currentFileIndex = 0;
 public:
     About() = default;
     virtual ~About() override {
@@ -349,7 +410,7 @@ public:
                     var total = $2;
                     window.addLoadingMessage('[' + idx + '/' + total + '] Compiling: ' + name, 'normal');
                 }
-            }, info.name, loadingShaderIndex + 1, (int)shaderSources.size());
+            }, info.name.c_str(), loadingShaderIndex + 1, (int)shaderSources.size());
 #endif
             
             auto shader = std::make_unique<gl::ShaderProgram>();
@@ -365,8 +426,6 @@ public:
                 std::cout << "Compiled: " << info.name << " [OK]\n";
             }
 
-
-
 #ifdef __EMSCRIPTEN__
             EM_ASM({
                 if (typeof window.addLoadingMessage === 'function') {
@@ -381,23 +440,24 @@ public:
                         window.addLoadingMessage('    ✗ ' + name + ' - FAILED', 'error');
                     }
                 }
-            }, info.name, success ? 1 : 0, success2 ? 1 : 0);
+            }, info.name.c_str(), success ? 1 : 0, success2 ? 1 : 0);
 #endif
 
+            
             if(success && success2) {
                 if (success) {
                     shader->setSilent(true);
                     shaders.push_back(std::move(shader));
-                    
                 }
                 if(success2) {
                     shader2->setSilent(true);
                     shaders2.push_back(std::move(shader2));
                 }
-
                 shader_names.push_back(info.name);
-        }
-        loadingShaderIndex++;
+            } else {
+                std::cout << "Failed: " << info.name << "\n";
+            } 
+            loadingShaderIndex++;
             
             
 #ifdef __EMSCRIPTEN__
@@ -497,15 +557,18 @@ public:
         loadingShaderIndex = 0;
         loadingComplete = false;
 #ifdef __EMSCRIPTEN__   
+        currentFileIndex = 0;
+        library.init(win, win->util.getFilePath("data/shaders/index.txt"));
+        for(size_t i = 0; i < library.getSize(); ++i) {
+            shaderSources.push_back({library.getNameAt(i), library.getShaderAt(i)});
+        }
         emscripten_async_call([](void* arg) {
             About* self = static_cast<About*>(arg);
             self->loadNextShader();
         }, this, 50);  
-#else
-        finishLoading();
+        
 #endif
     }
-
     float cameraYaw = 270.0f;   
     float cameraPitch = 0.0f; 
     const float cameraRotationSpeed = 5.0f; 
@@ -1131,8 +1194,6 @@ public:
             printf("glReadPixels error: %d\n", err);
             return;
         }
-        
-        
         int stride = readW * 4;
         std::vector<uint8_t> row(stride);
         for (int y = 0; y < readH / 2; ++y) {
