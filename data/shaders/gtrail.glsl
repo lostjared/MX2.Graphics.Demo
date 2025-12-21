@@ -4,26 +4,87 @@ precision highp float;
 uniform sampler2D textTexture;
 uniform float time_f;
 uniform vec2 iResolution;
+uniform float iSpeed;
+uniform float iAmplitude;
+uniform float iFrequency;
+uniform float iBrightness;
+uniform float iContrast;
+uniform float iSaturation;
+uniform float iHueShift;
+uniform float iZoom;
+uniform float iRotation;
+uniform float iQuality;
+uniform float iDebugMode;
 
 out vec4 FragColor;
 
+
+vec3 adjustBrightness(vec3 col, float b) {
+    return col * b;
+}
+
+vec3 adjustContrast(vec3 col, float c) {
+    return (col - 0.5) * c + 0.5;
+}
+
+vec3 adjustSaturation(vec3 col, float s) {
+    float gray = dot(col, vec3(0.299, 0.587, 0.114));
+    return mix(vec3(gray), col, s);
+}
+
+vec3 rotateHue(vec3 col, float angle) {
+    float U = cos(angle);
+    float W = sin(angle);
+    mat3 R = mat3(
+        0.299 + 0.701*U + 0.168*W,
+        0.587 - 0.587*U + 0.330*W,
+        0.114 - 0.114*U - 0.497*W,
+        0.299 - 0.299*U - 0.328*W,
+        0.587 + 0.413*U + 0.035*W,
+        0.114 - 0.114*U + 0.292*W,
+        0.299 - 0.300*U + 1.250*W,
+        0.587 - 0.588*U - 1.050*W,
+        0.114 + 0.886*U - 0.203*W
+    );
+    return clamp(R * col, 0.0, 1.0);
+}
+
+vec3 applyColorAdjustments(vec3 col) {
+    col = adjustBrightness(col, iBrightness);
+    col = adjustContrast(col, iContrast);
+    col = adjustSaturation(col, iSaturation);
+    col = rotateHue(col, iHueShift);
+    return clamp(col, 0.0, 1.0);
+}
+
+vec2 applyZoomRotation(vec2 uv, vec2 center) {
+    vec2 p = uv - center;
+    float c = cos(iRotation);
+    float s = sin(iRotation);
+    p = mat2(c, -s, s, c) * p;
+    float z = max(abs(iZoom), 0.001);
+    p /= z;
+    return p + center;
+}
+
 void main() {
+    float time = time_f * iSpeed;
     vec2 uv = gl_FragCoord.xy / iResolution;
     vec4 texColor = texture(textTexture, uv);
     
-    vec2 trailOffset1 = vec2(0.02, 0.03) * sin(time_f + length(uv - 0.5) * 10.0);
-    vec2 trailOffset2 = vec2(-0.03, 0.02) * cos(time_f * 1.5 + length(uv - 0.5) * 15.0);
-    vec2 trailOffset3 = vec2(0.01, -0.01) * sin(time_f * 3.0);
+    vec2 trailOffset1 = vec2(0.02, 0.03) * sin(time + length(uv - 0.5) * 10.0 * iFrequency);
+    vec2 trailOffset2 = vec2(-0.03, 0.02) * cos(time * 1.5 + length(uv - 0.5) * 15.0);
+    vec2 trailOffset3 = vec2(0.01, -0.01) * sin(time * 3.0);
     
     vec3 trail1 = texture(textTexture, uv + trailOffset1).rgb * 0.7;
-    vec3 trail2 = texture(textTexture, uv + trailOffset2).rgb * 0.5;
+    vec3 trail2 = texture(textTexture, uv + trailOffset2).rgb * 0.5 * iAmplitude;
     vec3 trail3 = texture(textTexture, uv + trailOffset3).rgb * 0.3;
 
     vec3 intenseTrail = trail1 + trail2 + trail3;
     vec3 vibrantShift = vec3(
-        0.5 + 0.5 * sin(time_f + uv.x * 20.0),
-        0.5 + 0.5 * cos(time_f + uv.y * 20.0),
-        0.5 + 0.5 * sin(time_f + uv.x * uv.y * 20.0)
+        0.5 + 0.5 * sin(time + uv.x * 20.0),
+        0.5 + 0.5 * cos(time + uv.y * 20.0),
+        0.5 + 0.5 * sin(time + uv.x * uv.y * 20.0)
     );
 
     vec3 finalColor = mix(intenseTrail, vibrantShift, 0.6);
