@@ -1297,21 +1297,37 @@
             }
         }
 
-        // Initialize uniform controls
+        function initializeUniforms() {
+            Object.keys(uniformDefaults).forEach(uniformName => {
+                const element = document.getElementById(uniformName);
+                if (element) {
+                    localStorage.removeItem(uniformName);
+                    const defaultValue = uniformDefaults[uniformName];
+                    if (element.type === 'checkbox') {
+                        element.checked = defaultValue;
+                    } else {
+                        element.value = defaultValue;
+                    }                    
+                    updateUniformDisplay(uniformName);
+                    sendUniformToWasm(uniformName, defaultValue);
+                }
+            });
+        }
+        
+        if (typeof Module !== 'undefined' && Module.calledRun) {
+            initializeUniforms();
+        } else {
+            const checkModule = setInterval(() => {
+                if (typeof Module !== 'undefined' && Module.calledRun) {
+                    clearInterval(checkModule);
+                    initializeUniforms();
+                }
+            }, 100);
+        }
+
         Object.keys(uniformDefaults).forEach(uniformName => {
             const element = document.getElementById(uniformName);
             if (element) {
-                const saved = localStorage.getItem(uniformName);
-                if (saved !== null) {
-                    if (element.type === 'checkbox') {
-                        element.checked = saved === 'true';
-                    } else {
-                        element.value = saved;
-                    }
-                }
-                
-                updateUniformDisplay(uniformName);
-                
                 if (element.type === 'checkbox') {
                     element.addEventListener('change', (e) => {
                         const value = e.target.checked;
