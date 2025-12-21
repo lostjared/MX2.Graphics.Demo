@@ -5,6 +5,7 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>ACMX2 - Interactive Visualizer</title>
     <style>
         body {
@@ -458,6 +459,7 @@
             background: #333;
             outline: none;
             -webkit-appearance: none;
+            appearance: none;
             cursor: pointer;
         }
 
@@ -791,6 +793,247 @@
         max-width: 100px;
     }
 }
+
+/* ========== MOBILE-SPECIFIC STYLES ========== */
+body.mobile-mode {
+    touch-action: none;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+}
+
+body.mobile-mode #canvas-container {
+    height: calc(100% - 180px);
+}
+
+body.mobile-mode #controls {
+    display: none;
+}
+
+/* Mobile Control Panel */
+#mobile-controls {
+    display: none;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: linear-gradient(to top, rgba(0,0,0,0.95), rgba(20,20,30,0.9));
+    padding: 10px 15px 20px;
+    z-index: 100;
+    flex-direction: column;
+    gap: 10px;
+    border-top: 2px solid #9C27B0;
+}
+
+body.mobile-mode #mobile-controls {
+    display: flex;
+}
+
+.mobile-row {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.mobile-btn {
+    padding: 14px 18px;
+    font-size: 16px;
+    cursor: pointer;
+    background: linear-gradient(135deg, #444 0%, #333 100%);
+    color: #fff;
+    border: 1px solid #666;
+    border-radius: 8px;
+    transition: all 0.2s;
+    min-width: 50px;
+    text-align: center;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.mobile-btn:active {
+    background: linear-gradient(135deg, #666 0%, #555 100%);
+    transform: scale(0.95);
+}
+
+.mobile-btn.primary {
+    background: linear-gradient(135deg, #9C27B0 0%, #7B1FA2 100%);
+    border-color: #BA68C8;
+}
+
+.mobile-btn.primary:active {
+    background: linear-gradient(135deg, #BA68C8 0%, #9C27B0 100%);
+}
+
+.mobile-btn.success {
+    background: linear-gradient(135deg, #4CAF50 0%, #388E3C 100%);
+    border-color: #66BB6A;
+}
+
+.mobile-btn.success:active {
+    background: linear-gradient(135deg, #66BB6A 0%, #4CAF50 100%);
+}
+
+.mobile-select {
+    padding: 14px 12px;
+    font-size: 16px;
+    background: #333;
+    color: #fff;
+    border: 1px solid #666;
+    border-radius: 8px;
+    flex: 1;
+    max-width: 45%;
+    min-width: 120px;
+    -webkit-appearance: none;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23fff' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    padding-right: 30px;
+}
+
+.mobile-select option {
+    background: #222;
+    color: #fff;
+    padding: 10px;
+}
+
+/* Touch Control Overlay */
+#touch-overlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 180px;
+    z-index: 50;
+    touch-action: none;
+}
+
+body.mobile-mode #touch-overlay {
+    display: block;
+}
+
+/* Touch indicator */
+#touch-indicator {
+    position: fixed;
+    top: 10px;
+    right: 10px;
+    background: rgba(156, 39, 176, 0.8);
+    color: #fff;
+    padding: 8px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    display: none;
+    z-index: 200;
+    pointer-events: none;
+}
+
+body.mobile-mode #touch-indicator {
+    display: block;
+}
+
+/* Mobile shader info */
+#mobile-shader-info {
+    color: #aaa;
+    font-size: 12px;
+    text-align: center;
+    padding: 5px;
+}
+
+/* Mobile modal styles */
+body.mobile-mode #shader-editor-container {
+    width: 95%;
+    max-width: none;
+    max-height: 90vh;
+}
+
+body.mobile-mode #shader-code-textarea {
+    height: 200px;
+    font-size: 12px;
+}
+
+body.mobile-mode #uniforms-modal {
+    width: 100%;
+    max-width: none;
+}
+
+body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
+    width: 24px;
+    height: 24px;
+}
+
+/* Gesture hint */
+#gesture-hint {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(0,0,0,0.8);
+    color: #fff;
+    padding: 20px 30px;
+    border-radius: 12px;
+    text-align: center;
+    z-index: 300;
+    display: none;
+    border: 2px solid #9C27B0;
+}
+
+#gesture-hint h3 {
+    margin: 0 0 15px 0;
+    color: #BA68C8;
+}
+
+#gesture-hint p {
+    margin: 8px 0;
+    font-size: 14px;
+}
+
+#gesture-hint .emoji {
+    font-size: 24px;
+    margin-right: 8px;
+}
+
+#close-gesture-hint {
+    margin-top: 15px;
+    padding: 10px 30px;
+    background: #9C27B0;
+    border: none;
+    color: #fff;
+    border-radius: 6px;
+    font-size: 16px;
+    cursor: pointer;
+}
+
+/* Landscape orientation for mobile */
+@media (max-height: 500px) and (orientation: landscape) {
+    body.mobile-mode #canvas-container {
+        height: calc(100% - 100px);
+    }
+    
+    body.mobile-mode #mobile-controls {
+        padding: 8px 15px 12px;
+    }
+    
+    body.mobile-mode #touch-overlay {
+        bottom: 100px;
+    }
+    
+    .mobile-btn {
+        padding: 10px 14px;
+        font-size: 14px;
+    }
+    
+    .mobile-select {
+        padding: 10px 12px;
+        font-size: 14px;
+    }
+    
+    .mobile-row {
+        gap: 6px;
+    }
+}
     </style>
 </head>
 <body>
@@ -884,6 +1127,73 @@
         <option value="uv_sphere.mxmod.z">uv_sphere.mxmod.z</option>
         </select>
         </div>
+
+    <!-- Mobile Controls -->
+    <div id="mobile-controls">
+        <div class="mobile-row">
+            <select id="mobile-shader" class="mobile-select">
+                <option value="0">Loading...</option>
+            </select>
+            <select id="mobile-model-selector" class="mobile-select">
+                <option value="quad">quad.mxmod.z</option>
+                <option value="3dplus.mxmod.z">3dplus.mxmod.z</option>
+                <option value="3dstar.mxmod.z">3dstar.mxmod.z</option>
+                <option value="UFO3.mxmod.z">UFO3.mxmod.z</option>
+                <option value="bird.mxmod.z">bird.mxmod.z</option>
+                <option value="cone.mxmod.z">cone.mxmod.z</option>
+                <option value="cube.mxmod.z">cube.mxmod.z</option>
+                <option value="cylinder.mxmod.z">cylinder.mxmod.z</option>
+                <option value="diamond.mxmod.z">diamond.mxmod.z</option>
+                <option value="dome.mxmod.z">dome.mxmod.z</option>
+                <option value="globe.mxmod.z">globe.mxmod.z</option>
+                <option value="octahedron.mxmod.z">octahedron.mxmod.z</option>
+                <option value="pyramid.mxmod.z">pyramid.mxmod.z</option>
+                <option value="saturn.mxmod.z">saturn.mxmod.z</option>
+                <option value="sphere.mxmod.z">sphere.mxmod.z</option>
+                <option value="star.mxmod.z">star.mxmod.z</option>
+                <option value="torus.mxmod.z">torus.mxmod.z</option>
+                <option value="ufo.mxmod.z">ufo.mxmod.z</option>
+            </select>
+        </div>
+        <div class="mobile-row">
+            <button class="mobile-btn" id="mobile-prev-shader">◀ Prev</button>
+            <button class="mobile-btn" id="mobile-next-shader">Next ▶</button>
+            <button class="mobile-btn" id="mobile-reset">⟲ Reset</button>
+        </div>
+        <div class="mobile-row">
+            <label class="mobile-btn primary" for="mobile-file-input">🖼️ Load</label>
+            <input type="file" id="mobile-file-input" accept=".png,.jpg,.jpeg" style="display:none;">
+            <button class="mobile-btn success" id="mobile-save-image">💾 Save</button>
+            <select id="mobile-save-scale" class="mobile-btn" style="padding: 10px 8px; min-width: 50px;">
+                <option value="1">1x</option>
+                <option value="2" selected>2x</option>
+                <option value="3">3x</option>
+                <option value="4">4x</option>
+            </select>
+            <button class="mobile-btn" id="mobile-shader-editor-btn" style="background: linear-gradient(135deg, #9C27B0 0%, #7B1FA2 100%);">✏️ Shader</button>
+            <button class="mobile-btn" id="mobile-uniforms-btn">⚙️</button>
+            <button class="mobile-btn" id="mobile-help-btn">❓</button>
+        </div>
+        <div id="mobile-shader-info">Swipe to rotate • Pinch to zoom • Double-tap to change shader</div>
+    </div>
+
+    <!-- Touch Overlay for gesture detection -->
+    <div id="touch-overlay"></div>
+
+    <!-- Touch Indicator -->
+    <div id="touch-indicator">Touch: Ready</div>
+
+    <!-- Gesture Help Modal -->
+    <div id="gesture-hint">
+        <h3>Touch Controls</h3>
+        <p><span class="emoji">👆</span> Single finger drag: Rotate model</p>
+        <p><span class="emoji">👆👆</span> Two finger drag: Pan view</p>
+        <p><span class="emoji">🤏</span> Pinch: Zoom in/out</p>
+        <p><span class="emoji">👆👆</span> Double tap: Next shader</p>
+        <p><span class="emoji">👆👆👆</span> Triple tap: Previous shader</p>
+        <button id="close-gesture-hint">Got it!</button>
+    </div>
+
     <div id="shader-editor-modal">
         <div id="shader-editor-container">
             <div id="shader-editor-header">
@@ -1048,7 +1358,6 @@
             }
         };
 
-        // Add shader compilation status
         window.onShaderCompileStart = function(shaderName) {
             window.addLoadingMessage('Compiling shader: ' + shaderName + '...', 'info');
         };
@@ -1345,7 +1654,7 @@
             }
         });
 
-        // Modal controls
+        
         if (uniformsBtn) {
             uniformsBtn.addEventListener('click', () => {
                 uniformsModal.classList.add('visible');
@@ -1366,7 +1675,7 @@
             });
         }
 
-        // Reset all uniforms
+        
         if (resetUniformsBtn) {
             resetUniformsBtn.addEventListener('click', () => {
                 Object.keys(uniformDefaults).forEach(uniformName => {
@@ -1435,7 +1744,7 @@
             }
         });
 
-        // Shader templates
+        
         const basicTemplate = `#version 300 es
 precision highp float;
 out vec4 color;
@@ -1908,6 +2217,364 @@ void main(void) {
                 console.log('Module.selectShader not available yet');
             }
         });
+
+        
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) 
+                        || (window.innerWidth <= 768 && 'ontouchstart' in window);
+        
+        if (isMobile) {
+            document.body.classList.add('mobile-mode');
+            console.log('Mobile mode activated');
+            initMobileControls();
+        }
+
+        let wasMobile = isMobile;
+        window.addEventListener('resize', () => {
+            const nowMobile = window.innerWidth <= 768 && 'ontouchstart' in window;
+            if (nowMobile !== wasMobile) {
+                if (nowMobile) {
+                    document.body.classList.add('mobile-mode');
+                    initMobileControls();
+                } else {
+                    document.body.classList.remove('mobile-mode');
+                }
+                wasMobile = nowMobile;
+            }
+        });
+
+        function initMobileControls() {
+            const mobileShaderSelect = document.getElementById('mobile-shader');
+            const desktopShaderSelect = document.getElementById('shader');
+            function syncShaderOptions() {
+                if (desktopShaderSelect && mobileShaderSelect) {
+                    mobileShaderSelect.innerHTML = desktopShaderSelect.innerHTML;
+                    mobileShaderSelect.value = desktopShaderSelect.value;
+                }
+            }
+            const observer = new MutationObserver(syncShaderOptions);
+            if (desktopShaderSelect) {
+                observer.observe(desktopShaderSelect, { childList: true, subtree: true });
+            }
+            syncShaderOptions();
+            const mobileModelSelect = document.getElementById('mobile-model-selector');
+            const desktopModelSelect = document.getElementById('model-selector');
+            if (desktopModelSelect && mobileModelSelect) {
+                mobileModelSelect.innerHTML = desktopModelSelect.innerHTML;
+                mobileModelSelect.value = desktopModelSelect.value;
+            }
+            mobileShaderSelect.addEventListener('change', (e) => {
+                const shaderIndex = parseInt(e.target.value);
+                if (typeof Module !== 'undefined' && Module.setShaderIndex) {
+                    try {
+                        Module.setShaderIndex(shaderIndex);
+                        desktopShaderSelect.value = e.target.value;
+                        setTimeout(updateShaderInfo, 50);
+                    } catch (error) {
+                        console.error('Error selecting shader:', error);
+                    }
+                }
+            });
+            mobileModelSelect.addEventListener('change', (e) => {
+                const selectedModel = e.target.value;
+                if (selectedModel && typeof Module !== 'undefined' && Module.loadModel) {
+                    try {
+                        Module.loadModel(selectedModel);
+                        desktopModelSelect.value = selectedModel;
+                    } catch (error) {
+                        console.error('Error loading model:', error);
+                    }
+                }
+            });
+            document.getElementById('mobile-prev-shader').addEventListener('click', () => {
+                if (typeof Module !== 'undefined' && Module.prevShaderWeb) {
+                    Module.prevShaderWeb();
+                    setTimeout(() => {
+                        updateShaderInfo();
+                        syncMobileShaderSelect();
+                    }, 50);
+                }
+            });
+
+            document.getElementById('mobile-next-shader').addEventListener('click', () => {
+                if (typeof Module !== 'undefined' && Module.nextShaderWeb) {
+                    Module.nextShaderWeb();
+                    setTimeout(() => {
+                        updateShaderInfo();
+                        syncMobileShaderSelect();
+                    }, 50);
+                }
+            });
+
+            document.getElementById('mobile-reset').addEventListener('click', () => {
+                if (typeof Module !== 'undefined' && Module.reset_time) {
+                    Module.reset_time();
+                }
+            });
+
+            document.getElementById('mobile-file-input').addEventListener('change', (event) => {
+                const file = event.target.files[0];
+                if (file) {
+                    document.getElementById('file-input').files = event.target.files;
+                    document.getElementById('file-input').dispatchEvent(new Event('change'));
+                }
+                event.target.value = '';
+            });
+
+            document.getElementById('mobile-save-image').addEventListener('click', () => {
+                const mobileScale = document.getElementById('mobile-save-scale');
+                const desktopScale = document.getElementById('save-scale');
+                if (mobileScale && desktopScale) {
+                    desktopScale.value = mobileScale.value;
+                }
+                saveButton.click();
+            });
+
+            document.getElementById('mobile-save-scale').addEventListener('change', (e) => {
+                document.getElementById('save-scale').value = e.target.value;
+            });
+
+            document.getElementById('mobile-shader-editor-btn').addEventListener('click', () => {
+                shaderEditorModal.classList.add('visible');
+                setTimeout(() => {
+                    shaderCodeTextarea.focus();
+                }, 100);
+            });
+
+            document.getElementById('mobile-uniforms-btn').addEventListener('click', () => {
+                uniformsModal.classList.add('visible');
+            });
+
+            document.getElementById('mobile-help-btn').addEventListener('click', () => {
+                document.getElementById('gesture-hint').style.display = 'block';
+            });
+
+            document.getElementById('close-gesture-hint').addEventListener('click', () => {
+                document.getElementById('gesture-hint').style.display = 'none';
+                localStorage.setItem('gestureHintShown', 'true');
+            });
+
+            if (!localStorage.getItem('gestureHintShown')) {
+                setTimeout(() => {
+                    document.getElementById('gesture-hint').style.display = 'block';
+                }, 1000);
+            }
+
+            function syncMobileShaderSelect() {
+                if (typeof Module !== 'undefined' && typeof Module.getIndex === 'function') {
+                    try {
+                        const currentIndex = Module.getIndex();
+                        mobileShaderSelect.value = currentIndex.toString();
+                        desktopShaderSelect.value = currentIndex.toString();
+                    } catch (e) {
+                        console.log('Could not sync shader select:', e);
+                    }
+                }
+            }
+
+            const touchOverlay = document.getElementById('touch-overlay');
+            const touchIndicator = document.getElementById('touch-indicator');
+            
+            let touchState = {
+                startX: 0,
+                startY: 0,
+                lastX: 0,
+                lastY: 0,
+                startDistance: 0,
+                isMultiTouch: false,
+                touchCount: 0,
+                lastTapTime: 0,
+                tapCount: 0,
+                isDragging: false
+            };
+
+            const ROTATION_SENSITIVITY = 0.5;
+            const ZOOM_SENSITIVITY = 0.01;
+            function simulateKeyPress(keyCode, key) {
+                if (typeof Module !== 'undefined' && Module.canvas) {
+                    const event = new KeyboardEvent('keydown', {
+                        keyCode: keyCode,
+                        key: key,
+                        bubbles: true
+                    });
+                    Module.canvas.dispatchEvent(event);
+                }
+            }
+
+            function simulateKeyRelease(keyCode, key) {
+                if (typeof Module !== 'undefined' && Module.canvas) {
+                    const event = new KeyboardEvent('keyup', {
+                        keyCode: keyCode,
+                        key: key,
+                        bubbles: true
+                    });
+                    Module.canvas.dispatchEvent(event);
+                }
+            }
+
+            let rotationInterval = null;
+            let currentRotation = { x: 0, y: 0 };
+
+            function startContinuousRotation() {
+                if (rotationInterval) return;
+                
+                rotationInterval = setInterval(() => {
+                    if (currentRotation.x !== 0 || currentRotation.y !== 0) {
+                        if (currentRotation.x > 0.1) simulateKeyPress(39, 'ArrowRight'); 
+                        else if (currentRotation.x < -0.1) simulateKeyPress(37, 'ArrowLeft');
+                        
+                        if (currentRotation.y > 0.1) simulateKeyPress(40, 'ArrowDown'); 
+                        else if (currentRotation.y < -0.1) simulateKeyPress(38, 'ArrowUp'); 
+                    }
+                }, 16);
+            }
+
+            function stopContinuousRotation() {
+                if (rotationInterval) {
+                    clearInterval(rotationInterval);
+                    rotationInterval = null;
+                }
+                simulateKeyRelease(37, 'ArrowLeft');
+                simulateKeyRelease(38, 'ArrowUp');
+                simulateKeyRelease(39, 'ArrowRight');
+                simulateKeyRelease(40, 'ArrowDown');
+            }
+
+            function getTouchDistance(touches) {
+                if (touches.length < 2) return 0;
+                const dx = touches[0].clientX - touches[1].clientX;
+                const dy = touches[0].clientY - touches[1].clientY;
+                return Math.sqrt(dx * dx + dy * dy);
+            }
+
+            touchOverlay.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                const touches = e.touches;
+                touchState.touchCount = touches.length;
+                touchState.isDragging = true;
+
+                if (touches.length === 1) {
+                    touchState.startX = touches[0].clientX;
+                    touchState.startY = touches[0].clientY;
+                    touchState.lastX = touches[0].clientX;
+                    touchState.lastY = touches[0].clientY;
+                    touchState.isMultiTouch = false;
+                    touchIndicator.textContent = 'Touch: Drag to rotate';
+                    
+                    const now = Date.now();
+                    if (now - touchState.lastTapTime < 300) {
+                        touchState.tapCount++;
+                    } else {
+                        touchState.tapCount = 1;
+                    }
+                    touchState.lastTapTime = now;
+                } else if (touches.length === 2) {
+                    touchState.isMultiTouch = true;
+                    touchState.startDistance = getTouchDistance(touches);
+                    touchIndicator.textContent = 'Touch: Pinch to zoom';
+                }
+            }, { passive: false });
+
+            touchOverlay.addEventListener('touchmove', (e) => {
+                e.preventDefault();
+                const touches = e.touches;
+
+                if (touches.length === 1 && !touchState.isMultiTouch) {
+                    const deltaX = touches[0].clientX - touchState.lastX;
+                    const deltaY = touches[0].clientY - touchState.lastY;
+                    
+                    touchState.lastX = touches[0].clientX;
+                    touchState.lastY = touches[0].clientY;
+
+                    if (typeof Module !== 'undefined') {
+                        if (Math.abs(deltaX) > 1 && Module.touchRotateY) {
+                            Module.touchRotateY(deltaX * ROTATION_SENSITIVITY);
+                        }
+                        
+                        if (Math.abs(deltaY) > 1 && Module.touchRotateX) {
+                            Module.touchRotateX(-deltaY * ROTATION_SENSITIVITY);
+                        }
+                    }
+
+                    touchIndicator.textContent = `Rotating: ${deltaX.toFixed(0)}, ${deltaY.toFixed(0)}`;
+                    
+                } else if (touches.length === 2) {
+                    const currentDistance = getTouchDistance(touches);
+                    const delta = currentDistance - touchState.startDistance;
+                    
+                    if (typeof Module !== 'undefined' && Module.touchZoom) {
+                        if (Math.abs(delta) > 3) {
+                            Module.touchZoom(-delta * ZOOM_SENSITIVITY);
+                            touchState.startDistance = currentDistance;
+                        }
+                    }
+                    
+                    touchIndicator.textContent = `Zoom: ${(delta > 0 ? '+' : '')}${delta.toFixed(0)}`;
+                }
+            }, { passive: false });
+
+            touchOverlay.addEventListener('touchend', (e) => {
+                e.preventDefault();
+                if (!touchState.isMultiTouch && e.changedTouches.length === 1) {
+                    const touch = e.changedTouches[0];
+                    const moveX = Math.abs(touch.clientX - touchState.startX);
+                    const moveY = Math.abs(touch.clientY - touchState.startY);
+                    if (moveX < 10 && moveY < 10) {
+                        setTimeout(() => {
+                            if (touchState.tapCount === 2) {
+                                if (typeof Module !== 'undefined' && Module.nextShaderWeb) {
+                                    Module.nextShaderWeb();
+                                    setTimeout(() => {
+                                        updateShaderInfo();
+                                        syncMobileShaderSelect();
+                                    }, 50);
+                                }
+                                touchIndicator.textContent = 'Double tap: Next shader';
+                            } else if (touchState.tapCount >= 3) {
+                                if (typeof Module !== 'undefined' && Module.prevShaderWeb) {
+                                    Module.prevShaderWeb();
+                                    setTimeout(() => {
+                                        updateShaderInfo();
+                                        syncMobileShaderSelect();
+                                    }, 50);
+                                }
+                                touchIndicator.textContent = 'Triple tap: Prev shader';
+                            }
+                        }, 300);
+                    }
+                }
+
+                simulateKeyRelease(65, 'a');
+                simulateKeyRelease(68, 'd');
+                simulateKeyRelease(87, 'w');
+                simulateKeyRelease(83, 's');
+                simulateKeyRelease(69, 'e');
+                simulateKeyRelease(81, 'q');
+
+                touchState.isDragging = false;
+                touchState.isMultiTouch = false;
+                
+                setTimeout(() => {
+                    if (!touchState.isDragging) {
+                        touchIndicator.textContent = 'Touch: Ready';
+                    }
+                }, 500);
+            }, { passive: false });
+
+            touchOverlay.addEventListener('touchcancel', (e) => {
+                touchState.isDragging = false;
+                touchState.isMultiTouch = false;
+                touchIndicator.textContent = 'Touch: Ready';
+                simulateKeyRelease(65, 'a');
+                simulateKeyRelease(68, 'd');
+                simulateKeyRelease(87, 'w');
+                simulateKeyRelease(83, 's');
+                simulateKeyRelease(69, 'e');
+                simulateKeyRelease(81, 'q');
+            });
+
+            canvas.addEventListener('touchstart', (e) => e.preventDefault(), { passive: false });
+            canvas.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
+        }
 
         
     </script>

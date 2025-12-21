@@ -585,6 +585,23 @@ public:
     float cameraDistance = 0.0f;
     float movementSpeed = 0.01f;
 
+    void adjustCameraYaw(float delta) {
+        cameraYaw += delta;
+        cameraYaw = fmod(cameraYaw + 360.0f, 360.0f);
+    }
+
+    void adjustCameraPitch(float delta) {
+        cameraPitch += delta;
+        if (cameraPitch > 89.0f) cameraPitch = 89.0f;
+        if (cameraPitch < -89.0f) cameraPitch = -89.0f;
+    }
+
+    void adjustCameraDistance(float delta) {
+        cameraDistance += delta;
+        if (cameraDistance < -2.0f) cameraDistance = -2.0f;
+        if (cameraDistance > 2.0f) cameraDistance = 2.0f;
+    }
+
     void loadModelFile(const std::string &m_file_path) {
         if(m_file_path.find("quad") != std::string::npos) {
                 is3d = false;
@@ -1606,6 +1623,18 @@ About *about_ptr = nullptr;
         return 0;
     }
 
+    void touchRotateX(float delta) {
+        if(about_ptr) about_ptr->adjustCameraPitch(delta);
+    }
+
+    void touchRotateY(float delta) {
+        if(about_ptr) about_ptr->adjustCameraYaw(delta);
+    }
+
+    void touchZoom(float delta) {
+        if(about_ptr) about_ptr->adjustCameraDistance(delta);
+    }
+
     EMSCRIPTEN_BINDINGS(image_loader) {
         emscripten::function("nextShaderWeb", &nextShaderWeb);
         emscripten::function("prevShaderWeb", &prevShaderWeb);
@@ -1646,6 +1675,9 @@ About *about_ptr = nullptr;
         emscripten::function("saveImage", &saveImageWeb);
         emscripten::function("resize", &resizeWeb);
         emscripten::function("forceTextureRebind", &forceTextureRebindWeb);
+        emscripten::function("touchRotateX", &touchRotateX);
+        emscripten::function("touchRotateY", &touchRotateY);
+        emscripten::function("touchZoom", &touchZoom);
         emscripten::function("getIndex", &getIndex);
         emscripten::function("loadModel", &loadModel);
         emscripten::function("setShader3DMode", &set3D);
