@@ -21,7 +21,7 @@ void main(void) {
     float n = 5.0;
     float t = mod(a + 3.14159 / n, 2.0 * 3.14159 / n) * n / 2.0 / 3.14159;
     t = abs(t - 0.5);
-    float time_t = mod(time_f, 10);
+    float time_t = mod(time_f, 10.0);
     FragColor = texture(textTexture, TexCoord * r * time_t * t); //vec2(TexCoord[0] * time_t * r, TexCoord[1] * time_t * t));
     //FragColor = texture(textTexture, sin(TexCoord * t));
 }

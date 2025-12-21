@@ -25,7 +25,7 @@ void main(void) {
     vec2 uv = TexCoord * 2.0 - 1.0;
     uv.y *= iResolution.y / iResolution.x;
 
-    float t = pingPong(time_f, 15) + 1.0;
+    float t = pingPong(time_f, 15.0) + 1.0;
 
     float wave = sin(uv.x * 10.0 + t * 2.0) * 0.1;
     float expand = 0.5 + 0.5 * sin(t * 2.0);

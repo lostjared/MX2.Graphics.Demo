@@ -75,11 +75,11 @@ vec4 blur(sampler2D image, vec2 uv, vec2 resolution) {
 }
 
 vec4 FragColorRotate(vec4 FragColor) {
-    ivec4 col = ivec4(FragColor * 255);
+    ivec4 col = ivec4(FragColor * 255.0);
     for (int i = 0; i < 3; ++i) {
         col[i] = col[i] % 0xFF;
     }
-    return vec4(col / 255.0);
+    return vec4(vec4(col) / 255.0);
 }
 
 void main(void) {

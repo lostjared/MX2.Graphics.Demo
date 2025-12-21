@@ -13,9 +13,9 @@ float pingPong(float x, float length) {
 void main(void)
 {
     FragColor = texture(textTexture, TexCoord);
-    vec4 FragColor2 = texture(textTexture, TexCoord / 2);
-    vec4 FragColor3 = texture(textTexture, TexCoord / 4);
-    vec4 FragColor4 = texture(textTexture, TexCoord / 8);
+    vec4 FragColor2 = texture(textTexture, TexCoord / 2.0);
+    vec4 FragColor3 = texture(textTexture, TexCoord / 4.0);
+    vec4 FragColor4 = texture(textTexture, TexCoord / 8.0);
     FragColor = (FragColor * 0.4) + (FragColor2 * 0.4) + (FragColor3 * 0.4) + (FragColor4 * 0.4);
     
     float time_t = pingPong(time_f, 10.0) + 2.0;

@@ -42,9 +42,9 @@ void main() {
     FragColor = vec4(col, 1.0);
     FragColor = mix(texture(textTexture, TexCoord), FragColor, 0.5);
 
-    vec4 FragColor2 = texture(textTexture, TexCoord / 2);
-    vec4 FragColor3 = texture(textTexture, TexCoord / 4);
-    vec4 FragColor4 = texture(textTexture, TexCoord / 8);
+    vec4 FragColor2 = texture(textTexture, TexCoord / 2.0);
+    vec4 FragColor3 = texture(textTexture, TexCoord / 4.0);
+    vec4 FragColor4 = texture(textTexture, TexCoord / 8.0);
     FragColor = (FragColor * 0.4) + (FragColor2 * 0.4) + (FragColor3 * 0.4) + (FragColor4 * 0.4);
 
     float time_t = pingPong(time_f, 10.0) + 2.0;

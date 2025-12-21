@@ -8,7 +8,7 @@ uniform sampler2D textTexture;
 uniform float time_f;
 uniform vec2 iResolution;
 uniform float restore_black;
-in float restore_black_value;
+uniform float restore_black_value;
 uniform vec4 inc_valuex;
 
 float hash(float n) {
@@ -67,6 +67,6 @@ void main(void) {
     FragColor[0] += s[0] * pos[0];
     FragColor[1] += s[1] * pos[1];
 
-    time_t = pingPong(time_f, 20) + 2.0;
+    time_t = pingPong(time_f, 20.0) + 2.0;
     FragColor = sin(FragColor * time_t);
 }

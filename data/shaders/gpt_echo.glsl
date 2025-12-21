@@ -4,7 +4,7 @@ precision highp float;
 
 in vec2 TexCoord;
 out vec4 FragColor;
-in float restore_black_value;
+uniform float restore_black_value;
 
 uniform sampler2D textTexture;
 

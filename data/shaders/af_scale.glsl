@@ -48,12 +48,12 @@ vec4 blur(sampler2D image, vec2 uv, vec2 resolution) {
 
 
 vec4 FragColorShift(vec4 col) {
-    ivec4 i_col = ivec4(col * 255);
+    ivec4 i_col = ivec4(col * 255.0);
 
-    for(int i = 0; i < 3; ++i) {
-        i_col[i] = i_col[i]%255;
-    }
-    return vec4(i_col / 255.0);
+    i_col[0] = i_col[0] % 255;
+    i_col[1] = i_col[1] % 255;
+    i_col[2] = i_col[2] % 255;
+    return vec4(i_col) / 255.0;
 }
 
 void main(void) {

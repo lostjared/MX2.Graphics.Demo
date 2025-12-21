@@ -3,16 +3,16 @@ precision highp float;
 
 in vec2 TexCoord;
 out vec4 FragColor;
-in float alpha_r;
-in float alpha_g;
-in float alpha_b;
-in float current_index;
-in float timeval;
-in float alpha;
-in vec3 vpos;
-in vec4 optx_val;
+uniform float alpha_r;
+uniform float alpha_g;
+uniform float alpha_b;
+uniform float current_index;
+uniform float timeval;
+uniform float alpha;
+uniform vec3 vpos;
+uniform vec4 optx_val;
 uniform vec4 optx;
-in vec4 random_value;
+uniform vec4 random_value;
 uniform vec4 random_var;
 uniform float alpha_value;
 
@@ -27,23 +27,25 @@ uniform vec4 inc_valuex;
 uniform vec4 inc_value;
 
 uniform float restore_black;
-in float restore_black_value;
+uniform float restore_black_value;
 
 void main(void)
 {
     if(restore_black_value == 1.0 && texture(textTexture, TexCoord) == vec4(0, 0, 0, 1))
         discard;
     FragColor = texture(textTexture, TexCoord);
-    ivec4 source = ivec4(FragColor * 255);
+    ivec4 source = ivec4(FragColor * 255.0);
     ivec4 inc = ivec4(inc_valuex);
     ivec4 inc_v = ivec4(inc_value);
     
     source += inc + inc_v;
     
-    for(int i = 0; i < 3; ++i) {
-        source[i] = source[i]%255;
-        FragColor[i] = float(source[i])/255;
-    }
+    source[0] = source[0]%255;
+    source[1] = source[1]%255;
+    source[2] = source[2]%255;
+    FragColor[0] = float(source[0])/255.0;
+    FragColor[1] = float(source[1])/255.0;
+    FragColor[2] = float(source[2])/255.0;
 }
 
 

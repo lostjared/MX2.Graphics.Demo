@@ -21,7 +21,7 @@ void main(void) {
     spiralCoord *= scale;
     spiralCoord = (spiralCoord / vec2(iResolution.x / iResolution.y, 1.0) + 1.0) / 2.0;
 
-    float time_t = mod(time_f, 100);
+    float time_t = mod(time_f, 100.0);
     float waveScale = time_t;
     float speed = 16.0;
     float offset = sin(time_f * speed + spiralCoord.x * waveScale) * 0.05;

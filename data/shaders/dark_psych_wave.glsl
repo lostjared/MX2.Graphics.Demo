@@ -31,7 +31,7 @@ void main(void) {
     );
 
     uv = TexCoord * 2.0 - 1.0;
-    float t = mod(time_f, 20);
+    float t = mod(time_f, 20.0);
     uv.y *= iResolution.y / iResolution.x;
     float angle = atan(uv.y, uv.x) + t * 20.0;
     vec3 rainbowColor = rainbow(angle / (2.0 * 3.14159));

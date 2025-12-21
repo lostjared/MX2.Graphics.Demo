@@ -19,7 +19,6 @@ cd_zoom_out.glsl
 chue.glsl
 cmod.glsl
 color_g.glsl
-color_grad_rainbow.glsl
 color_l.glsl
 color_swirl-o1.glsl
 color_swirl_c.glsl
@@ -54,10 +53,6 @@ distortf4.glsl
 dmdc.glsl
 echo-pingpong.glsl
 echo-pingpong_c.glsl
-echo_div4_rainbow.glsl
-echo_g.glsl
-echo_rainbow_spin.glsl
-echo_rainbow_swirl.glsl
 echo_rgb1.glsl
 echo_s.glsl
 echo_s_rgb.glsl
@@ -299,7 +294,6 @@ twirl_tex.glsl
 twist.glsl
 twist_directions.glsl
 twist_full.glsl
-vertex.glsl
 vhs-palette.glsl
 vhs.glsl
 warp-atan.glsl

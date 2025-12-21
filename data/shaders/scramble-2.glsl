@@ -15,7 +15,7 @@ float pingPong(float x, float length) {
 void main(void) {
     vec2 uv = TexCoord;
 
-    float time_t =  pingPong(time_f, 10);
+    float time_t =  pingPong(time_f, 10.0);
     
     float scrambleAmount = sin(time_f * 10.0) * 0.5 + 0.5;
     

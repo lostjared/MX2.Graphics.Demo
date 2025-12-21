@@ -7,7 +7,7 @@ uniform sampler2D textTexture;
 uniform float time_f;
 uniform vec2 iResolution;
 uniform float restore_black;
-in float restore_black_value;
+uniform float restore_black_value;
 uniform vec4 inc_valuex;
 
 float pingPong(float x, float length) {

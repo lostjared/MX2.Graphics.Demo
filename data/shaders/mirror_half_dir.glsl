@@ -5,7 +5,7 @@ precision highp float;
 in vec2 TexCoord;
 out vec4 FragColor;
 uniform sampler2D textTexture;
-in vec2 iResolution_;
+uniform vec2 iResolution_;
 uniform float time_f;
 
 void main(void)

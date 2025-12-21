@@ -8,7 +8,7 @@ uniform sampler2D textTexture;
 uniform float time_f;
 uniform vec2 iResolution;
 uniform float restore_black;
-in float restore_black_value;
+uniform float restore_black_value;
 
 vec3 rainbow(float t) {
     t = fract(t);
@@ -22,7 +22,7 @@ void main(void) {
     vec2 uv = TexCoord * 2.0 - 1.0;
     uv.y *= iResolution.y / iResolution.x;
 
-    float t = mod(time_f, 15);
+    float t = mod(time_f, 15.0);
     
     float wave = sin(uv.x * 10.0 + t * 2.0) * 0.1;
     float expand = 0.5 + 0.5 * sin(t * 2.0);
@@ -39,9 +39,9 @@ void main(void) {
     if (restore_black_value == 1.0 && texture(textTexture, TexCoord) == vec4(0, 0, 0, 1))
         discard;
 
-    vec4 FragColor2 = texture(textTexture, TexCoord / 2);
-    vec4 FragColor3 = texture(textTexture, TexCoord / 4);
-    vec4 FragColor4 = texture(textTexture, TexCoord / 8);
+    vec4 FragColor2 = texture(textTexture, TexCoord / 2.0);
+    vec4 FragColor3 = texture(textTexture, TexCoord / 4.0);
+    vec4 FragColor4 = texture(textTexture, TexCoord / 8.0);
     FragColor_result = (FragColor_result * 0.4) + (FragColor2 * 0.4) + (FragColor3 * 0.4) + (FragColor4 * 0.4);
 
     FragColor = FragColor_result;
