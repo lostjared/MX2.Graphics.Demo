@@ -1454,6 +1454,85 @@ About *about_ptr = nullptr;
         }
     }
 
+    void loadImageRGBA(const std::vector<uint8_t>& rgbaData, int width, int height) {
+        if(rgbaData.size() != static_cast<size_t>(width * height * 4)) {
+            mx::system_err << "Invalid RGBA data size. Expected " << (width * height * 4) << " but got " << rgbaData.size() << "\n";
+            return;
+        }
+        
+        SDL_Surface *surface = SDL_CreateRGBSurfaceWithFormatFrom(
+            const_cast<uint8_t*>(rgbaData.data()),
+            width, height,
+            32,
+            width * 4,
+            SDL_PIXELFORMAT_RGBA32
+        );
+        
+        if(!surface) {
+            mx::system_err << "Failed to create surface from RGBA data: " << SDL_GetError() << "\n";
+            return;
+        }
+        
+        SDL_Surface *converted = SDL_CreateRGBSurfaceWithFormat(0, width, height, 32, SDL_PIXELFORMAT_RGBA32);
+        if(!converted) {
+            mx::system_err << "Failed to create converted surface: " << SDL_GetError() << "\n";
+            SDL_FreeSurface(surface);
+            return;
+        }
+        
+        SDL_BlitSurface(surface, NULL, converted, NULL);
+        SDL_FreeSurface(surface);
+        
+        if(converted && main_w && main_w->object) {
+            About *about = dynamic_cast<About*>(main_w->object.get());
+            if(about) {
+                about->loadNewTexture(converted, main_w);
+            }
+        }
+        if(converted) {
+            SDL_FreeSurface(converted);
+        }
+    }
+
+    // Fast version using raw pointer - called from JavaScript with HEAPU8
+    void loadImageRGBAPtr(uintptr_t dataPtr, int width, int height) {
+        uint8_t* rgbaData = reinterpret_cast<uint8_t*>(dataPtr);
+        size_t expectedSize = static_cast<size_t>(width * height * 4);
+        
+        SDL_Surface *surface = SDL_CreateRGBSurfaceWithFormatFrom(
+            rgbaData,
+            width, height,
+            32,
+            width * 4,
+            SDL_PIXELFORMAT_RGBA32
+        );
+        
+        if(!surface) {
+            mx::system_err << "Failed to create surface from RGBA data: " << SDL_GetError() << "\n";
+            return;
+        }
+        
+        SDL_Surface *converted = SDL_CreateRGBSurfaceWithFormat(0, width, height, 32, SDL_PIXELFORMAT_RGBA32);
+        if(!converted) {
+            mx::system_err << "Failed to create converted surface: " << SDL_GetError() << "\n";
+            SDL_FreeSurface(surface);
+            return;
+        }
+        
+        SDL_BlitSurface(surface, NULL, converted, NULL);
+        SDL_FreeSurface(surface);
+        
+        if(converted && main_w && main_w->object) {
+            About *about = dynamic_cast<About*>(main_w->object.get());
+            if(about) {
+                about->loadNewTexture(converted, main_w);
+            }
+        }
+        if(converted) {
+            SDL_FreeSurface(converted);
+        }
+    }
+
      std::string compileCustomShaderWeb(const std::string &fragmentSource) {
         if(about_ptr && main_w) {
             return about_ptr->compileCustomShader(fragmentSource, main_w);
@@ -1643,6 +1722,8 @@ About *about_ptr = nullptr;
         emscripten::register_vector<uint8_t>("VectorU8");
         emscripten::function("loadImagePNG", &loadImagePNG);
         emscripten::function("loadImageJPG", &loadImageJPG);
+        emscripten::function("loadImageRGBA", &loadImageRGBA);
+        emscripten::function("loadImageRGBAPtr", &loadImageRGBAPtr);
         emscripten::function("reset_time", &reset_time);
         emscripten::function("setUniformSpeed", &setUniformSpeed);
         emscripten::function("setUniformAmplitude", &setUniformAmplitude);
