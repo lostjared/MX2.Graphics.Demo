@@ -106,6 +106,123 @@
             background: #388E3C !important;
         }
 
+        #camera-btn {
+            background: #E91E63 !important;
+            border: 1px solid #C2185B !important;
+        }
+
+        #camera-btn:hover {
+            background: #C2185B !important;
+        }
+
+        #camera-btn.active {
+            background: #F44336 !important;
+            border: 1px solid #D32F2F !important;
+        }
+
+        #camera-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+        }
+
+        #camera-modal.visible {
+            display: flex;
+        }
+
+        #camera-container {
+            background: #1e1e1e;
+            border-radius: 8px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
+            max-width: 90vw;
+            max-height: 85vh;
+        }
+
+        #camera-video {
+            max-width: 640px;
+            max-height: 480px;
+            width: 100%;
+            background: #000;
+            border-radius: 4px;
+        }
+
+        #camera-canvas {
+            display: none;
+        }
+
+        #camera-controls {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        #camera-controls button {
+            padding: 10px 20px;
+            font-size: 14px;
+            cursor: pointer;
+            border-radius: 4px;
+            border: none;
+            transition: background 0.2s;
+        }
+
+        #capture-frame-btn {
+            background: #4CAF50;
+            color: white;
+        }
+
+        #capture-frame-btn:hover {
+            background: #388E3C;
+        }
+
+        #start-stream-btn {
+            background: #2196F3;
+            color: white;
+        }
+
+        #start-stream-btn:hover {
+            background: #1976D2;
+        }
+
+        #start-stream-btn.streaming {
+            background: #F44336;
+        }
+
+        #start-stream-btn.streaming:hover {
+            background: #D32F2F;
+        }
+
+        #close-camera-btn {
+            background: #f44336;
+            color: white;
+        }
+
+        #close-camera-btn:hover {
+            background: #d32f2f;
+        }
+
+        #switch-camera-btn:hover {
+            background: #F57C00 !important;
+        }
+
+        #camera-status {
+            color: #aaa;
+            font-size: 12px;
+            text-align: center;
+        }
+
         #shader-editor-btn {
             background: #9C27B0 !important;
             border: 1px solid #7B1FA2 !important;
@@ -802,7 +919,21 @@ body.mobile-mode {
 }
 
 body.mobile-mode #canvas-container {
-    height: calc(100% - 180px);
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 140px;
+    height: auto;
+    width: 100%;
+}
+
+body.mobile-mode #canvas {
+    width: 100% !important;
+    height: 100% !important;
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
 }
 
 body.mobile-mode #controls {
@@ -817,10 +948,10 @@ body.mobile-mode #controls {
     left: 0;
     right: 0;
     background: linear-gradient(to top, rgba(0,0,0,0.95), rgba(20,20,30,0.9));
-    padding: 10px 15px 20px;
+    padding: 8px 10px 15px;
     z-index: 100;
     flex-direction: column;
-    gap: 10px;
+    gap: 6px;
     border-top: 2px solid #9C27B0;
 }
 
@@ -905,7 +1036,7 @@ body.mobile-mode #mobile-controls {
     top: 0;
     left: 0;
     right: 0;
-    bottom: 180px;
+    bottom: 140px;
     z-index: 50;
     touch-action: none;
 }
@@ -1003,29 +1134,29 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
 
 @media (max-height: 500px) and (orientation: landscape) {
     body.mobile-mode #canvas-container {
-        height: calc(100% - 100px);
+        bottom: 90px;
     }
     
     body.mobile-mode #mobile-controls {
-        padding: 8px 15px 12px;
+        padding: 5px 10px 8px;
     }
     
     body.mobile-mode #touch-overlay {
-        bottom: 100px;
+        bottom: 90px;
     }
     
     .mobile-btn {
-        padding: 10px 14px;
-        font-size: 14px;
+        padding: 8px 12px;
+        font-size: 13px;
     }
     
     .mobile-select {
-        padding: 10px 12px;
-        font-size: 14px;
+        padding: 8px 10px;
+        font-size: 13px;
     }
     
     .mobile-row {
-        gap: 6px;
+        gap: 5px;
     }
 }
     </style>
@@ -1054,6 +1185,7 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
             <option value="3">3x</option>
             <option value="4">4x</option>
         </select>
+        <button id="camera-btn">📷 Camera</button>
         <button id="shader-editor-btn">✏️ Custom Shader</button>
         <button id="uniforms-btn" title="Uniform Controls">⚙️</button>
         <span id="shader-info">Double-tap to cycle: <a href="/activity/demo/shaders/index.html" target="_blank">List ES3 Shaders</a></span>        
@@ -1157,6 +1289,7 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
         <div class="mobile-row">
             <label class="mobile-btn primary" for="mobile-file-input">🖼️ Load</label>
             <input type="file" id="mobile-file-input" accept=".png,.jpg,.jpeg" style="display:none;">
+            <button class="mobile-btn" id="mobile-camera-btn" style="background: linear-gradient(135deg, #E91E63 0%, #C2185B 100%);">📷</button>
             <button class="mobile-btn success" id="mobile-save-image">💾 Save</button>
             <select id="mobile-save-scale" class="mobile-btn" style="padding: 10px 8px; min-width: 50px;">
                 <option value="1">1x</option>
@@ -1164,7 +1297,7 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
                 <option value="3">3x</option>
                 <option value="4">4x</option>
             </select>
-            <button class="mobile-btn" id="mobile-shader-editor-btn" style="background: linear-gradient(135deg, #9C27B0 0%, #7B1FA2 100%);">✏️ Shader</button>
+            <button class="mobile-btn" id="mobile-shader-editor-btn" style="background: linear-gradient(135deg, #9C27B0 0%, #7B1FA2 100%);">✏️</button>
             <button class="mobile-btn" id="mobile-uniforms-btn">⚙️</button>
             <button class="mobile-btn" id="mobile-help-btn">❓</button>
         </div>
@@ -1217,6 +1350,30 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
             <div id="shader-editor-footer">
                 <button id="reset-shader-btn">Reset to Default</button>
                 <button id="compile-shader-btn">▶ Compile & Apply</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Camera Modal -->
+    <div id="camera-modal">
+        <div id="camera-container">
+            <h2 style="color: #fff; margin: 0 0 10px 0;">📷 Camera Capture</h2>
+            <video id="camera-video" autoplay playsinline></video>
+            <canvas id="camera-canvas"></canvas>
+            <div id="camera-status">Click "Start Streaming" to begin</div>
+            <div id="camera-settings" style="display: flex; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; justify-content: center;">
+                <select id="camera-resolution" style="padding: 8px; font-size: 14px; background: #333; color: #fff; border: 1px solid #555; border-radius: 4px;">
+                    <option value="320x240">320×240 (QVGA)</option>
+                    <option value="640x480" selected>640×480 (VGA)</option>
+                    <option value="1280x720">1280×720 (HD)</option>
+                    <option value="1920x1080">1920×1080 (Full HD)</option>
+                </select>
+                <button id="switch-camera-btn" style="padding: 8px 16px; font-size: 14px; background: #FF9800; color: #fff; border: none; border-radius: 4px; cursor: pointer;">🔄 Switch Camera</button>
+            </div>
+            <div id="camera-controls">
+                <button id="start-stream-btn">▶ Start Streaming</button>
+                <button id="capture-frame-btn">📸 Capture Frame</button>
+                <button id="close-camera-btn">✕ Close</button>
             </div>
         </div>
     </div>
@@ -1737,6 +1894,271 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
                 canvas.focus();
             }
         });
+
+        // Camera functionality
+        const cameraBtn = document.getElementById('camera-btn');
+        const cameraModal = document.getElementById('camera-modal');
+        const cameraVideo = document.getElementById('camera-video');
+        const cameraCanvas = document.getElementById('camera-canvas');
+        const startStreamBtn = document.getElementById('start-stream-btn');
+        const captureFrameBtn = document.getElementById('capture-frame-btn');
+        const closeCameraBtn = document.getElementById('close-camera-btn');
+        const cameraStatus = document.getElementById('camera-status');
+        const switchCameraBtn = document.getElementById('switch-camera-btn');
+        const cameraResolution = document.getElementById('camera-resolution');
+
+        let cameraStream = null;
+        let isStreaming = false;
+        let streamingInterval = null;
+        let animationFrameId = null;
+        let cameraBuffer = null;
+        let cameraBufferSize = 0;
+        let cameraCtx = null;
+        let currentFacingMode = 'user'; // 'user' for front, 'environment' for back
+
+        function getResolutionConstraints() {
+            const resolution = cameraResolution.value;
+            const [width, height] = resolution.split('x').map(Number);
+            return { width: { ideal: width }, height: { ideal: height } };
+        }
+
+        async function startCamera() {
+            try {
+                // Stop existing stream first
+                if (cameraStream) {
+                    cameraStream.getTracks().forEach(track => track.stop());
+                }
+                
+                cameraStatus.textContent = 'Requesting camera access...';
+                const resConstraints = getResolutionConstraints();
+                
+                cameraStream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        ...resConstraints,
+                        facingMode: currentFacingMode
+                    },
+                    audio: false
+                });
+                cameraVideo.srcObject = cameraStream;
+                
+                // Get actual resolution
+                cameraVideo.onloadedmetadata = () => {
+                    cameraStatus.textContent = `Camera ready: ${cameraVideo.videoWidth}×${cameraVideo.videoHeight}`;
+                };
+            } catch (error) {
+                console.error('Camera access error:', error);
+                cameraStatus.textContent = 'Error: Could not access camera. ' + error.message;
+            }
+        }
+
+        async function switchCamera() {
+            currentFacingMode = currentFacingMode === 'user' ? 'environment' : 'user';
+            const wasStreaming = isStreaming;
+            
+            if (wasStreaming) {
+                stopStreaming();
+            }
+            
+            await startCamera();
+            
+            if (wasStreaming) {
+                // Small delay to let the new camera initialize
+                setTimeout(() => {
+                    startStreaming();
+                }, 500);
+            }
+        }
+
+        function stopCamera() {
+            if (cameraStream) {
+                cameraStream.getTracks().forEach(track => track.stop());
+                cameraStream = null;
+                cameraVideo.srcObject = null;
+            }
+            // Free the camera buffer
+            if (cameraBuffer && typeof Module !== 'undefined' && Module._free) {
+                Module._free(cameraBuffer);
+                cameraBuffer = null;
+                cameraBufferSize = 0;
+            }
+            cameraCtx = null;
+            stopStreaming();
+        }
+
+        function captureFrame() {
+            if (!cameraStream) {
+                cameraStatus.textContent = 'Please start the camera first';
+                return;
+            }
+
+            const videoWidth = cameraVideo.videoWidth;
+            const videoHeight = cameraVideo.videoHeight;
+
+            if (videoWidth === 0 || videoHeight === 0) {
+                cameraStatus.textContent = 'Waiting for video to load...';
+                return;
+            }
+
+            // Only resize canvas if dimensions changed
+            if (cameraCanvas.width !== videoWidth || cameraCanvas.height !== videoHeight) {
+                cameraCanvas.width = videoWidth;
+                cameraCanvas.height = videoHeight;
+                cameraCtx = null; // Force context refresh
+            }
+            
+            if (!cameraCtx) {
+                cameraCtx = cameraCanvas.getContext('2d', { willReadFrequently: true });
+            }
+            
+            // Flip horizontally for mirror effect
+            cameraCtx.translate(videoWidth, 0);
+            cameraCtx.scale(-1, 1);
+            cameraCtx.drawImage(cameraVideo, 0, 0, videoWidth, videoHeight);
+            cameraCtx.setTransform(1, 0, 0, 1, 0, 0); // Reset transform
+
+            const imageData = cameraCtx.getImageData(0, 0, videoWidth, videoHeight);
+            const rgbaData = imageData.data;
+
+            if (typeof Module === 'undefined' || !Module._malloc || !Module.HEAPU8 || !Module.loadImageRGBAPtr) {
+                console.error('Module not ready:', {
+                    Module: !!Module,
+                    _malloc: !!Module?._malloc,
+                    HEAPU8: !!Module?.HEAPU8,
+                    loadImageRGBAPtr: !!Module?.loadImageRGBAPtr
+                });
+                cameraStatus.textContent = 'Module not ready. Please wait...';
+                return;
+            }
+
+            const dataSize = rgbaData.length;
+            
+            // Allocate or reuse buffer in WASM memory
+            if (!cameraBuffer || cameraBufferSize !== dataSize) {
+                if (cameraBuffer) {
+                    Module._free(cameraBuffer);
+                }
+                cameraBuffer = Module._malloc(dataSize);
+                cameraBufferSize = dataSize;
+            }
+
+            // Fast bulk copy using HEAPU8.set()
+            Module.HEAPU8.set(rgbaData, cameraBuffer);
+
+            try {
+                Module.loadImageRGBAPtr(cameraBuffer, videoWidth, videoHeight);
+                if (isStreaming) {
+                    cameraStatus.textContent = `Streaming: ${videoWidth}x${videoHeight}`;
+                } else {
+                    cameraStatus.textContent = `Frame captured: ${videoWidth}x${videoHeight}`;
+                }
+            } catch (error) {
+                console.error('Error sending frame:', error);
+                cameraStatus.textContent = 'Error: ' + error.message;
+            }
+        }
+
+        function streamLoop() {
+            if (!isStreaming) return;
+            captureFrame();
+            animationFrameId = requestAnimationFrame(streamLoop);
+        }
+
+        function startStreaming() {
+            if (!cameraStream) {
+                cameraStatus.textContent = 'Please start the camera first';
+                return;
+            }
+
+            isStreaming = true;
+            startStreamBtn.textContent = '⏹ Stop Streaming';
+            startStreamBtn.classList.add('streaming');
+            cameraStatus.textContent = 'Streaming frames to visualizer...';
+            
+            // Close the modal so user can see the visualizer
+            cameraModal.classList.remove('visible');
+            cameraBtn.classList.add('active');
+
+            // Use requestAnimationFrame for smooth streaming
+            streamLoop();
+        }
+
+        function stopStreaming() {
+            isStreaming = false;
+            if (animationFrameId) {
+                cancelAnimationFrame(animationFrameId);
+                animationFrameId = null;
+            }
+            if (streamingInterval) {
+                clearInterval(streamingInterval);
+                streamingInterval = null;
+            }
+            startStreamBtn.textContent = '▶ Start Streaming';
+            startStreamBtn.classList.remove('streaming');
+            cameraBtn.classList.remove('active');
+            if (cameraStream) {
+                cameraStatus.textContent = 'Streaming stopped';
+            }
+        }
+
+        if (cameraBtn) {
+            cameraBtn.addEventListener('click', () => {
+                cameraModal.classList.add('visible');
+                startCamera();
+            });
+        }
+
+        if (closeCameraBtn) {
+            closeCameraBtn.addEventListener('click', () => {
+                stopCamera();
+                cameraModal.classList.remove('visible');
+            });
+        }
+
+        if (cameraModal) {
+            cameraModal.addEventListener('click', (e) => {
+                if (e.target === cameraModal) {
+                    stopCamera();
+                    cameraModal.classList.remove('visible');
+                }
+            });
+        }
+
+        if (startStreamBtn) {
+            startStreamBtn.addEventListener('click', () => {
+                if (isStreaming) {
+                    stopStreaming();
+                } else {
+                    startStreaming();
+                }
+            });
+        }
+
+        if (captureFrameBtn) {
+            captureFrameBtn.addEventListener('click', () => {
+                captureFrame();
+            });
+        }
+
+        if (switchCameraBtn) {
+            switchCameraBtn.addEventListener('click', () => {
+                switchCamera();
+            });
+        }
+
+        if (cameraResolution) {
+            cameraResolution.addEventListener('change', async () => {
+                if (cameraStream) {
+                    const wasStreaming = isStreaming;
+                    if (wasStreaming) {
+                        stopStreaming();
+                    }
+                    await startCamera();
+                    if (wasStreaming) {
+                        setTimeout(() => startStreaming(), 500);
+                    }
+                }
+            });
+        }
 
         
         const basicTemplate = `#version 300 es
@@ -2332,6 +2754,11 @@ void main(void) {
                 setTimeout(() => {
                     shaderCodeTextarea.focus();
                 }, 100);
+            });
+
+            document.getElementById('mobile-camera-btn').addEventListener('click', () => {
+                cameraModal.classList.add('visible');
+                startCamera();
             });
 
             document.getElementById('mobile-uniforms-btn').addEventListener('click', () => {
