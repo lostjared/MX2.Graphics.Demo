@@ -59,6 +59,19 @@
             justify-content: center;
             max-width: 95vw;
             box-sizing: border-box;
+            transition: all 0.3s ease;
+        }
+
+        #controls.minimized {
+            flex-direction: column;
+            padding: 8px;
+            min-width: 50px;
+            height: auto;
+            max-width: 60px;
+        }
+
+        #controls.minimized > *:not(#toggle-controls) {
+            display: none;
         }
 
         #controls button {
@@ -1036,6 +1049,13 @@ body.mobile-mode #controls {
     flex-direction: column;
     gap: 6px;
     border-top: 2px solid #9C27B0;
+    transition: max-height 0.3s ease, padding 0.3s ease;
+}
+
+#mobile-controls.minimized {
+    max-height: 50px;
+    overflow: hidden;
+    padding: 8px 10px;
 }
 
 body.mobile-mode #mobile-controls {
@@ -1246,13 +1266,14 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
 </head>
 <body>
     <div id="loading-overlay">
-        <div id="loading-title">ACMX2 Interactive Visualizer v1.0 - Initializing...</div>
+        <div id="loading-title">ACMX2 Interactive Visualizer v1.1 - Initializing...</div>
         <div id="loading-output"></div>
     </div>
     <div id="canvas-container">
         <canvas id="canvas"></canvas>
     </div>
     <div id="controls">
+    <button id="toggle-controls" title="Minimize/Maximize Controls">⇅</button>
     <select name="shader_index" id="shader" style="padding: 8px; font-size: 12px; background: #333; color: #fff; border: 1px solid #555; border-radius: 4px; cursor: pointer; flex-shrink: 0; min-width: 120px; max-width: 200px;">
         <option value="0">Loading...</option>
     </select>
@@ -1342,6 +1363,7 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
     <!-- Mobile Controls -->
     <div id="mobile-controls">
         <div class="mobile-row">
+            <button class="mobile-btn" id="mobile-toggle-controls" title="Minimize/Maximize Controls" style="padding: 8px 6px; font-size: 12px; min-width: auto; flex: 0 0 auto;">⇅</button>
             <select id="mobile-shader" class="mobile-select">
                 <option value="0">Loading...</option>
             </select>
@@ -1460,9 +1482,11 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
                 </select>
                 <select id="camera-resolution" style="padding: 8px; font-size: 14px; background: #333; color: #fff; border: 1px solid #555; border-radius: 4px;">
                     <option value="320x240">320×240 (QVGA)</option>
-                    <option value="640x480" selected>640×480 (VGA)</option>
-                    <option value="1280x720">1280×720 (HD)</option>
+                    <option value="640x480">640×480 (VGA)</option>
+                    <option value="1280x720" selected>1280×720 (HD)</option>
                     <option value="1920x1080">1920×1080 (Full HD)</option>
+                    <option value="2560x1440">2560×1440 (2K)</option>
+                    <option value="3840x2160">3840×2160 (4K UHD)</option>
                 </select>
                 <button id="switch-camera-btn" style="padding: 8px 16px; font-size: 14px; background: #FF9800; color: #fff; border: none; border-radius: 4px; cursor: pointer;">🔄 Switch Camera</button>
             </div>
@@ -1562,7 +1586,7 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
             var output = document.getElementById('loading-output');
             if (output) {
                 output.innerHTML = '<span class="info">Initializing WebGL...</span>\n' +
-                                   '<span class="normal">Loading ACMX2 v1.0...</span>\n';
+                                   '<span class="normal">Loading ACMX2 v1.1...</span>\n';
             }
         })();
         
@@ -1812,6 +1836,8 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
         const nextButton = document.getElementById('next-shader');
         const saveButton = document.getElementById('save-image');
         const resetButton = document.getElementById('reset-btn');
+        const toggleControlsBtn = document.getElementById('toggle-controls');
+        const controlsDiv = document.getElementById('controls');
         const shaderEditorBtn = document.getElementById('shader-editor-btn');
         const shaderEditorModal = document.getElementById('shader-editor-modal');
         const closeEditorBtn = document.getElementById('close-editor-btn');
@@ -1924,6 +1950,38 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
                 }
             }
         });
+
+        // Toggle controls minimize/maximize (desktop)
+        if (toggleControlsBtn) {
+            toggleControlsBtn.addEventListener('click', () => {
+                controlsDiv.classList.toggle('minimized');
+                toggleControlsBtn.textContent = controlsDiv.classList.contains('minimized') ? '⇄' : '⇅';
+                localStorage.setItem('controlsMinimized', controlsDiv.classList.contains('minimized'));
+            });
+            
+            // Restore minimized state
+            if (localStorage.getItem('controlsMinimized') === 'true') {
+                controlsDiv.classList.add('minimized');
+                toggleControlsBtn.textContent = '⇄';
+            }
+        }
+
+        // Toggle controls minimize/maximize (mobile)
+        const mobileToggleBtn = document.getElementById('mobile-toggle-controls');
+        const mobileControlsDiv = document.getElementById('mobile-controls');
+        if (mobileToggleBtn) {
+            mobileToggleBtn.addEventListener('click', () => {
+                mobileControlsDiv.classList.toggle('minimized');
+                mobileToggleBtn.textContent = mobileControlsDiv.classList.contains('minimized') ? '⇄' : '⇅';
+                localStorage.setItem('mobileControlsMinimized', mobileControlsDiv.classList.contains('minimized'));
+            });
+            
+            // Restore minimized state
+            if (localStorage.getItem('mobileControlsMinimized') === 'true') {
+                mobileControlsDiv.classList.add('minimized');
+                mobileToggleBtn.textContent = '⇄';
+            }
+        }
 
         
         if (uniformsBtn) {
@@ -2414,16 +2472,32 @@ void main(void) {
             
             const containerWidth = container.clientWidth;
             const containerHeight = container.clientHeight;
+            const isMobile = window.innerWidth <= 768;
+            
+            // On mobile, use window dimensions for higher quality, not just container
+            let targetWidth = Math.floor(containerWidth);
+            let targetHeight = Math.floor(containerHeight);
+            
+            if (isMobile) {
+                // Use full viewport minus controls
+                const vw = window.innerWidth;
+                const vh = window.innerHeight;
+                // Account for mobile controls (roughly 60-100px at bottom depending on orientation)
+                const controlHeight = window.innerWidth > window.innerHeight ? 60 : 100;
+                
+                targetWidth = vw;
+                targetHeight = vh - controlHeight;
+            }
+            
+            const resolutionMultiplier = isMobile ? 2.0 : 1.0;
 
-            // Fill the entire container - no letterboxing
-            const targetWidth = Math.floor(containerWidth);
-            const targetHeight = Math.floor(containerHeight);
-
-            canvas.width = targetWidth;
-            canvas.height = targetHeight;
+            canvas.width = Math.floor(targetWidth * resolutionMultiplier);
+            canvas.height = Math.floor(targetHeight * resolutionMultiplier);
 
             canvas.style.width = `${targetWidth}px`;
             canvas.style.height = `${targetHeight}px`;
+            
+            console.log(`Canvas resized - Display: ${targetWidth}x${targetHeight}, Internal: ${canvas.width}x${canvas.height}, Multiplier: ${resolutionMultiplier}, Megapixels: ${(canvas.width * canvas.height / 1000000).toFixed(2)}`);
             
             if (typeof Module !== 'undefined' && typeof Module.resize === 'function') {
                 Module.resize();
@@ -2433,7 +2507,7 @@ void main(void) {
         resizeCanvas();
         window.addEventListener('resize', resizeCanvas);
 
-        // Video Recording functionality
+        
         const recordBtn = document.getElementById('record-btn');
         const recordTimer = document.getElementById('record-timer');
         const recordingIndicator = document.getElementById('recording-indicator');
@@ -2444,8 +2518,8 @@ void main(void) {
         let recordingStartTime = null;
         let recordingTimerInterval = null;
         let isRecording = false;
-        let recordingStream = null; // Store the stream to stop it later
-        let croppedCanvas = null; // Canvas for cropped recording
+        let recordingStream = null; 
+        let croppedCanvas = null; 
         let croppedCtx = null;
         let recordingAnimationFrame = null;
 
@@ -2495,10 +2569,53 @@ void main(void) {
                     return;
                 }
                 
-                // Create a canvas sized to the display area (no black bars)
+                // Calculate source coordinates in canvas space (which is already scaled)
+                const canvasScale = canvas.width / canvas.clientWidth;
+                
+                console.log(`Canvas: ${canvas.width}x${canvas.height}`);
+                console.log(`Canvas client: ${canvas.clientWidth}x${canvas.clientHeight}`);
+                console.log(`Canvas scale: ${canvasScale}`);
+                console.log(`Display dims: ${displayW}x${displayH}`);
+                
+                // Use full canvas resolution for recording on mobile
+                let recordWidth = canvas.width;
+                let recordHeight = canvas.height;
+                
+                // Enforce minimum 720p resolution for recording on mobile
+                const isMobile = window.innerWidth <= 768;
+                if (isMobile && recordWidth < 1280) {
+                    // Scale up to at least 720p (1280x720)
+                    const aspectRatio = recordHeight / recordWidth;
+                    recordWidth = 1280;
+                    recordHeight = Math.floor(1280 * aspectRatio);
+                    console.log(`Upscaling to minimum 720p: ${recordWidth}x${recordHeight}`);
+                }
+                
+                // If display dimensions are provided and valid, use scaled versions
+                if (displayW > 0 && displayH > 0 && displayW < canvas.width) {
+                    const srcX = Math.floor(displayX * canvasScale);
+                    const srcY = Math.floor(displayY * canvasScale);
+                    const srcW = Math.floor(displayW * canvasScale);
+                    const srcH = Math.floor(displayH * canvasScale);
+                    
+                    recordWidth = srcW;
+                    recordHeight = srcH;
+                    
+                    // Still enforce minimum for cropped recording
+                    if (isMobile && recordWidth < 1280) {
+                        const aspectRatio = recordHeight / recordWidth;
+                        recordWidth = 1280;
+                        recordHeight = Math.floor(1280 * aspectRatio);
+                    }
+                    console.log(`Using cropped: ${srcX},${srcY} ${srcW}x${srcH}`);
+                } else {
+                    console.log(`Using full canvas: ${recordWidth}x${recordHeight}`);
+                }
+                
+                // Create cropped canvas at the actual rendered size
                 croppedCanvas = document.createElement('canvas');
-                croppedCanvas.width = displayW;
-                croppedCanvas.height = displayH;
+                croppedCanvas.width = recordWidth;
+                croppedCanvas.height = recordHeight;
                 croppedCtx = croppedCanvas.getContext('2d', { 
                     alpha: false,
                     willReadFrequently: false
@@ -2508,12 +2625,20 @@ void main(void) {
                 croppedCtx.imageSmoothingEnabled = true;
                 croppedCtx.imageSmoothingQuality = 'high';
                 
-                // Draw initial frame
-                croppedCtx.drawImage(
-                    canvas,
-                    displayX, displayY, displayW, displayH,
-                    0, 0, displayW, displayH
-                );
+                // Draw initial frame - use full canvas or cropped area
+                if (displayW > 0 && displayH > 0 && displayW < canvas.width) {
+                    const canvasScale = canvas.width / canvas.clientWidth;
+                    const srcX = Math.floor(displayX * canvasScale);
+                    const srcY = Math.floor(displayY * canvasScale);
+                    const srcW = Math.floor(displayW * canvasScale);
+                    const srcH = Math.floor(displayH * canvasScale);
+                    croppedCtx.drawImage(canvas, srcX, srcY, srcW, srcH, 0, 0, recordWidth, recordHeight);
+                } else {
+                    croppedCtx.drawImage(canvas, 0, 0, recordWidth, recordHeight);
+                }
+                
+                console.log(`Recording at resolution: ${croppedCanvas.width}x${croppedCanvas.height} (${(croppedCanvas.width * croppedCanvas.height / 1000000).toFixed(2)} megapixels)`);
+                //alert(`Recording at ${croppedCanvas.width}x${croppedCanvas.height} (${(croppedCanvas.width * croppedCanvas.height / 1000000).toFixed(2)} MP)`);
                 
                 // Capture stream from the cropped canvas - use 0 for manual mode
                 recordingStream = croppedCanvas.captureStream(0);
@@ -2580,12 +2705,17 @@ void main(void) {
                     if (!isRecording || !croppedCtx) return;
                     
                     try {
-                        // Draw the display region (without black bars) to the cropped canvas
-                        croppedCtx.drawImage(
-                            canvas,
-                            displayX, displayY, displayW, displayH,  // source region (crop area)
-                            0, 0, displayW, displayH                  // destination (full cropped canvas)
-                        );
+                        // Draw full canvas or cropped area
+                        if (displayW > 0 && displayH > 0 && displayW < canvas.width) {
+                            const canvasScale = canvas.width / canvas.clientWidth;
+                            const srcX = Math.floor(displayX * canvasScale);
+                            const srcY = Math.floor(displayY * canvasScale);
+                            const srcW = Math.floor(displayW * canvasScale);
+                            const srcH = Math.floor(displayH * canvasScale);
+                            croppedCtx.drawImage(canvas, srcX, srcY, srcW, srcH, 0, 0, croppedCanvas.width, croppedCanvas.height);
+                        } else {
+                            croppedCtx.drawImage(canvas, 0, 0, croppedCanvas.width, croppedCanvas.height);
+                        }
                         
                         // Request a new frame to be added to the stream
                         const tracks = recordingStream.getVideoTracks();
