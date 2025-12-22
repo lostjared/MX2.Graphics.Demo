@@ -217,6 +217,22 @@
             background: #F57C00 !important;
         }
 
+        #camera-device-select {
+            padding: 8px;
+            font-size: 14px;
+            background: #333;
+            color: #fff;
+            border: 1px solid #555;
+            border-radius: 4px;
+            min-width: 200px;
+            max-width: 300px;
+        }
+
+        #camera-device-select:focus {
+            outline: none;
+            border-color: #E91E63;
+        }
+
         #camera-status {
             color: #aaa;
             font-size: 12px;
@@ -1361,7 +1377,10 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
             <video id="camera-video" autoplay playsinline></video>
             <canvas id="camera-canvas"></canvas>
             <div id="camera-status">Click "Start Streaming" to begin</div>
-            <div id="camera-settings" style="display: flex; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; justify-content: center;">
+            <div id="camera-settings" style="display: flex; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; justify-content: center; align-items: center;">
+                <select id="camera-device-select" title="Select Camera">
+                    <option value="">Loading cameras...</option>
+                </select>
                 <select id="camera-resolution" style="padding: 8px; font-size: 14px; background: #333; color: #fff; border: 1px solid #555; border-radius: 4px;">
                     <option value="320x240">320×240 (QVGA)</option>
                     <option value="640x480" selected>640×480 (VGA)</option>
@@ -1906,6 +1925,7 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
         const cameraStatus = document.getElementById('camera-status');
         const switchCameraBtn = document.getElementById('switch-camera-btn');
         const cameraResolution = document.getElementById('camera-resolution');
+        const cameraDeviceSelect = document.getElementById('camera-device-select');
 
         let cameraStream = null;
         let isStreaming = false;
@@ -1915,6 +1935,39 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
         let cameraBufferSize = 0;
         let cameraCtx = null;
         let currentFacingMode = 'user'; // 'user' for front, 'environment' for back
+        let availableCameras = [];
+
+        // Enumerate available camera devices
+        async function enumerateCameras() {
+            try {
+                // Request permission first to get device labels
+                const tempStream = await navigator.mediaDevices.getUserMedia({ video: true });
+                tempStream.getTracks().forEach(track => track.stop());
+                
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                availableCameras = devices.filter(device => device.kind === 'videoinput');
+                
+                // Populate the select dropdown
+                cameraDeviceSelect.innerHTML = '';
+                
+                if (availableCameras.length === 0) {
+                    const option = document.createElement('option');
+                    option.value = '';
+                    option.textContent = 'No cameras found';
+                    cameraDeviceSelect.appendChild(option);
+                } else {
+                    availableCameras.forEach((camera, index) => {
+                        const option = document.createElement('option');
+                        option.value = camera.deviceId;
+                        option.textContent = camera.label || `Camera ${index + 1}`;
+                        cameraDeviceSelect.appendChild(option);
+                    });
+                }
+            } catch (error) {
+                console.error('Error enumerating cameras:', error);
+                cameraDeviceSelect.innerHTML = '<option value="">Camera access denied</option>';
+            }
+        }
 
         function getResolutionConstraints() {
             const resolution = cameraResolution.value;
@@ -1932,14 +1985,32 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
                 cameraStatus.textContent = 'Requesting camera access...';
                 const resConstraints = getResolutionConstraints();
                 
+                // Build video constraints based on selected device or facing mode
+                const selectedDeviceId = cameraDeviceSelect.value;
+                let videoConstraints = { ...resConstraints };
+                
+                if (selectedDeviceId) {
+                    // Use specific device if selected
+                    videoConstraints.deviceId = { exact: selectedDeviceId };
+                } else {
+                    // Fall back to facing mode
+                    videoConstraints.facingMode = currentFacingMode;
+                }
+                
                 cameraStream = await navigator.mediaDevices.getUserMedia({
-                    video: {
-                        ...resConstraints,
-                        facingMode: currentFacingMode
-                    },
+                    video: videoConstraints,
                     audio: false
                 });
                 cameraVideo.srcObject = cameraStream;
+                
+                // Update the select to show currently active camera
+                const activeTrack = cameraStream.getVideoTracks()[0];
+                if (activeTrack) {
+                    const settings = activeTrack.getSettings();
+                    if (settings.deviceId && cameraDeviceSelect.value !== settings.deviceId) {
+                        cameraDeviceSelect.value = settings.deviceId;
+                    }
+                }
                 
                 // Get actual resolution
                 cameraVideo.onloadedmetadata = () => {
@@ -1999,7 +2070,7 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
                 return;
             }
 
-            // Only resize canvas if dimensions changed
+            
             if (cameraCanvas.width !== videoWidth || cameraCanvas.height !== videoHeight) {
                 cameraCanvas.width = videoWidth;
                 cameraCanvas.height = videoHeight;
@@ -2010,9 +2081,11 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
                 cameraCtx = cameraCanvas.getContext('2d', { willReadFrequently: true });
             }
             
-            // Flip horizontally for mirror effect
-            cameraCtx.translate(videoWidth, 0);
-            cameraCtx.scale(-1, 1);
+            
+            if (currentFacingMode === 'user') {
+                cameraCtx.translate(videoWidth, 0);
+                cameraCtx.scale(-1, 1);
+            }
             cameraCtx.drawImage(cameraVideo, 0, 0, videoWidth, videoHeight);
             cameraCtx.setTransform(1, 0, 0, 1, 0, 0); // Reset transform
 
@@ -2100,9 +2173,26 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
             }
         }
 
+        // Add event listener for camera device selection change
+        if (cameraDeviceSelect) {
+            cameraDeviceSelect.addEventListener('change', async () => {
+                if (cameraStream) {
+                    const wasStreaming = isStreaming;
+                    if (wasStreaming) {
+                        stopStreaming();
+                    }
+                    await startCamera();
+                    if (wasStreaming) {
+                        setTimeout(() => startStreaming(), 500);
+                    }
+                }
+            });
+        }
+
         if (cameraBtn) {
-            cameraBtn.addEventListener('click', () => {
+            cameraBtn.addEventListener('click', async () => {
                 cameraModal.classList.add('visible');
+                await enumerateCameras();
                 startCamera();
             });
         }
