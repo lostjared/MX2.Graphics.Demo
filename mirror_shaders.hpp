@@ -134,15 +134,17 @@ vec3 softTone(vec3 c) {
 
 vec3 tentBlur3(sampler2D img, vec2 uv, vec2 res) {
     vec2 ts = 1.0 / res;
-    vec3 s00 = textureGrad(img, uv + ts * vec2(-1.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
-    vec3 s10 = textureGrad(img, uv + ts * vec2(0.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
-    vec3 s20 = textureGrad(img, uv + ts * vec2(1.0, -1.0), dFdx(uv), dFdy(uv)).rgb;
-    vec3 s01 = textureGrad(img, uv + ts * vec2(-1.0, 0.0), dFdx(uv), dFdy(uv)).rgb;
-    vec3 s11 = textureGrad(img, uv, dFdx(uv), dFdy(uv)).rgb;
-    vec3 s21 = textureGrad(img, uv + ts * vec2(1.0, 0.0), dFdx(uv), dFdy(uv)).rgb;
-    vec3 s02 = textureGrad(img, uv + ts * vec2(-1.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
-    vec3 s12 = textureGrad(img, uv + ts * vec2(0.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
-    vec3 s22 = textureGrad(img, uv + ts * vec2(1.0, 1.0), dFdx(uv), dFdy(uv)).rgb;
+    vec2 grad_x = dFdx(uv);
+    vec2 grad_y = dFdy(uv);
+    vec3 s00 = textureGrad(img, wrapUV(uv + ts * vec2(-1.0, -1.0)), grad_x, grad_y).rgb;
+    vec3 s10 = textureGrad(img, wrapUV(uv + ts * vec2(0.0, -1.0)), grad_x, grad_y).rgb;
+    vec3 s20 = textureGrad(img, wrapUV(uv + ts * vec2(1.0, -1.0)), grad_x, grad_y).rgb;
+    vec3 s01 = textureGrad(img, wrapUV(uv + ts * vec2(-1.0, 0.0)), grad_x, grad_y).rgb;
+    vec3 s11 = textureGrad(img, wrapUV(uv), grad_x, grad_y).rgb;
+    vec3 s21 = textureGrad(img, wrapUV(uv + ts * vec2(1.0, 0.0)), grad_x, grad_y).rgb;
+    vec3 s02 = textureGrad(img, wrapUV(uv + ts * vec2(-1.0, 1.0)), grad_x, grad_y).rgb;
+    vec3 s12 = textureGrad(img, wrapUV(uv + ts * vec2(0.0, 1.0)), grad_x, grad_y).rgb;
+    vec3 s22 = textureGrad(img, wrapUV(uv + ts * vec2(1.0, 1.0)), grad_x, grad_y).rgb;
     return (s00 + 2.0 * s10 + s20 + 2.0 * s01 + 4.0 * s11 + 2.0 * s21 + s02 + 2.0 * s12 + s22) / 16.0;
 }
 
@@ -1932,9 +1934,9 @@ vec3 sampleWarp(vec2 uv, float t, float strength, vec2 center, vec2 res) {
     vec2 chromaShift = 0.0035 * strength * chromaBoost *
                        vec2(sin(t + f1 * 6.0), cos(t * 1.3 + f2 * 6.0));
 
-    float rC = texture(textTexture, base + chromaShift).r;
-    float gC = texture(textTexture, base).g;
-    float bC = texture(textTexture, base - chromaShift).b;
+    float rC = mxTexture(textTexture, base + chromaShift).r;
+    float gC = mxTexture(textTexture, base).g;
+    float bC = mxTexture(textTexture, base - chromaShift).b;
     vec3 col = vec3(rC, gC, bC);
 
     float bright = 0.7 + 0.6 * f3 + 0.4 * sin(t * 0.6 + f1 * 3.0);
@@ -2011,7 +2013,6 @@ void main(void) {
     float radius = length(offset);
     float normalizedRadius = radius / maxRadius;
     float angle = atan(offset.y, offset.x);
-
     float distortion = 0.5;
     float distortedRadius = normalizedRadius + distortion * pow(normalizedRadius, 2.0);
     distortedRadius = min(distortedRadius, 1.0);
@@ -2120,7 +2121,7 @@ void main(void) {
     // Tile a bit so extreme warping stays “filled”
     sampleUV = fract(sampleUV);
 
-    vec4 texColor = texture(textTexture, sampleUV);
+    vec4 texColor = mxTexture(textTexture, sampleUV);
 
     // Vertical glowing seam between worlds
     float seam = smoothstep(splitX - 0.004, splitX, uv.x)

@@ -72,44 +72,39 @@ vec2 applyZoomRotation(vec2 uv, vec2 center) {
     return p + center;
 }
 
-vec2 _mx_mirror_dudx = vec2(0.0);
-vec2 _mx_mirror_dudy = vec2(0.0);
-bool _mx_mirror_hasGrad = false;
-/*
-vec2 mirrorCoord(vec2 uv) {
-    vec2 u = fract(uv);
-    vec2 flip = step(vec2(0.5), u);
-    vec2 m = mix(u, 1.0 - u, flip);
-    vec2 signv = mix(vec2(1.0), vec2(-1.0), flip);
-    _mx_mirror_dudx = dFdx(uv) * signv;
-    _mx_mirror_dudy = dFdy(uv) * signv;
-    _mx_mirror_hasGrad = true;
-    return m;
-}*/
-
-vec2 mirrorCoord(vec2 uv) {
-    vec2 m = mod(uv, 2.0);
-    return mix(m, 2.0 - m, step(1.0, m));
+// Triangle wave wrap function - call this on coordinates before ANY texture sampling
+// Formula: 1.0 - abs(1.0 - 2.0 * tc) creates seamless mirroring
+vec2 wrapUV(vec2 tc) {
+    return 1.0 - abs(1.0 - 2.0 * fract(tc * 0.5));
 }
 
-// Safe mirror function that avoids seams at boundaries
+// Pass-through mirror coord - actual wrapping happens in mxTexture
+vec2 mirrorCoord(vec2 tc) {
+    return tc;
+}
+
+// Pass-through safe mirror - actual wrapping happens in mxTexture  
 vec2 safeMirror(vec2 tc, sampler2D tex) {
-    vec2 m = mod(tc, 2.0);
-    vec2 uv = mix(m, 2.0 - m, step(1.0, m));
-    vec2 ts = vec2(textureSize(tex, 0));
-    vec2 eps = 0.5 / ts;
-    return clamp(uv, eps, 1.0 - eps);
+    return tc;
 }
 
-vec4 mxTexture(sampler2D tex, vec2 uv) {
+// Final texture sampling - applies seamless triangle wave wrap after all calculations
+vec4 mxTexture(sampler2D tex, vec2 tc) {
     vec2 ts = vec2(textureSize(tex, 0));
     vec2 eps = 0.5 / ts;
-    vec2 u = clamp(uv, eps, 1.0 - eps);
-    if (_mx_mirror_hasGrad) {
-        _mx_mirror_hasGrad = false;
-        return textureGrad(tex, u, _mx_mirror_dudx, _mx_mirror_dudy);
+    
+    // Apply triangle wave mirroring at final sample stage
+    vec2 uv = wrapUV(tc);
+    vec2 sampleUV = clamp(uv, eps, 1.0 - eps);
+    
+    // Use textureLod to avoid derivative discontinuities at wrap boundaries
+    float lod = 0.0;
+    vec2 deriv = fwidth(tc);
+    if (deriv.x > 0.0 || deriv.y > 0.0) {
+        lod = log2(max(max(deriv.x, deriv.y) * max(ts.x, ts.y), 1.0));
     }
-    return texture(tex, u);
+    
+    return textureLod(tex, sampleUV, lod);
 }
 
 )"
