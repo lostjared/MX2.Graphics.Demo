@@ -22,6 +22,10 @@ float pingPong(float t, float l) {
     return abs(mod(t, 2.0 * l) - l);
 }
 
+vec2 seamlessMirror(vec2 uv) {
+    return abs(mod(uv, 2.0) - 1.0);
+}
+
 
 vec3 adjustBrightness(vec3 col, float b) {
     return col * b;
@@ -74,15 +78,13 @@ vec2 applyZoomRotation(vec2 uv, vec2 center) {
 void main() {
     float time = time_f * iSpeed;
     vec2 uv = applyZoomRotation(TexCoord, vec2(0.5));
-    float streTexCoordh = 1.0 + pingPong(time, 2.0) * 0.5 * iAmplitude;
-
-    if (uv.x < 0.5) {
-        uv.x = 0.5 - (0.5 - uv.x) * streTexCoordh;
-        uv.x = 1.0 - uv.x;
-    } else {
-        uv.x = 0.5 + (uv.x - 0.5) * streTexCoordh;
-    }
-    vec4 texCol = texture(textTexture, uv);
+    
+    // Animate stretch effect using pingPong
+    float stretch = 1.0 + pingPong(time, 2.0) * 0.5 * iAmplitude;
+    uv = (uv - 0.5) * vec2(stretch, 1.0) + 0.5;
+    
+    // Apply seamless mirroring for proper tiling
+    vec4 texCol = texture(textTexture, seamlessMirror(uv));
     vec3 finalCol = applyColorAdjustments(texCol.rgb);
     FragColor = vec4(finalCol, texCol.a);
 }

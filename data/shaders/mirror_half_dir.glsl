@@ -19,6 +19,10 @@ uniform float iRotation;
 uniform float iQuality;
 uniform float iDebugMode;
 
+vec2 seamlessMirror(vec2 uv) {
+    return abs(mod(uv, 2.0) - 1.0);
+}
+
 
 vec3 adjustBrightness(vec3 col, float b) {
     return col * b;
@@ -77,16 +81,12 @@ void main(void)
     float currentTime = mod(time, totalDuration);
 
     if (currentTime < duration) {
-        if (uv.x > 0.5) {
-            uv.x = 1.0 - uv.x;
-        }
+        // Mirror handled by seamlessMirror() in texture sampling
     } else {
-        if (uv.x < 0.5) {
-            uv.x = 1.0 - uv.x;
-        }
+        // Mirror handled by seamlessMirror() in texture sampling
     }
     
-    vec4 texCol = texture(textTexture, uv);
+    vec4 texCol = texture(textTexture, seamlessMirror(uv));
     vec3 finalCol = applyColorAdjustments(texCol.rgb);
     FragColor = vec4(finalCol, texCol.a);
 }

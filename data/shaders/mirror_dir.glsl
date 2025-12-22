@@ -18,6 +18,10 @@ uniform float iRotation;
 uniform float iQuality;
 uniform float iDebugMode;
 
+vec2 seamlessMirror(vec2 uv) {
+    return abs(mod(uv, 2.0) - 1.0);
+}
+
 
 vec3 adjustBrightness(vec3 col, float b) {
     return col * b;
@@ -70,21 +74,14 @@ vec2 applyZoomRotation(vec2 uv, vec2 center) {
 void main(void)
 {
     float time = time_f * iSpeed;
-    vec2 mirrored_TexCoord = TexCoord;
+    vec2 uv = applyZoomRotation(TexCoord, vec2(0.5));
     
-    int direction = int(mod(time, 4.0));
+    // Animate the UV scaling for visual effect
+    float scale = 1.0 + sin(time) * 0.5 * iAmplitude;
+    uv = (uv - 0.5) * scale + 0.5;
     
-    if (direction == 0) {
-        mirrored_TexCoord = TexCoord;
-    } else if (direction == 1) {
-        mirrored_TexCoord.x = 1.0 - TexCoord.x;
-    } else if (direction == 2) {
-        mirrored_TexCoord.y = 1.0 - TexCoord.y;
-    } else if (direction == 3) {
-        mirrored_TexCoord = 1.0 - TexCoord;
-    }
-
-    vec4 texCol = texture(textTexture, mirrored_TexCoord);
+    // Apply seamless mirroring for proper tiling
+    vec4 texCol = texture(textTexture, seamlessMirror(uv));
     vec3 finalCol = applyColorAdjustments(texCol.rgb);
     FragColor = vec4(finalCol, texCol.a);
 }

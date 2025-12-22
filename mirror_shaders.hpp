@@ -298,8 +298,8 @@ void main(void){
     vec2 km = mod(kaleido, 2.0);
     kaleido = mix(km, 2.0 - km, step(1.0, km));
     vec2 uv=kaleido/ar+m;
-    uv=fract(uv);
-    color=mxTexture(textTexture,sin(uv * (PI * pingPong(fract(time_f), 1.0))));
+    uv=mirrorCoord(uv);
+    color=mxTexture(textTexture, mirrorCoord(sin(uv * (PI * pingPong(fract(time_f), 1.0))) * 0.5 + 0.5));
 
     color.rgb = applyColorAdjustments(color.rgb);
 }
@@ -382,9 +382,9 @@ void main(void){
     vec2 tcAdjustedG=tcAdjusted;
     vec2 tcAdjustedB=tcAdjusted+dispersionOffset;
 
-    float r=mxTexture(textTexture,tcAdjustedR).r;
-    float g=mxTexture(textTexture,tcAdjustedG).g;
-    float b=mxTexture(textTexture,tcAdjustedB).b;
+    float r=mxTexture(textTexture, mirrorCoord(tcAdjustedR)).r;
+    float g=mxTexture(textTexture, mirrorCoord(tcAdjustedG)).g;
+    float b=mxTexture(textTexture, mirrorCoord(tcAdjustedB)).b;
 
     color=vec4(r,g,b,1.0);
 
@@ -440,7 +440,7 @@ void main(void) {
         float b = mxTexture(textTexture, texCoordB).b;
         color = vec4(r, g, b, 1.0);
     } else {
-        vec2 newTexCoord = clamp(tc, 0.0, 1.0);
+        vec2 newTexCoord = mirrorCoord(tc);
         color = mxTexture(textTexture, newTexCoord);
     }
 
@@ -566,7 +566,7 @@ void main(void) {
     float phase = mod(time_f * rippleSpeed, maxRippleRadius);
     float ripple = sin((dist - phase) * 10.0) * exp(-dist * 3.0);
     vec2 displacedCoord = vec2(tc.x, tc.y + ripple * sin(time_f));
-    color = mxTexture(textTexture, displacedCoord);
+    color = mxTexture(textTexture, mirrorCoord(displacedCoord));
 
     color.rgb = applyColorAdjustments(color.rgb);
 }
@@ -598,10 +598,7 @@ void main(void) {
     vec2 uv = safeMirror(tc, textTexture);
 
     float timeVar = time_f * 0.5;
-    vec2 noise = vec2(
-        pingPong(uv.x + timeVar, 1.0),
-        pingPong(uv.y + timeVar, 1.0)
-    );
+    vec2 noise = mirrorCoord(uv + timeVar);
 
     float stretchFactorX = 1.0 + 0.3 * sin(time_f + uv.y * 10.0);
     float stretchFactorY = 1.0 + 0.3 * cos(time_f + uv.x * 10.0);
@@ -611,7 +608,7 @@ void main(void) {
         uv.y * stretchFactorY + noise.y * 0.1
     );
 
-    color = mxTexture(textTexture, distortedUV);
+    color = mxTexture(textTexture, mirrorCoord(distortedUV));
 
     color.rgb = applyColorAdjustments(color.rgb);
 }
@@ -661,7 +658,7 @@ void main(void){
     float rp = r + bend * r * r;
     uv = center + vec2(cos(ang), sin(ang)) * rp;
     uv += 0.02 * vec2(sin((tc.y+time_f)*4.0), cos((tc.x-time_f)*3.5));
-    uv = vec2(pingPong(uv.x, 1.0), pingPong(uv.y, 1.0));
+    uv = mirrorCoord(uv);
     color = mxTexture(textTexture, uv);
 
     color.rgb = applyColorAdjustments(color.rgb);
@@ -933,9 +930,7 @@ void main(void){
     rotatedTC.y = sin(angle) * (distortedCoords.x - center.x) + cos(angle) * (distortedCoords.y - center.y) + center.y;
 
     float warpAmp = 0.02 + 0.06*ua + 0.04*a;
-    vec2 warpedCoords;
-    warpedCoords.x = pingPong(rotatedTC.x + t * 0.12 * (1.0 + warpAmp*5.0), 1.0);
-    warpedCoords.y = pingPong(rotatedTC.y + t * 0.12 * (1.0 + warpAmp*5.0), 1.0);
+    vec2 warpedCoords = mirrorCoord(rotatedTC + t * 0.12 * (1.0 + warpAmp*5.0));
 
     vec2 uv = cv * warpedCoords;
 
@@ -1099,7 +1094,7 @@ void main(void){
     vec2 kaleido=kdir*length(qwrap);
 
     vec2 uv=kaleido/ar+m;
-    uv=fract(uv);
+    uv=mirrorCoord(uv);
     color=mxTexture(textTexture,uv);
 
     color.rgb = applyColorAdjustments(color.rgb);
@@ -1248,7 +1243,7 @@ void main(void)
 
     vec2 tcAdjusted = uv + (normCoord * 0.301 * wave);
 
-    vec4 textureColor = mxTexture(textTexture, tcAdjusted);
+    vec4 textureColor = mxTexture(textTexture, mirrorCoord(tcAdjusted));
     color = textureColor;
 
     color.rgb = applyColorAdjustments(color.rgb);
@@ -1520,7 +1515,7 @@ void main(void) {
     vec2 rotatedTC = center + r*vec2(cos(ang), sin(ang));
     rotatedTC = fract(rotatedTC);
 
-    color = mxTexture(textTexture, rotatedTC);
+    color = mxTexture(textTexture, mirrorCoord(rotatedTC));
 
     color.rgb = applyColorAdjustments(color.rgb);
 }
@@ -1567,7 +1562,7 @@ void main(void) {
     
     rotatedTC = sin(rotatedTC * (modulatedTime1 * modulatedTime2 * modulatedTime3));
 
-    color = mxTexture(textTexture, rotatedTC);
+    color = mxTexture(textTexture, mirrorCoord(rotatedTC * 0.5 + 0.5));
 
     color.rgb = applyColorAdjustments(color.rgb);
 }
@@ -1601,7 +1596,7 @@ void main() {
     vec2 reflectUV = vec2(cos(reflection), sin(reflection)) * radius + 0.5;
 
     vec4 gradientColor = vec4(0.5 + 0.5 * cos(time_f + radius * 10.0), 0.5 + 0.5 * sin(time_f + radius * 10.0), 0.5 + 0.5 * cos(time_f - radius * 10.0), 1.0);
-    vec4 textureColor = mxTexture(textTexture, reflectUV);
+    vec4 textureColor = mxTexture(textTexture, mirrorCoord(reflectUV));
     
     color = mix(gradientColor, textureColor, 0.5);
 
@@ -1714,12 +1709,9 @@ void main(void) {
     uv -= 0.5;
     uv = mat2(c, -s, s, c) * uv;
     uv += 0.5;
-    if (uv.x > 0.5) {
-        uv.x = 1.0 - uv.x;
-    } else {
-        uv.x = uv.x;
-    }
-    color = mxTexture(textTexture, sin(uv * time_t));
+    // Apply seamless mirroring instead of manual flip
+    uv = mirrorCoord(uv);
+    color = mxTexture(textTexture, mirrorCoord(sin(uv * time_t) * 0.5 + 0.5));
 
     color.rgb = applyColorAdjustments(color.rgb);
 }
@@ -1848,7 +1840,7 @@ void main(void){
 
     uvx += 0.02 * vec2(sin((tc.y+time_f)*4.0), cos((tc.x-time_f)*3.5));
 
-    uv = vec2(pingPong(uv.x, 1.0), pingPong(uv.y, 1.0));
+    uvx = mirrorCoord(uvx);
 
     color = mxTexture(textTexture, uvx);
 
@@ -2030,12 +2022,8 @@ void main(void) {
     vec2 rotatedTC;
     rotatedTC.x = cos(angle) * (distortedCoords.x - center.x) - sin(angle) * (distortedCoords.y - center.y) + center.x;
     rotatedTC.y = sin(angle) * (distortedCoords.x - center.x) + cos(angle) * (distortedCoords.y - center.y) + center.y;
-    vec2 warpedCoords;
-    warpedCoords.x = pingPong(rotatedTC.x + time_f * 0.1, 1.0);
-    warpedCoords.y = pingPong(rotatedTC.y + time_f * 0.1, 1.0);
-    
-    warpedCoords = mirrorCoord(warpedCoords);
-    color = mxTexture(textTexture, warpedCoords);
+    vec2 warpedCoords = mirrorCoord(rotatedTC + time_f * 0.1);
+    color = mxTexture(textTexture, mirrorCoord(warpedCoords));
     color.rgb = applyColorAdjustments(color.rgb);
 }
 )SHD1";

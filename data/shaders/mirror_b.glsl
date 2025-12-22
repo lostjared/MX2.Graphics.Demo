@@ -17,6 +17,10 @@ uniform float iRotation;
 uniform float iQuality;
 uniform float iDebugMode;
 
+vec2 seamlessMirror(vec2 uv) {
+    return abs(mod(uv, 2.0) - 1.0);
+}
+
 
 vec3 adjustBrightness(vec3 col, float b) {
     return col * b;
@@ -68,10 +72,8 @@ vec2 applyZoomRotation(vec2 uv, vec2 center) {
 
 void main() {
     vec2 uv = applyZoomRotation(TexCoord, vec2(0.5));
-    if (uv.x < 0.5) {
-        uv.x = 1.0 - uv.x;
-    }
-    vec4 texCol = texture(textTexture, uv);
+    // Mirror handled by seamlessMirror() in texture sampling
+    vec4 texCol = texture(textTexture, seamlessMirror(uv));
     vec3 finalCol = applyColorAdjustments(texCol.rgb);
     FragColor = vec4(finalCol, texCol.a);
 }
