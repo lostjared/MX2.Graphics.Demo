@@ -1,3 +1,4 @@
+<!-- Most of this HTML/JavaScript was generated with Claude Cpus -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -8,6 +9,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="screen-orientation" content="portrait">
     <title>ACMX2 - Interactive Visualizer</title>
+    <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
     <style>
         body {
             display: flex;
@@ -1342,6 +1344,10 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
             <option value="4">4x</option>
         </select>
         <button id="record-btn">🔴 Record</button>
+        <select id="record-format" style="padding: 6px 8px; font-size: 12px; background: #333; color: #fff; border: 1px solid #555; border-radius: 4px; cursor: pointer; min-width: 65px;" title="Recording Format">
+            <option value="mp4">MP4</option>
+            <option value="webm" selected>WebM</option>
+        </select>
         <select id="record-fps" style="padding: 6px 8px; font-size: 12px; background: #333; color: #fff; border: 1px solid #555; border-radius: 4px; cursor: pointer; min-width: 60px;" title="Recording Frame Rate">
             <option value="24">24fps</option>
             <option value="30">30fps</option>
@@ -1456,6 +1462,10 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
             <input type="file" id="mobile-file-input" accept=".png,.jpg,.jpeg" style="display:none;">
             <button class="mobile-btn" id="mobile-camera-btn" style="background: linear-gradient(135deg, #E91E63 0%, #C2185B 100%);">📷</button>
             <button class="mobile-btn" id="mobile-record-btn" style="background: linear-gradient(135deg, #673AB7 0%, #512DA8 100%);">🔴</button>
+            <select id="mobile-record-format" class="mobile-btn" style="padding: 10px 8px; min-width: 55px; font-size: 12px;">
+                <option value="mp4">MP4</option>
+                <option value="webm" selected>WebM</option>
+            </select>
             <select id="mobile-record-fps" class="mobile-btn" style="padding: 10px 8px; min-width: 55px; font-size: 12px;">
                 <option value="24">24</option>
                 <option value="30">30</option>
@@ -2907,6 +2917,322 @@ void main(void) {
         let croppedCanvas = null; 
         let croppedCtx = null;
         let recordingAnimationFrame = null;
+        let lastRecordingDuration = 0; // Store duration for FFmpeg progress tracking
+        
+        // FFmpeg.wasm instance for WebM to MP4 conversion
+        let ffmpeg = null;
+        let ffmpegLoaded = false;
+        let ffmpegLoading = false;
+        let ffmpegSupported = typeof SharedArrayBuffer !== 'undefined';
+        
+        // Check if MP4 conversion is supported and update UI accordingly
+        if (!ffmpegSupported) {
+            console.warn('SharedArrayBuffer not available - MP4 conversion disabled');
+            console.warn('To enable MP4, serve with these headers:');
+            console.warn('  Cross-Origin-Opener-Policy: same-origin');
+            console.warn('  Cross-Origin-Embedder-Policy: require-corp');
+            // Set format selectors to WebM only
+            setTimeout(() => {
+                const formatSelect = document.getElementById('record-format');
+                const mobileFormatSelect = document.getElementById('mobile-record-format');
+                if (formatSelect) {
+                    formatSelect.value = 'webm';
+                    formatSelect.disabled = true;
+                    formatSelect.title = 'MP4 requires server CORS headers (SharedArrayBuffer)';
+                }
+                if (mobileFormatSelect) {
+                    mobileFormatSelect.value = 'webm';
+                    mobileFormatSelect.disabled = true;
+                    mobileFormatSelect.title = 'MP4 requires server CORS headers (SharedArrayBuffer)';
+                }
+            }, 100);
+        }
+        
+        async function loadFFmpeg() {
+            if (!ffmpegSupported) {
+                console.error('SharedArrayBuffer not supported - cannot use FFmpeg');
+                return false;
+            }
+            if (ffmpegLoaded) return true;
+            if (ffmpegLoading) {
+                // Wait for loading to complete
+                while (ffmpegLoading) {
+                    await new Promise(r => setTimeout(r, 100));
+                }
+                return ffmpegLoaded;
+            }
+            
+            ffmpegLoading = true;
+            try {
+                // FFmpeg 0.11.x API - createFFmpeg
+                const { createFFmpeg, fetchFile } = FFmpeg;
+                
+                // Track encoding progress via log parsing
+                window.ffmpegLastProgress = 5;
+                
+                // Use CDN for core files (has proper CORS headers)
+                ffmpeg = createFFmpeg({
+                    log: false, // We'll handle logging ourselves
+                    corePath: 'https://unpkg.com/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js'
+                });
+                
+                // Store fetchFile for later use
+                window.ffmpegFetchFile = fetchFile;
+                
+                console.log('Loading FFmpeg from CDN...');
+                await ffmpeg.load();
+                
+                // Set up logger AFTER loading - this is more reliable in 0.11.x
+                ffmpeg.setLogger(({ type, message }) => {
+                    // Log everything for debugging
+                    if (message && message.trim()) {
+                        console.log(`[FFmpeg ${type}]`, message);
+                    }
+                    
+                    // Parse progress from FFmpeg stderr output
+                    if (message && message.includes('frame=')) {
+                        // Parse time from format: time=00:00:05.23
+                        const timeMatch = message.match(/time=(\d+):(\d+):(\d+\.?\d*)/);
+                        if (timeMatch && window.ffmpegDuration > 0) {
+                            const hours = parseInt(timeMatch[1]);
+                            const minutes = parseInt(timeMatch[2]);
+                            const seconds = parseFloat(timeMatch[3]);
+                            const currentTime = hours * 3600 + minutes * 60 + seconds;
+                            const timePct = Math.min(100, Math.round((currentTime / window.ffmpegDuration) * 100));
+                            const progress = 5 + Math.round(timePct * 0.85); // Scale to 5-90%
+                            window.ffmpegLastProgress = progress;
+                            console.log('FFmpeg progress:', timePct + '% (time:', currentTime.toFixed(1) + 's)');
+                        }
+                        
+                        // Also try parsing frame count as fallback
+                        const frameMatch = message.match(/frame=\s*(\d+)/);
+                        if (frameMatch && window.ffmpegDuration > 0 && !timeMatch) {
+                            const frame = parseInt(frameMatch[1]);
+                            const estimatedFrames = window.ffmpegDuration * 30;
+                            const framePct = Math.min(100, Math.round((frame / estimatedFrames) * 100));
+                            const progress = 5 + Math.round(framePct * 0.85); // Scale to 5-90%
+                            window.ffmpegLastProgress = progress;
+                            console.log('FFmpeg frame progress:', framePct + '% (frame:', frame + ')');
+                        }
+                    }
+                    
+                    // Also parse out_time from -progress output
+                    if (message && message.includes('out_time_ms=')) {
+                        const match = message.match(/out_time_ms=(\d+)/);
+                        if (match && window.ffmpegDuration > 0) {
+                            const outTimeMs = parseInt(match[1]);
+                            const outTimeSec = outTimeMs / 1000000;
+                            const timePct = Math.min(100, Math.round((outTimeSec / window.ffmpegDuration) * 100));
+                            const progress = 5 + Math.round(timePct * 0.85); // Scale to 5-90%
+                            window.ffmpegLastProgress = progress;
+                            console.log('FFmpeg out_time progress:', timePct + '%');
+                        }
+                    }
+                });
+                
+                // Set up progress callback as well
+                ffmpeg.setProgress(({ ratio }) => {
+                    if (ratio >= 0 && ratio <= 1) {
+                        const progress = 5 + Math.round(ratio * 85); // Scale to 5-90%
+                        window.ffmpegLastProgress = progress;
+                        console.log('FFmpeg setProgress:', Math.round(ratio * 100) + '%');
+                    }
+                });
+                
+                ffmpegLoaded = true;
+                console.log('FFmpeg loaded successfully');
+                return true;
+            } catch (error) {
+                console.error('Failed to load FFmpeg:', error);
+                ffmpegLoaded = false;
+                return false;
+            } finally {
+                ffmpegLoading = false;
+            }
+        }
+        
+        function showConversionOverlay() {
+            let overlay = document.getElementById('conversion-overlay');
+            if (!overlay) {
+                overlay = document.createElement('div');
+                overlay.id = 'conversion-overlay';
+                overlay.style.cssText = `
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    width: 100%;
+                    height: 100%;
+                    background: rgba(0, 0, 0, 0.8);
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    justify-content: center;
+                    z-index: 10000;
+                    color: white;
+                    font-family: Arial, sans-serif;
+                `;
+                overlay.innerHTML = `
+                    <div style="text-align: center;">
+                        <div style="font-size: 24px; margin-bottom: 20px;">Converting to MP4...</div>
+                        <div style="width: 300px; height: 20px; background: #333; border-radius: 10px; overflow: hidden;">
+                            <div id="conversion-progress-bar" style="width: 0%; height: 100%; background: linear-gradient(90deg, #4CAF50, #8BC34A); transition: width 0.3s;"></div>
+                        </div>
+                        <div id="conversion-progress-text" style="margin-top: 10px; font-size: 16px;">0%</div>
+                        <div id="conversion-status" style="margin-top: 15px; font-size: 14px; color: #aaa;">Loading FFmpeg...</div>
+                    </div>
+                `;
+                document.body.appendChild(overlay);
+            }
+            overlay.style.display = 'flex';
+        }
+        
+        function updateConversionStatus(status) {
+            const el = document.getElementById('conversion-status');
+            if (el) el.textContent = status;
+        }
+        
+        function updateConversionProgress(percent) {
+            const bar = document.getElementById('conversion-progress-bar');
+            const text = document.getElementById('conversion-progress-text');
+            if (bar) bar.style.width = percent + '%';
+            if (text) text.textContent = percent + '%';
+        }
+        
+        function hideConversionOverlay() {
+            const overlay = document.getElementById('conversion-overlay');
+            if (overlay) overlay.style.display = 'none';
+        }
+        
+        async function convertWebMtoMP4(webmBlob) {
+            showConversionOverlay();
+            updateConversionProgress(5);
+            updateConversionStatus('Loading FFmpeg...');
+            
+            try {
+                // Load FFmpeg if not already loaded
+                console.log('Starting MP4 conversion, blob size:', webmBlob.size);
+                updateConversionProgress(10);
+                
+                const loaded = await loadFFmpeg();
+                if (!loaded) {
+                    throw new Error('Failed to load FFmpeg');
+                }
+                
+                updateConversionProgress(20);
+                updateConversionStatus('Preparing video...');
+                console.log('FFmpeg loaded, writing input file...');
+                
+                // Use stored fetchFile from 0.11.x API
+                const fetchFile = window.ffmpegFetchFile;
+                
+                // Write input file (0.11.x uses FS.writeFile)
+                ffmpeg.FS('writeFile', 'input.webm', await fetchFile(webmBlob));
+                
+                // Use actual recording duration if available, otherwise estimate from file size
+                if (lastRecordingDuration > 0) {
+                    window.ffmpegDuration = lastRecordingDuration;
+                    console.log('Using actual recording duration:', window.ffmpegDuration, 'seconds');
+                } else {
+                    // Fallback: estimate from file size (WebM at ~10Mbps)
+                    window.ffmpegDuration = (webmBlob.size / (10 * 1024 * 1024 / 8));
+                    console.log('Estimated duration from file size:', window.ffmpegDuration, 'seconds');
+                }
+                
+                updateConversionProgress(5);
+                updateConversionStatus('Encoding video...');
+                console.log('Input file written, starting conversion...');
+                
+                // Set up progress polling using requestAnimationFrame
+                // This polls window.ffmpegLastProgress which is updated by the logger callback
+                let progressRunning = true;
+                let lastDisplayedProgress = 5;
+                window.ffmpegLastProgress = 5; // Reset progress
+                
+                function pollProgress() {
+                    if (!progressRunning) return;
+                    
+                    // Get progress from FFmpeg callbacks (stored in window.ffmpegLastProgress)
+                    const ffmpegProgress = window.ffmpegLastProgress || 5;
+                    
+                    // Smoothly animate towards the target progress
+                    if (ffmpegProgress > lastDisplayedProgress) {
+                        lastDisplayedProgress = Math.min(ffmpegProgress, lastDisplayedProgress + 1);
+                    }
+                    
+                    updateConversionProgress(Math.round(lastDisplayedProgress));
+                    
+                    // Calculate percentage for status (5-90% range maps to 0-100%)
+                    const pct = Math.round(((lastDisplayedProgress - 5) / 85) * 100);
+                    updateConversionStatus(`Encoding: ${pct}% complete...`);
+                    
+                    requestAnimationFrame(pollProgress);
+                }
+                
+                // Start polling
+                requestAnimationFrame(pollProgress);
+                
+                // Convert WebM to MP4 (0.11.x uses ffmpeg.run)
+                // Simplified command for reliability
+                try {
+                    await ffmpeg.run(
+                        '-i', 'input.webm',
+                        '-r', '30',             // Force 30fps output - fixes playback speed
+                        '-c:v', 'libx264',      // H.264 codec
+                        '-preset', 'ultrafast', // Fastest encoding
+                        '-crf', '23',           // Good quality
+                        '-pix_fmt', 'yuv420p',  // Compatible pixel format
+                        '-c:a', 'aac',          // AAC audio
+                        '-b:a', '128k',
+                        '-movflags', '+faststart',
+                        '-y',
+                        'output.mp4'
+                    );
+                } finally {
+                    // Stop progress polling when encoding completes (success or error)
+                    progressRunning = false;
+                }
+                
+                updateConversionProgress(92);
+                updateConversionStatus('Reading output file...');
+                
+                // Read output file (0.11.x uses FS.readFile)
+                console.log('Reading output file...');
+                const outputData = ffmpeg.FS('readFile', 'output.mp4');
+                console.log('Output data size:', outputData.length, 'type:', typeof outputData, outputData.constructor.name);
+                
+                // Check if we got valid data
+                if (!outputData || outputData.length === 0) {
+                    throw new Error('FFmpeg produced empty output file');
+                }
+                
+                updateConversionProgress(96);
+                updateConversionStatus('Creating download...');
+                
+                // Create blob from the output data
+                // FFmpeg.wasm returns Uint8Array, we need to create a proper blob
+                const mp4Blob = new Blob([outputData], { type: 'video/mp4' });
+                console.log('MP4 blob created, size:', mp4Blob.size);
+                
+                // Clean up FFmpeg filesystem
+                try {
+                    ffmpeg.FS('unlink', 'input.webm');
+                    ffmpeg.FS('unlink', 'output.mp4');
+                    delete window.ffmpegDuration;
+                } catch (e) {
+                    console.warn('Cleanup error:', e);
+                }
+                
+                updateConversionProgress(100);
+                hideConversionOverlay();
+                return mp4Blob;
+                
+            } catch (error) {
+                console.error('FFmpeg conversion error:', error);
+                console.error('Error details:', error.message, error.stack);
+                hideConversionOverlay();
+                throw error;
+            }
+        }
 
         function formatTime(seconds) {
             const mins = Math.floor(seconds / 60);
@@ -2974,6 +3300,9 @@ void main(void) {
                 console.log(`Canvas scale: ${canvasScale}`);
                 console.log(`Display dims: ${displayW}x${displayH}`);
                 
+                // Helper to ensure even dimensions (required for H.264 encoding)
+                const makeEven = (n) => Math.floor(n / 2) * 2;
+                
                 // Use full canvas resolution for recording on mobile
                 let recordWidth = canvas.width;
                 let recordHeight = canvas.height;
@@ -3008,6 +3337,11 @@ void main(void) {
                 } else {
                     console.log(`Using full canvas: ${recordWidth}x${recordHeight}`);
                 }
+                
+                // Ensure dimensions are even (required for H.264/MP4)
+                recordWidth = makeEven(recordWidth);
+                recordHeight = makeEven(recordHeight);
+                console.log(`Final recording dimensions (even): ${recordWidth}x${recordHeight}`);
                 
                 // Create cropped canvas at the actual rendered size
                 croppedCanvas = document.createElement('canvas');
@@ -3094,31 +3428,58 @@ void main(void) {
                     }
                 };
                 
-                mediaRecorder.onstop = () => {
+                mediaRecorder.onstop = async () => {
                     console.log(`Total chunks: ${recordedChunks.length}`);
                     const mimeType = mediaRecorder.mimeType || 'video/webm';
-                    const blob = new Blob(recordedChunks, { type: mimeType });
-                    console.log(`Final blob size: ${blob.size} bytes`);
+                    const webmBlob = new Blob(recordedChunks, { type: mimeType });
+                    console.log(`Final blob size: ${webmBlob.size} bytes`);
                     
-                    if (blob.size === 0) {
+                    if (webmBlob.size === 0) {
                         alert('Recording failed: No data captured');
                         return;
                     }
                     
-                    const url = URL.createObjectURL(blob);
+                    // Get selected format
+                    const formatSelect = document.getElementById('record-format') || document.getElementById('mobile-record-format');
+                    const selectedFormat = formatSelect ? formatSelect.value : 'mp4';
+                    
+                    let finalBlob;
+                    let extension;
+                    
+                    if (selectedFormat === 'mp4') {
+                        // Convert WebM to MP4 using FFmpeg
+                        try {
+                            console.log('Converting WebM to MP4...');
+                            finalBlob = await convertWebMtoMP4(webmBlob);
+                            extension = 'mp4';
+                            console.log(`MP4 blob size: ${finalBlob.size} bytes`);
+                        } catch (error) {
+                            console.warn('MP4 conversion failed, falling back to WebM:', error);
+                            alert('MP4 conversion failed. Saving as WebM instead.');
+                            finalBlob = webmBlob;
+                            extension = 'webm';
+                        }
+                    } else {
+                        // Use WebM directly (no conversion needed)
+                        console.log('Using WebM format (no conversion)');
+                        finalBlob = webmBlob;
+                        extension = 'webm';
+                    }
+                    
+                    const url = URL.createObjectURL(finalBlob);
                     
                     // Create download link
                     const a = document.createElement('a');
                     a.href = url;
-                    const extension = mimeType.includes('mp4') ? 'mp4' : 'webm';
                     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
                     a.download = `visualizer-recording-${timestamp}.${extension}`;
                     document.body.appendChild(a);
                     a.click();
                     document.body.removeChild(a);
                     
-                    // Clean up
-                    setTimeout(() => URL.revokeObjectURL(url), 1000);
+                    // Clean up URL after a longer delay to ensure download completes
+                    // For large files, the download may take a while
+                    setTimeout(() => URL.revokeObjectURL(url), 60000); // 60 seconds
                     recordedChunks = [];
                     console.log('Recording saved!');
                 };
@@ -3193,6 +3554,12 @@ void main(void) {
         }
 
         function stopRecording() {
+            // Capture recording duration before resetting
+            if (recordingStartTime) {
+                lastRecordingDuration = (Date.now() - recordingStartTime) / 1000;
+                console.log('Captured recording duration:', lastRecordingDuration, 'seconds');
+            }
+            
             // Set flag first to stop animation loop
             isRecording = false;
             recordingStartTime = null;
@@ -3776,6 +4143,14 @@ void main(void) {
             });
             document.getElementById('record-fps').addEventListener('change', (e) => {
                 document.getElementById('mobile-record-fps').value = e.target.value;
+            });
+            
+            // Sync format selectors between mobile and desktop
+            document.getElementById('mobile-record-format').addEventListener('change', (e) => {
+                document.getElementById('record-format').value = e.target.value;
+            });
+            document.getElementById('record-format').addEventListener('change', (e) => {
+                document.getElementById('mobile-record-format').value = e.target.value;
             });
 
             document.getElementById('mobile-shader-editor-btn').addEventListener('click', () => {
