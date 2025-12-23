@@ -1342,6 +1342,12 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
             <option value="4">4x</option>
         </select>
         <button id="record-btn">🔴 Record</button>
+        <select id="record-fps" style="padding: 6px 8px; font-size: 12px; background: #333; color: #fff; border: 1px solid #555; border-radius: 4px; cursor: pointer; min-width: 60px;" title="Recording Frame Rate">
+            <option value="24">24fps</option>
+            <option value="30">30fps</option>
+            <option value="60" selected>60fps</option>
+            <option value="120">120fps</option>
+        </select>
         <span id="record-timer">00:00</span>
         <button id="camera-btn">📷 Camera</button>
         <button id="shader-editor-btn">✏️ Custom Shader</button>
@@ -1450,6 +1456,12 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
             <input type="file" id="mobile-file-input" accept=".png,.jpg,.jpeg" style="display:none;">
             <button class="mobile-btn" id="mobile-camera-btn" style="background: linear-gradient(135deg, #E91E63 0%, #C2185B 100%);">📷</button>
             <button class="mobile-btn" id="mobile-record-btn" style="background: linear-gradient(135deg, #673AB7 0%, #512DA8 100%);">🔴</button>
+            <select id="mobile-record-fps" class="mobile-btn" style="padding: 10px 8px; min-width: 55px; font-size: 12px;">
+                <option value="24">24</option>
+                <option value="30">30</option>
+                <option value="60" selected>60</option>
+                <option value="120">120</option>
+            </select>
             <button class="mobile-btn success" id="mobile-save-image">💾 Save</button>
             <select id="mobile-save-scale" class="mobile-btn" style="padding: 10px 8px; min-width: 50px;">
                 <option value="1">1x</option>
@@ -1531,7 +1543,10 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
     <!-- Camera Modal -->
     <div id="camera-modal">
         <div id="camera-container">
-            <h2 style="color: #fff; margin: 0 0 10px 0;">📷 Camera Capture</h2>
+            <div id="camera-header" style="display: flex; justify-content: space-between; align-items: center; width: 100%; margin-bottom: 10px;">
+                <h2 style="color: #fff; margin: 0;">📷 Camera Capture</h2>
+                <button id="close-camera-header-btn" style="background: #f44336; color: white; border: none; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center; transition: all 0.2s ease;">✕</button>
+            </div>
             <video id="camera-video" autoplay playsinline></video>
             <canvas id="camera-canvas"></canvas>
             <div id="camera-status">Click "Start Streaming" to begin</div>
@@ -2724,6 +2739,15 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
             });
         }
 
+        // Header close button for camera modal
+        const closeCameraHeaderBtn = document.getElementById('close-camera-header-btn');
+        if (closeCameraHeaderBtn) {
+            closeCameraHeaderBtn.addEventListener('click', () => {
+                stopCamera();
+                cameraModal.classList.remove('visible');
+            });
+        }
+
         if (cameraModal) {
             cameraModal.addEventListener('click', (e) => {
                 if (e.target === cameraModal) {
@@ -3012,8 +3036,13 @@ void main(void) {
                 
                 console.log(`Recording at resolution: ${croppedCanvas.width}x${croppedCanvas.height} (${(croppedCanvas.width * croppedCanvas.height / 1000000).toFixed(2)} megapixels)`);
                 
-                // Use 30fps capture for smooth video (not manual mode which causes stuttering)
-                recordingStream = croppedCanvas.captureStream(30);
+                // Get selected frame rate from UI
+                const fpsSelect = document.getElementById('record-fps') || document.getElementById('mobile-record-fps');
+                const selectedFps = fpsSelect ? parseInt(fpsSelect.value) : 60;
+                console.log(`Recording at ${selectedFps} fps`);
+                
+                // Use selected fps for capture stream
+                recordingStream = croppedCanvas.captureStream(selectedFps);
                 
                 // Add audio track from camera if available
                 let audioAdded = false;
@@ -3046,7 +3075,7 @@ void main(void) {
                 
                 const recorderOptions = {
                     mimeType: mimeType,
-                    videoBitsPerSecond: 8000000 // 8 Mbps for better quality
+                    videoBitsPerSecond: 10000000 // 10 Mbps for high quality 60fps
                 };
                 
                 // Add audio bitrate if we have audio
@@ -3107,7 +3136,7 @@ void main(void) {
                 
                 // Variables for frame timing
                 let lastFrameTime = 0;
-                const targetFrameInterval = 1000 / 30; // Target 30fps
+                const targetFrameInterval = 1000 / selectedFps; // Target selected fps
                 
                 // Function to copy cropped region from main canvas
                 function updateCroppedCanvas(currentTime) {
@@ -3739,6 +3768,14 @@ void main(void) {
 
             document.getElementById('mobile-save-scale').addEventListener('change', (e) => {
                 document.getElementById('save-scale').value = e.target.value;
+            });
+
+            // Sync fps selectors between mobile and desktop
+            document.getElementById('mobile-record-fps').addEventListener('change', (e) => {
+                document.getElementById('record-fps').value = e.target.value;
+            });
+            document.getElementById('record-fps').addEventListener('change', (e) => {
+                document.getElementById('mobile-record-fps').value = e.target.value;
             });
 
             document.getElementById('mobile-shader-editor-btn').addEventListener('click', () => {
