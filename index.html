@@ -6,6 +6,7 @@
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="screen-orientation" content="portrait">
     <title>ACMX2 - Interactive Visualizer</title>
     <style>
         body {
@@ -297,7 +298,8 @@
             background: #F57C00 !important;
         }
 
-        #camera-device-select {
+        #camera-device-select,
+        #microphone-device-select {
             padding: 8px;
             font-size: 14px;
             background: #333;
@@ -308,7 +310,8 @@
             max-width: 300px;
         }
 
-        #camera-device-select:focus {
+        #camera-device-select:focus,
+        #microphone-device-select:focus {
             outline: none;
             border-color: #E91E63;
         }
@@ -1262,6 +1265,55 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
         gap: 5px;
     }
 }
+
+/* Landscape blocking overlay for mobile */
+#landscape-blocker {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.95);
+    z-index: 99999;
+    justify-content: center;
+    align-items: center;
+    flex-direction: column;
+    color: #fff;
+    text-align: center;
+    padding: 20px;
+    box-sizing: border-box;
+}
+
+#landscape-blocker .rotate-icon {
+    font-size: 80px;
+    margin-bottom: 20px;
+    animation: rotate-phone 2s ease-in-out infinite;
+}
+
+#landscape-blocker h2 {
+    margin: 0 0 10px 0;
+    font-size: 24px;
+    color: #9C27B0;
+}
+
+#landscape-blocker p {
+    margin: 0;
+    font-size: 16px;
+    color: #aaa;
+}
+
+@keyframes rotate-phone {
+    0%, 100% { transform: rotate(0deg); }
+    25% { transform: rotate(-15deg); }
+    75% { transform: rotate(15deg); }
+}
+
+@media (orientation: landscape) and (max-height: 500px) {
+    body.mobile-mode #landscape-blocker {
+        display: flex;
+    }
+}
     </style>
 </head>
 <body>
@@ -1425,6 +1477,13 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
     <!-- Touch Indicator -->
     <div id="touch-indicator">Touch: Ready</div>
 
+    <!-- Landscape Blocker Overlay -->
+    <div id="landscape-blocker">
+        <div class="rotate-icon">📱</div>
+        <h2>Please Rotate Your Device</h2>
+        <p>This app works best in portrait mode</p>
+    </div>
+
     <!-- Gesture Help Modal -->
     <div id="gesture-hint">
         <h3>Touch Controls</h3>
@@ -1480,6 +1539,10 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
                 <select id="camera-device-select" title="Select Camera">
                     <option value="">Loading cameras...</option>
                 </select>
+                <select id="microphone-device-select" title="Select Microphone">
+                    <option value="">Loading microphones...</option>
+                </select>
+                <button id="enable-mic-btn" style="padding: 8px 16px; font-size: 14px; background: #E91E63; color: #fff; border: none; border-radius: 4px; cursor: pointer;" title="Click to enable microphone">🎤 Enable Mic</button>
                 <select id="camera-resolution" style="padding: 8px; font-size: 14px; background: #333; color: #fff; border: 1px solid #555; border-radius: 4px;">
                     <option value="320x240">320×240 (QVGA)</option>
                     <option value="640x480">640×480 (VGA)</option>
@@ -2085,8 +2148,12 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
         const switchCameraBtn = document.getElementById('switch-camera-btn');
         const cameraResolution = document.getElementById('camera-resolution');
         const cameraDeviceSelect = document.getElementById('camera-device-select');
+        const microphoneDeviceSelect = document.getElementById('microphone-device-select');
+        const enableMicBtn = document.getElementById('enable-mic-btn');
 
         let cameraStream = null;
+        let cameraAudioStream = null; // Separate audio stream for recording
+        let availableMicrophones = [];
         let isStreaming = false;
         let streamingInterval = null;
         let animationFrameId = null;
@@ -2095,24 +2162,152 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
         let cameraCtx = null;
         let currentFacingMode = 'user'; // 'user' for front, 'environment' for back
         let availableCameras = [];
+        let micPermissionGranted = false;
 
-        // Enumerate available camera devices
-        async function enumerateCameras() {
+        // Update mic button appearance based on state
+        function updateMicButtonState() {
+            if (!enableMicBtn) return;
+            if (cameraAudioStream) {
+                enableMicBtn.textContent = '🎤 Mic On';
+                enableMicBtn.style.background = '#4CAF50';
+            } else if (micPermissionGranted) {
+                enableMicBtn.textContent = '🎤 Enable Mic';
+                enableMicBtn.style.background = '#FF9800';
+            } else {
+                enableMicBtn.textContent = '🎤 Enable Mic';
+                enableMicBtn.style.background = '#E91E63';
+            }
+        }
+
+        // Explicitly request microphone permission (needed for Chrome mobile)
+        async function requestMicrophonePermission() {
             try {
-                // Request permission first to get device labels
-                const tempStream = await navigator.mediaDevices.getUserMedia({ video: true });
-                tempStream.getTracks().forEach(track => track.stop());
+                // Stop existing audio stream if any
+                if (cameraAudioStream) {
+                    cameraAudioStream.getTracks().forEach(track => track.stop());
+                    cameraAudioStream = null;
+                }
                 
+                const selectedMicId = microphoneDeviceSelect.value;
+                let audioConstraints = {
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    autoGainControl: true
+                };
+                
+                // Only add deviceId if it's a valid selection (not 'none' or empty)
+                if (selectedMicId && selectedMicId !== 'none' && selectedMicId !== '') {
+                    audioConstraints.deviceId = { ideal: selectedMicId };
+                }
+                
+                cameraAudioStream = await navigator.mediaDevices.getUserMedia({
+                    video: false,
+                    audio: audioConstraints
+                });
+                
+                micPermissionGranted = true;
+                console.log('Microphone permission granted, stream active');
+                
+                // Re-enumerate to get proper labels now that we have permission
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                availableMicrophones = devices.filter(device => device.kind === 'audioinput');
+                
+                // Update microphone dropdown with proper labels
+                const currentValue = microphoneDeviceSelect.value;
+                microphoneDeviceSelect.innerHTML = '';
+                
+                const noAudioOption = document.createElement('option');
+                noAudioOption.value = 'none';
+                noAudioOption.textContent = '🔇 No Audio';
+                microphoneDeviceSelect.appendChild(noAudioOption);
+                
+                availableMicrophones.forEach((mic, index) => {
+                    const option = document.createElement('option');
+                    option.value = mic.deviceId;
+                    option.textContent = mic.label || `🎤 Microphone ${index + 1}`;
+                    microphoneDeviceSelect.appendChild(option);
+                });
+                
+                // Select the active microphone
+                const activeTrack = cameraAudioStream.getAudioTracks()[0];
+                if (activeTrack) {
+                    const settings = activeTrack.getSettings();
+                    if (settings.deviceId) {
+                        microphoneDeviceSelect.value = settings.deviceId;
+                    }
+                }
+                
+                updateMicButtonState();
+                cameraStatus.textContent = cameraStatus.textContent.split(' | ')[0] + ' | 🎤 Mic enabled';
+                
+                return true;
+            } catch (err) {
+                console.error('Microphone permission error:', err);
+                cameraAudioStream = null;
+                updateMicButtonState();
+                cameraStatus.textContent = cameraStatus.textContent.split(' | ')[0] + ' | ⚠️ Mic denied: ' + err.message;
+                return false;
+            }
+        }
+
+        // Enumerate available camera and microphone devices
+        async function enumerateCameras() {
+            let hasVideoPermission = false;
+            let hasAudioPermission = false;
+            
+            // Request video permission first
+            try {
+                const videoStream = await navigator.mediaDevices.getUserMedia({ video: true });
+                videoStream.getTracks().forEach(track => track.stop());
+                hasVideoPermission = true;
+            } catch (videoErr) {
+                console.warn('Video permission denied:', videoErr.message);
+            }
+            
+            // For audio, don't auto-request on mobile (Chrome blocks it) - use Enable Mic button instead
+            // But check if we already have permission from a previous grant
+            try {
+                // Check permission state if available (not all browsers support this)
+                if (navigator.permissions && navigator.permissions.query) {
+                    const micPermission = await navigator.permissions.query({ name: 'microphone' });
+                    hasAudioPermission = micPermission.state === 'granted';
+                    console.log('Microphone permission state:', micPermission.state);
+                }
+            } catch (permErr) {
+                console.log('Permission query not supported, will check via enumeration');
+            }
+            
+            // If we already have permission, we can get proper labels
+            if (hasAudioPermission || micPermissionGranted) {
+                try {
+                    // Just enumerate, don't request new permission
+                    hasAudioPermission = true;
+                } catch (audioErr) {
+                    console.warn('Audio enumeration issue:', audioErr.message);
+                }
+            }
+            
+            try {
                 const devices = await navigator.mediaDevices.enumerateDevices();
                 availableCameras = devices.filter(device => device.kind === 'videoinput');
+                availableMicrophones = devices.filter(device => device.kind === 'audioinput');
                 
-                // Populate the select dropdown
+                // Check if we have labels (indicates permission was granted)
+                const hasLabels = availableMicrophones.some(mic => mic.label && mic.label.length > 0);
+                if (hasLabels) {
+                    hasAudioPermission = true;
+                    micPermissionGranted = true;
+                }
+                
+                console.log('Found cameras:', availableCameras.length, 'microphones:', availableMicrophones.length, 'hasLabels:', hasLabels);
+                
+                // Populate camera select dropdown
                 cameraDeviceSelect.innerHTML = '';
                 
                 if (availableCameras.length === 0) {
                     const option = document.createElement('option');
                     option.value = '';
-                    option.textContent = 'No cameras found';
+                    option.textContent = hasVideoPermission ? 'No cameras found' : 'Camera access denied';
                     cameraDeviceSelect.appendChild(option);
                 } else {
                     availableCameras.forEach((camera, index) => {
@@ -2122,9 +2317,50 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
                         cameraDeviceSelect.appendChild(option);
                     });
                 }
+                
+                // Populate microphone select dropdown
+                microphoneDeviceSelect.innerHTML = '';
+                
+                // Add a "No Audio" option first
+                const noAudioOption = document.createElement('option');
+                noAudioOption.value = 'none';
+                noAudioOption.textContent = '🔇 No Audio';
+                microphoneDeviceSelect.appendChild(noAudioOption);
+                
+                if (availableMicrophones.length === 0) {
+                    const option = document.createElement('option');
+                    option.value = '';
+                    option.textContent = 'No microphones found';
+                    option.disabled = true;
+                    microphoneDeviceSelect.appendChild(option);
+                    microphoneDeviceSelect.value = 'none';
+                } else {
+                    availableMicrophones.forEach((mic, index) => {
+                        const option = document.createElement('option');
+                        option.value = mic.deviceId;
+                        // Show label if available, otherwise generic name with note to enable
+                        if (mic.label) {
+                            option.textContent = mic.label;
+                        } else {
+                            option.textContent = `🎤 Microphone ${index + 1} (tap Enable Mic)`;
+                        }
+                        microphoneDeviceSelect.appendChild(option);
+                    });
+                    // Select first real microphone by default
+                    if (availableMicrophones.length > 0 && hasAudioPermission) {
+                        microphoneDeviceSelect.value = availableMicrophones[0].deviceId;
+                    } else {
+                        // Keep "No Audio" selected until user enables mic
+                        microphoneDeviceSelect.value = 'none';
+                    }
+                }
+                
+                console.log('Microphone select populated, value:', microphoneDeviceSelect.value);
+                updateMicButtonState();
             } catch (error) {
-                console.error('Error enumerating cameras:', error);
+                console.error('Error enumerating devices:', error);
                 cameraDeviceSelect.innerHTML = '<option value="">Camera access denied</option>';
+                microphoneDeviceSelect.innerHTML = '<option value="none">🔇 No Audio</option>';
             }
         }
 
@@ -2162,6 +2398,58 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
                 });
                 cameraVideo.srcObject = cameraStream;
                 
+                // Also request audio stream separately for recording (using selected microphone)
+                const selectedMicId = microphoneDeviceSelect.value;
+                if (selectedMicId && selectedMicId !== 'none') {
+                    try {
+                        // Stop existing audio stream if any
+                        if (cameraAudioStream) {
+                            cameraAudioStream.getTracks().forEach(track => track.stop());
+                        }
+                        
+                        const audioConstraints = {
+                            echoCancellation: true,
+                            noiseSuppression: true,
+                            autoGainControl: true
+                        };
+                        
+                        // Use specific device if selected (use 'ideal' not 'exact' for mobile compatibility)
+                        if (selectedMicId) {
+                            audioConstraints.deviceId = { ideal: selectedMicId };
+                        }
+                        
+                        cameraAudioStream = await navigator.mediaDevices.getUserMedia({
+                            video: false,
+                            audio: audioConstraints
+                        });
+                        console.log('Audio stream captured for recording from:', selectedMicId);
+                    } catch (audioErr) {
+                        console.warn('Could not capture audio:', audioErr.message);
+                        // Try again without deviceId constraint as fallback
+                        try {
+                            cameraAudioStream = await navigator.mediaDevices.getUserMedia({
+                                video: false,
+                                audio: {
+                                    echoCancellation: true,
+                                    noiseSuppression: true,
+                                    autoGainControl: true
+                                }
+                            });
+                            console.log('Audio stream captured (fallback - default mic)');
+                        } catch (fallbackErr) {
+                            console.warn('Fallback audio capture failed:', fallbackErr.message);
+                            cameraAudioStream = null;
+                        }
+                    }
+                } else {
+                    // User selected "No Audio"
+                    if (cameraAudioStream) {
+                        cameraAudioStream.getTracks().forEach(track => track.stop());
+                        cameraAudioStream = null;
+                    }
+                    console.log('Audio recording disabled by user');
+                }
+                
                 // Update the select to show currently active camera
                 const activeTrack = cameraStream.getVideoTracks()[0];
                 if (activeTrack) {
@@ -2173,7 +2461,15 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
                 
                 // Get actual resolution
                 cameraVideo.onloadedmetadata = () => {
-                    cameraStatus.textContent = `Camera ready: ${cameraVideo.videoWidth}×${cameraVideo.videoHeight}`;
+                    let statusText = `Camera ready: ${cameraVideo.videoWidth}×${cameraVideo.videoHeight}`;
+                    if (cameraAudioStream) {
+                        statusText += ' | 🎤 Mic active';
+                    } else if (microphoneDeviceSelect.value === 'none') {
+                        statusText += ' | 🔇 No audio';
+                    } else {
+                        statusText += ' | 🔇 No mic';
+                    }
+                    cameraStatus.textContent = statusText;
                 };
             } catch (error) {
                 console.error('Camera access error:', error);
@@ -2204,6 +2500,11 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
                 cameraStream.getTracks().forEach(track => track.stop());
                 cameraStream = null;
                 cameraVideo.srcObject = null;
+            }
+            // Stop audio stream too
+            if (cameraAudioStream) {
+                cameraAudioStream.getTracks().forEach(track => track.stop());
+                cameraAudioStream = null;
             }
             // Free the camera buffer
             if (cameraBuffer && typeof Module !== 'undefined' && Module._free) {
@@ -2348,11 +2649,71 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
             });
         }
 
+        // Add event listener for microphone device selection change
+        if (microphoneDeviceSelect) {
+            microphoneDeviceSelect.addEventListener('change', async () => {
+                const selectedMicId = microphoneDeviceSelect.value;
+                
+                // Stop existing audio stream
+                if (cameraAudioStream) {
+                    cameraAudioStream.getTracks().forEach(track => track.stop());
+                    cameraAudioStream = null;
+                }
+                
+                if (selectedMicId && selectedMicId !== 'none') {
+                    try {
+                        const audioConstraints = {
+                            echoCancellation: true,
+                            noiseSuppression: true,
+                            autoGainControl: true,
+                            deviceId: { ideal: selectedMicId }
+                        };
+                        
+                        cameraAudioStream = await navigator.mediaDevices.getUserMedia({
+                            video: false,
+                            audio: audioConstraints
+                        });
+                        console.log('Switched to microphone:', selectedMicId);
+                        cameraStatus.textContent = cameraStatus.textContent.split(' | ')[0] + ' | 🎤 Mic active';
+                    } catch (audioErr) {
+                        console.warn('Could not capture audio:', audioErr.message);
+                        // Try fallback without deviceId
+                        try {
+                            cameraAudioStream = await navigator.mediaDevices.getUserMedia({
+                                video: false,
+                                audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+                            });
+                            console.log('Using fallback microphone');
+                            cameraStatus.textContent = cameraStatus.textContent.split(' | ')[0] + ' | 🎤 Mic (fallback)';
+                            updateMicButtonState();
+                        } catch (fallbackErr) {
+                            cameraAudioStream = null;
+                            cameraStatus.textContent = cameraStatus.textContent.split(' | ')[0] + ' | 🔇 No mic';
+                            updateMicButtonState();
+                        }
+                    }
+                } else {
+                    console.log('Audio recording disabled');
+                    cameraStatus.textContent = cameraStatus.textContent.split(' | ')[0] + ' | 🔇 No audio';
+                    updateMicButtonState();
+                }
+            });
+        }
+
+        // Enable Microphone button click handler - explicit permission request for mobile Chrome
+        if (enableMicBtn) {
+            enableMicBtn.addEventListener('click', async () => {
+                console.log('Enable Mic button clicked');
+                await requestMicrophonePermission();
+            });
+        }
+
         if (cameraBtn) {
             cameraBtn.addEventListener('click', async () => {
                 cameraModal.classList.add('visible');
                 await enumerateCameras();
                 startCamera();
+                updateMicButtonState();
             });
         }
 
@@ -2539,14 +2900,26 @@ void main(void) {
         }
 
         function getSupportedMimeType() {
-            const types = [
+            // Check for audio+video codecs first if we have audio
+            const hasAudio = cameraAudioStream && cameraAudioStream.getAudioTracks().length > 0;
+            
+            const types = hasAudio ? [
+                'video/webm;codecs=vp9,opus',
+                'video/webm;codecs=vp8,opus',
+                'video/webm;codecs=vp9',
+                'video/webm;codecs=vp8',
+                'video/webm',
+                'video/mp4'
+            ] : [
                 'video/webm;codecs=vp9',
                 'video/webm;codecs=vp8',
                 'video/webm',
                 'video/mp4'
             ];
+            
             for (const type of types) {
                 if (MediaRecorder.isTypeSupported(type)) {
+                    console.log('Using mimeType:', type);
                     return type;
                 }
             }
@@ -2638,18 +3011,50 @@ void main(void) {
                 }
                 
                 console.log(`Recording at resolution: ${croppedCanvas.width}x${croppedCanvas.height} (${(croppedCanvas.width * croppedCanvas.height / 1000000).toFixed(2)} megapixels)`);
-                //alert(`Recording at ${croppedCanvas.width}x${croppedCanvas.height} (${(croppedCanvas.width * croppedCanvas.height / 1000000).toFixed(2)} MP)`);
                 
-                // Capture stream from the cropped canvas - use 0 for manual mode
-                recordingStream = croppedCanvas.captureStream(0);
+                // Use 30fps capture for smooth video (not manual mode which causes stuttering)
+                recordingStream = croppedCanvas.captureStream(30);
+                
+                // Add audio track from camera if available
+                let audioAdded = false;
+                if (cameraAudioStream) {
+                    const audioTracks = cameraAudioStream.getAudioTracks();
+                    console.log('Available audio tracks:', audioTracks.length);
+                    if (audioTracks.length > 0) {
+                        for (const track of audioTracks) {
+                            console.log('Audio track:', track.label, 'state:', track.readyState, 'enabled:', track.enabled);
+                            if (track.readyState === 'live' && track.enabled) {
+                                // Clone the track for recording
+                                const clonedTrack = track.clone();
+                                recordingStream.addTrack(clonedTrack);
+                                audioAdded = true;
+                                console.log('Successfully added audio track to recording');
+                            } else {
+                                console.warn('Audio track not usable - state:', track.readyState, 'enabled:', track.enabled);
+                            }
+                        }
+                    }
+                } else {
+                    console.log('No cameraAudioStream available for recording');
+                }
+                
+                console.log('Audio tracks in recording stream:', recordingStream.getAudioTracks().length);
                 
                 const mimeType = getSupportedMimeType();
                 console.log('Recording with mimeType:', mimeType);
+                console.log('Recording has audio:', audioAdded);
                 
-                mediaRecorder = new MediaRecorder(recordingStream, {
+                const recorderOptions = {
                     mimeType: mimeType,
-                    videoBitsPerSecond: 5000000 // 5 Mbps for good quality
-                });
+                    videoBitsPerSecond: 8000000 // 8 Mbps for better quality
+                };
+                
+                // Add audio bitrate if we have audio
+                if (audioAdded) {
+                    recorderOptions.audioBitsPerSecond = 128000; // 128 kbps audio
+                }
+                
+                mediaRecorder = new MediaRecorder(recordingStream, recorderOptions);
                 
                 recordedChunks = [];
                 
@@ -2700,9 +3105,20 @@ void main(void) {
                 isRecording = true;
                 recordingStartTime = Date.now();
                 
-                // Function to copy cropped region from main canvas and trigger frame
-                function updateCroppedCanvas() {
+                // Variables for frame timing
+                let lastFrameTime = 0;
+                const targetFrameInterval = 1000 / 30; // Target 30fps
+                
+                // Function to copy cropped region from main canvas
+                function updateCroppedCanvas(currentTime) {
                     if (!isRecording || !croppedCtx) return;
+                    
+                    // Throttle to ~30fps for consistent recording
+                    if (currentTime - lastFrameTime < targetFrameInterval) {
+                        recordingAnimationFrame = requestAnimationFrame(updateCroppedCanvas);
+                        return;
+                    }
+                    lastFrameTime = currentTime;
                     
                     try {
                         // Draw full canvas or cropped area
@@ -2716,12 +3132,6 @@ void main(void) {
                         } else {
                             croppedCtx.drawImage(canvas, 0, 0, croppedCanvas.width, croppedCanvas.height);
                         }
-                        
-                        // Request a new frame to be added to the stream
-                        const tracks = recordingStream.getVideoTracks();
-                        if (tracks.length > 0 && tracks[0].requestFrame) {
-                            tracks[0].requestFrame();
-                        }
                     } catch (e) {
                         console.error('Error updating cropped canvas:', e);
                     }
@@ -2732,7 +3142,7 @@ void main(void) {
                 }
                 
                 // Start the copy loop
-                updateCroppedCanvas();
+                recordingAnimationFrame = requestAnimationFrame(updateCroppedCanvas);
                 
                 // Update UI
                 recordBtn.classList.add('recording');
@@ -2744,7 +3154,7 @@ void main(void) {
                 recordingTimerInterval = setInterval(updateRecordingTimer, 100);
                 updateRecordingTimer();
                 
-                console.log('Recording started');
+                console.log('Recording started with audio:', audioAdded);
                 
             } catch (error) {
                 isRecording = false;
@@ -2764,30 +3174,37 @@ void main(void) {
                 recordingAnimationFrame = null;
             }
             
-            // Stop all tracks on the recording stream BEFORE stopping MediaRecorder
-            if (recordingStream) {
-                const tracks = recordingStream.getTracks();
-                console.log(`Stopping ${tracks.length} stream tracks`);
-                tracks.forEach(track => {
-                    console.log(`Stopping track: ${track.kind}, state: ${track.readyState}`);
-                    track.stop();
-                });
-                recordingStream = null;
-            }
-            
-            // Now stop the MediaRecorder
+            // Stop the MediaRecorder FIRST (before stopping tracks)
             if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-                console.log('Stopping MediaRecorder');
-                mediaRecorder.stop();
+                console.log('Stopping MediaRecorder, state:', mediaRecorder.state);
+                try {
+                    mediaRecorder.stop();
+                } catch (e) {
+                    console.warn('Error stopping MediaRecorder:', e);
+                }
             }
             
-            // Clean up cropped canvas
-            if (croppedCanvas) {
-                croppedCanvas.width = 0;
-                croppedCanvas.height = 0;
-                croppedCanvas = null;
-                croppedCtx = null;
-            }
+            // Small delay to let MediaRecorder finish processing, then clean up tracks
+            setTimeout(() => {
+                // Stop only video tracks on the recording stream (audio tracks are clones)
+                if (recordingStream) {
+                    const tracks = recordingStream.getTracks();
+                    console.log(`Cleaning up ${tracks.length} stream tracks`);
+                    tracks.forEach(track => {
+                        console.log(`Stopping track: ${track.kind}, state: ${track.readyState}`);
+                        track.stop();
+                    });
+                    recordingStream = null;
+                }
+                
+                // Clean up cropped canvas
+                if (croppedCanvas) {
+                    croppedCanvas.width = 0;
+                    croppedCanvas.height = 0;
+                    croppedCanvas = null;
+                    croppedCtx = null;
+                }
+            }, 100);
             
             // Clear timer
             if (recordingTimerInterval) {
@@ -2803,7 +3220,7 @@ void main(void) {
             recordingIndicator.classList.remove('visible');
             recordingTime.textContent = '00:00';
             
-            console.log('Recording stopped and all resources released');
+            console.log('Recording stopped');
         }
 
         if (recordBtn) {
@@ -3208,6 +3625,15 @@ void main(void) {
             document.body.classList.add('mobile-mode');
             console.log('Mobile mode activated');
             initMobileControls();
+            
+            // Try to lock screen orientation to portrait
+            if (screen.orientation && screen.orientation.lock) {
+                screen.orientation.lock('portrait').then(() => {
+                    console.log('Screen orientation locked to portrait');
+                }).catch((err) => {
+                    console.log('Could not lock orientation:', err.message);
+                });
+            }
         }
 
         let wasMobile = isMobile;
