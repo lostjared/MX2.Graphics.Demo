@@ -291,7 +291,6 @@ class About : public gl::GLObject {
     gl::GLWindow* loadingWin = nullptr;
     std::unique_ptr<mx::Model> model;
     bool is3d = false;
-    bool is3d_comp = false;
     ShaderLibrary library;
     int currentFileIndex = 0;
 public:
@@ -303,7 +302,7 @@ public:
     }
 
     void set3DMode(bool is3d_m) {
-        is3d_comp = is3d_m;
+        is3d = is3d_m;
     }
     int getShaderIndex() const { return currentShaderIndex; }
     void setShaderIndex(int index) { currentShaderIndex = index; }
@@ -1202,8 +1201,8 @@ public:
         int readW = canvasWidth;
         int readH = canvasHeight;
         
-        printf("Capturing: canvas=%dx%d, display=(%d,%d) %dx%d, scale=%d\n", 
-               readW, readH, displayX, displayY, displayW, displayH, captureScale);
+        printf("Capturing: canvas=%dx%d, display=(%d,%d) %dx%d, tex=%dx%d, scale=%d, is3d=%d\n", 
+               readW, readH, displayX, displayY, displayW, displayH, texWidth, texHeight, captureScale, is3d ? 1 : 0);
         
         if (readW <= 0 || readH <= 0 || displayW <= 0 || displayH <= 0) {
             printf("Invalid dimensions\n");
@@ -1230,16 +1229,28 @@ public:
         }
         
         
-        int cropX = displayX;
-        int cropY = 0; 
-        int cropW = displayW;
-        int cropH = displayH;
+        int cropX, cropY, cropW, cropH;
+        int finalW, finalH;
    
         if(is3d) {
+            // In 3D mode, capture the full canvas (no letterboxing)
             cropX = 0;
             cropY = 0;
             cropW = canvasWidth;
             cropH = canvasHeight;
+            // Output at canvas resolution * scale
+            finalW = cropW * captureScale;
+            finalH = cropH * captureScale;
+        } else {
+            // In 2D mode, crop to the display area (removing black bars)
+            // After vertical flip, displayY from top becomes the new Y position
+            cropX = displayX;
+            cropY = displayY;  // After flip, displayY is already correct
+            cropW = displayW;
+            cropH = displayH;
+            // Output at original texture resolution * scale for better quality
+            finalW = texWidth * captureScale;
+            finalH = texHeight * captureScale;
         }
         
         printf("Crop: x=%d, y=%d, w=%d, h=%d\n", cropX, cropY, cropW, cropH);
@@ -1258,10 +1269,6 @@ public:
             int dstOffset = y * cropW * 4;
             memcpy(croppedPixels.data() + dstOffset, pixels.data() + srcOffset, cropW * 4);
         }
-        
-        
-        int finalW = cropW * captureScale;
-        int finalH = cropH * captureScale;
         
         printf("Output: %dx%d (scale %d)\n", finalW, finalH, captureScale);
         
