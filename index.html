@@ -3770,17 +3770,21 @@ void main(void) {
                 requestAnimationFrame(pollProgress);
                 
                 // Convert WebM to MP4 (0.11.x uses ffmpeg.run)
-                // Simplified command for reliability
+                // Include audio mapping explicitly
                 try {
                     await ffmpeg.run(
                         '-i', 'input.webm',
+                        '-map', '0:v:0',        // Map first video stream
+                        '-map', '0:a:0?',       // Map first audio stream if present (? = optional)
                         '-r', String(fps),      // Match recording FPS
                         '-c:v', 'libx264',      // H.264 codec
                         '-preset', 'ultrafast', // Fastest encoding
                         '-crf', '23',           // Good quality
                         '-pix_fmt', 'yuv420p',  // Compatible pixel format
                         '-c:a', 'aac',          // AAC audio
-                        '-b:a', '128k',
+                        '-b:a', '128k',         // Audio bitrate
+                        '-ac', '2',             // Stereo
+                        '-ar', '44100',         // Sample rate
                         '-movflags', '+faststart',
                         '-y',
                         'output.mp4'
@@ -3874,8 +3878,24 @@ void main(void) {
             return 'video/webm';
         }
 
-        function startRecording() {
+        async function startRecording() {
             try {
+                // On mobile, request microphone if not already enabled
+                const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+                
+                if (isMobileDevice && !cameraAudioStream) {
+                    try {
+                        cameraAudioStream = await navigator.mediaDevices.getUserMedia({
+                            video: false,
+                            audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+                        });
+                        console.log('Mobile: Microphone enabled');
+                        if (typeof updateMicButtonState === 'function') updateMicButtonState();
+                    } catch (e) { 
+                        console.warn('Mobile: Mic unavailable:', e.message);
+                    }
+                }
+                
                 // Check if 3D mode is enabled via checkbox ONLY
                 const checkbox3D = document.getElementById('shader-3d-mode');
                 const is3DMode = checkbox3D?.checked || false;
@@ -4007,45 +4027,63 @@ void main(void) {
                 console.log(`Recording at ${selectedFps} fps`);
                 
                 // Use selected fps for capture stream
-                recordingStream = croppedCanvas.captureStream(selectedFps);
+                const videoStream = croppedCanvas.captureStream(selectedFps);
                 
-                // Add audio track from camera if available
+                // Create combined stream with video and audio
                 let audioAdded = false;
+                let audioContext = null;
+                
+                // Get all video tracks from canvas
+                const videoTracks = videoStream.getVideoTracks();
+                
+                // Create new MediaStream and add video tracks
+                recordingStream = new MediaStream();
+                for (const vt of videoTracks) {
+                    recordingStream.addTrack(vt);
+                }
+                
+                // Add audio track using Web Audio API for proper mixing on mobile
                 if (cameraAudioStream) {
                     const audioTracks = cameraAudioStream.getAudioTracks();
-                    console.log('Available audio tracks:', audioTracks.length);
-                    if (audioTracks.length > 0) {
-                        for (const track of audioTracks) {
-                            console.log('Audio track:', track.label, 'state:', track.readyState, 'enabled:', track.enabled);
-                            if (track.readyState === 'live' && track.enabled) {
-                                // Clone the track for recording
-                                const clonedTrack = track.clone();
-                                recordingStream.addTrack(clonedTrack);
+                    if (audioTracks.length > 0 && audioTracks[0].readyState === 'live') {
+                        try {
+                            // Use Web Audio API to properly capture audio
+                            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                            const source = audioContext.createMediaStreamSource(cameraAudioStream);
+                            const audioDestination = audioContext.createMediaStreamDestination();
+                            source.connect(audioDestination);
+                            
+                            // Add the audio track from the destination
+                            const destTrack = audioDestination.stream.getAudioTracks()[0];
+                            if (destTrack) {
+                                recordingStream.addTrack(destTrack);
                                 audioAdded = true;
-                                console.log('Successfully added audio track to recording');
-                            } else {
-                                console.warn('Audio track not usable - state:', track.readyState, 'enabled:', track.enabled);
+                                console.log('Audio added via Web Audio API');
+                            }
+                        } catch (e) {
+                            console.warn('Web Audio error:', e.message);
+                            // Fallback to direct add
+                            const track = audioTracks[0];
+                            if (track.readyState === 'live' && track.enabled) {
+                                recordingStream.addTrack(track);
+                                audioAdded = true;
                             }
                         }
                     }
-                } else {
-                    console.log('No cameraAudioStream available for recording');
                 }
                 
-                console.log('Audio tracks in recording stream:', recordingStream.getAudioTracks().length);
+                // Store audio context for cleanup
+                window._recordingAudioContext = audioContext;
                 
-                const mimeType = getSupportedMimeType();
-                console.log('Recording with mimeType:', mimeType);
-                console.log('Recording has audio:', audioAdded);
-                
-                const recorderOptions = {
-                    mimeType: mimeType,
-                    videoBitsPerSecond: 10000000 // 10 Mbps for high quality 60fps
+                // Let browser choose mimeType for combined streams when audio is present
+                let recorderOptions = {
+                    videoBitsPerSecond: 10000000,
+                    audioBitsPerSecond: 128000
                 };
                 
-                // Add audio bitrate if we have audio
-                if (audioAdded) {
-                    recorderOptions.audioBitsPerSecond = 128000; // 128 kbps audio
+                // Only set mimeType if no audio (canvas-only recording)
+                if (!audioAdded) {
+                    recorderOptions.mimeType = getSupportedMimeType();
                 }
                 
                 mediaRecorder = new MediaRecorder(recordingStream, recorderOptions);
@@ -4375,6 +4413,14 @@ void main(void) {
                 }
             }
             
+            // Clean up Web Audio context used for recording
+            if (window._recordingAudioContext) {
+                try {
+                    window._recordingAudioContext.close();
+                } catch (e) {}
+                window._recordingAudioContext = null;
+            }
+            
             // Small delay to let MediaRecorder finish processing, then clean up tracks
             setTimeout(() => {
                 // Stop only video tracks on the recording stream (audio tracks are clones)
@@ -4421,11 +4467,11 @@ void main(void) {
         }
 
         if (recordBtn) {
-            recordBtn.addEventListener('click', () => {
+            recordBtn.addEventListener('click', async () => {
                 if (isRecording) {
                     stopRecording();
                 } else {
-                    startRecording();
+                    await startRecording();
                 }
             });
         }
@@ -5021,13 +5067,13 @@ void main(void) {
                 videoFileModal.classList.add('visible');
             });
 
-            document.getElementById('mobile-record-btn').addEventListener('click', () => {
+            document.getElementById('mobile-record-btn').addEventListener('click', async () => {
                 if (isRecording) {
                     stopRecording();
                     document.getElementById('mobile-record-btn').textContent = '🔴';
                     document.getElementById('mobile-record-btn').style.background = 'linear-gradient(135deg, #673AB7 0%, #512DA8 100%)';
                 } else {
-                    startRecording();
+                    await startRecording();
                     document.getElementById('mobile-record-btn').textContent = '⏹';
                     document.getElementById('mobile-record-btn').style.background = 'linear-gradient(135deg, #f44336 0%, #d32f2f 100%)';
                 }
