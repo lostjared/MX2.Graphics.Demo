@@ -1233,22 +1233,17 @@ public:
         int finalW, finalH;
    
         if(is3d) {
-            // In 3D mode, capture the full canvas (no letterboxing)
             cropX = 0;
             cropY = 0;
             cropW = canvasWidth;
             cropH = canvasHeight;
-            // Output at canvas resolution * scale
             finalW = cropW * captureScale;
             finalH = cropH * captureScale;
         } else {
-            // In 2D mode, crop to the display area (removing black bars)
-            // After vertical flip, displayY from top becomes the new Y position
             cropX = displayX;
-            cropY = displayY;  // After flip, displayY is already correct
+            cropY = canvasHeight - displayY - displayH;  
             cropW = displayW;
             cropH = displayH;
-            // Output at original texture resolution * scale for better quality
             finalW = texWidth * captureScale;
             finalH = texHeight * captureScale;
         }
@@ -1305,15 +1300,15 @@ public:
                 outCtx.drawImage(srcCanvas, 0, 0, finalW, finalH);
                 
                 var now = new Date();
-                var timestamp = now.getFullYear() + 
-                    String(now.getMonth() + 1).padStart(2, '0') + 
-                    String(now.getDate()).padStart(2, '0') + '_' +
-                    String(now.getHours()).padStart(2, '0') + 
-                    String(now.getMinutes()).padStart(2, '0') + 
+                var timestamp = now.getFullYear() + '-' + 
+                    String(now.getMonth() + 1).padStart(2, '0') + '-' + 
+                    String(now.getDate()).padStart(2, '0') + 'T' +
+                    String(now.getHours()).padStart(2, '0') + '-' + 
+                    String(now.getMinutes()).padStart(2, '0') + '-' + 
                     String(now.getSeconds()).padStart(2, '0');
                 
                 var link = document.createElement('a');
-                link.download = 'mx2_shader_' + finalW + 'x' + finalH + '_' + timestamp + '.png';
+                link.download = 'acmx2.visualizer.' + finalW + 'x' + finalH + '.' + timestamp + '.png';
                 link.href = outCanvas.toDataURL('image/png');
                 document.body.appendChild(link);
                 link.click();

@@ -3284,58 +3284,34 @@ void main(void) {
                 const displayW = Module.getDisplayWidth();
                 const displayH = Module.getDisplayHeight();
                 
-                console.log(`Recording cropped area: ${displayX},${displayY} ${displayW}x${displayH}`);
-                
-                // Validate dimensions
-                if (displayW <= 0 || displayH <= 0) {
-                    alert('Invalid display dimensions. Cannot start recording.');
-                    return;
-                }
-                
-                // Calculate source coordinates in canvas space (which is already scaled)
-                const canvasScale = canvas.width / canvas.clientWidth;
-                
+                console.log(`Recording display area: ${displayX},${displayY} ${displayW}x${displayH}`);
                 console.log(`Canvas: ${canvas.width}x${canvas.height}`);
                 console.log(`Canvas client: ${canvas.clientWidth}x${canvas.clientHeight}`);
+                const canvasScale = canvas.width / canvas.clientWidth;
                 console.log(`Canvas scale: ${canvasScale}`);
-                console.log(`Display dims: ${displayW}x${displayH}`);
                 
                 // Helper to ensure even dimensions (required for H.264 encoding)
                 const makeEven = (n) => Math.floor(n / 2) * 2;
                 
-                // Use full canvas resolution for recording on mobile
-                let recordWidth = canvas.width;
-                let recordHeight = canvas.height;
+                // Calculate the cropped source region (removing letterboxing)
+                const srcX = Math.floor(displayX * canvasScale);
+                const srcY = Math.floor(displayY * canvasScale);
+                const srcW = Math.floor(displayW * canvasScale);
+                const srcH = Math.floor(displayH * canvasScale);
+                
+                console.log(`Source crop region: ${srcX},${srcY} ${srcW}x${srcH}`);
+                
+                // Use the cropped dimensions for recording
+                let recordWidth = srcW;
+                let recordHeight = srcH;
                 
                 // Enforce minimum 720p resolution for recording on mobile
                 const isMobile = window.innerWidth <= 768;
                 if (isMobile && recordWidth < 1280) {
-                    // Scale up to at least 720p (1280x720)
                     const aspectRatio = recordHeight / recordWidth;
                     recordWidth = 1280;
                     recordHeight = Math.floor(1280 * aspectRatio);
                     console.log(`Upscaling to minimum 720p: ${recordWidth}x${recordHeight}`);
-                }
-                
-                // If display dimensions are provided and valid, use scaled versions
-                if (displayW > 0 && displayH > 0 && displayW < canvas.width) {
-                    const srcX = Math.floor(displayX * canvasScale);
-                    const srcY = Math.floor(displayY * canvasScale);
-                    const srcW = Math.floor(displayW * canvasScale);
-                    const srcH = Math.floor(displayH * canvasScale);
-                    
-                    recordWidth = srcW;
-                    recordHeight = srcH;
-                    
-                    // Still enforce minimum for cropped recording
-                    if (isMobile && recordWidth < 1280) {
-                        const aspectRatio = recordHeight / recordWidth;
-                        recordWidth = 1280;
-                        recordHeight = Math.floor(1280 * aspectRatio);
-                    }
-                    console.log(`Using cropped: ${srcX},${srcY} ${srcW}x${srcH}`);
-                } else {
-                    console.log(`Using full canvas: ${recordWidth}x${recordHeight}`);
                 }
                 
                 // Ensure dimensions are even (required for H.264/MP4)
@@ -3343,7 +3319,10 @@ void main(void) {
                 recordHeight = makeEven(recordHeight);
                 console.log(`Final recording dimensions (even): ${recordWidth}x${recordHeight}`);
                 
-                // Create cropped canvas at the actual rendered size
+                // Store crop parameters for the animation loop
+                const cropParams = { srcX, srcY, srcW, srcH };
+                
+                // Create recording canvas at the cropped size
                 croppedCanvas = document.createElement('canvas');
                 croppedCanvas.width = recordWidth;
                 croppedCanvas.height = recordHeight;
@@ -3356,19 +3335,10 @@ void main(void) {
                 croppedCtx.imageSmoothingEnabled = true;
                 croppedCtx.imageSmoothingQuality = 'high';
                 
-                // Draw initial frame - use full canvas or cropped area
-                if (displayW > 0 && displayH > 0 && displayW < canvas.width) {
-                    const canvasScale = canvas.width / canvas.clientWidth;
-                    const srcX = Math.floor(displayX * canvasScale);
-                    const srcY = Math.floor(displayY * canvasScale);
-                    const srcW = Math.floor(displayW * canvasScale);
-                    const srcH = Math.floor(displayH * canvasScale);
-                    croppedCtx.drawImage(canvas, srcX, srcY, srcW, srcH, 0, 0, recordWidth, recordHeight);
-                } else {
-                    croppedCtx.drawImage(canvas, 0, 0, recordWidth, recordHeight);
-                }
+                // Draw initial frame - crop to display area
+                croppedCtx.drawImage(canvas, cropParams.srcX, cropParams.srcY, cropParams.srcW, cropParams.srcH, 0, 0, recordWidth, recordHeight);
                 
-                console.log(`Recording at resolution: ${croppedCanvas.width}x${croppedCanvas.height} (${(croppedCanvas.width * croppedCanvas.height / 1000000).toFixed(2)} megapixels)`);
+                console.log(`Recording at resolution: ${croppedCanvas.width}x${croppedCanvas.height} (${(croppedCanvas.width * croppedCanvas.height / 1000000).toFixed(2)} megapixels}`);
                 
                 // Get selected frame rate from UI
                 const fpsSelect = document.getElementById('record-fps') || document.getElementById('mobile-record-fps');
@@ -3471,14 +3441,13 @@ void main(void) {
                     // Create download link
                     const a = document.createElement('a');
                     a.href = url;
+                    const videoWidth = croppedCanvas.width;
+                    const videoHeight = croppedCanvas.height;
                     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-                    a.download = `visualizer-recording-${timestamp}.${extension}`;
+                    a.download = `acmx2.visualizer.${videoWidth}x${videoHeight}.${timestamp}.${extension}`;
                     document.body.appendChild(a);
                     a.click();
                     document.body.removeChild(a);
-                    
-                    // Clean up URL after a longer delay to ensure download completes
-                    // For large files, the download may take a while
                     setTimeout(() => URL.revokeObjectURL(url), 60000); // 60 seconds
                     recordedChunks = [];
                     console.log('Recording saved!');
@@ -3499,11 +3468,11 @@ void main(void) {
                 let lastFrameTime = 0;
                 const targetFrameInterval = 1000 / selectedFps; // Target selected fps
                 
-                // Function to copy cropped region from main canvas
+                // Function to copy cropped region from main canvas (removes letterboxing)
                 function updateCroppedCanvas(currentTime) {
                     if (!isRecording || !croppedCtx) return;
                     
-                    // Throttle to ~30fps for consistent recording
+                    // Throttle to target fps for consistent recording
                     if (currentTime - lastFrameTime < targetFrameInterval) {
                         recordingAnimationFrame = requestAnimationFrame(updateCroppedCanvas);
                         return;
@@ -3511,19 +3480,10 @@ void main(void) {
                     lastFrameTime = currentTime;
                     
                     try {
-                        // Draw full canvas or cropped area
-                        if (displayW > 0 && displayH > 0 && displayW < canvas.width) {
-                            const canvasScale = canvas.width / canvas.clientWidth;
-                            const srcX = Math.floor(displayX * canvasScale);
-                            const srcY = Math.floor(displayY * canvasScale);
-                            const srcW = Math.floor(displayW * canvasScale);
-                            const srcH = Math.floor(displayH * canvasScale);
-                            croppedCtx.drawImage(canvas, srcX, srcY, srcW, srcH, 0, 0, croppedCanvas.width, croppedCanvas.height);
-                        } else {
-                            croppedCtx.drawImage(canvas, 0, 0, croppedCanvas.width, croppedCanvas.height);
-                        }
+                        // Draw cropped region - removes letterboxing
+                        croppedCtx.drawImage(canvas, cropParams.srcX, cropParams.srcY, cropParams.srcW, cropParams.srcH, 0, 0, croppedCanvas.width, croppedCanvas.height);
                     } catch (e) {
-                        console.error('Error updating cropped canvas:', e);
+                        console.error('Error updating recording canvas:', e);
                     }
                     
                     if (isRecording) {
