@@ -1489,7 +1489,6 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
         <button id="uniforms-btn" title="Uniform Controls">⚙️</button>
         <span id="shader-info">Double-tap to cycle: <a href="/activity/demo/shaders/index.html" target="_blank">List ES3 Shaders</a></span>        
         <select id="model-selector" style="padding: 8px; font-size: 12px; background: #333; color: #fff; border: 1px solid #555; border-radius: 4px; cursor: pointer; flex-shrink: 0; min-width: 120px; max-width: 200px;">
-        <option value="quad">quad.mxmod.z</option>
         <option value="3dplus.mxmod.z">3dplus.mxmod.z</option>
         <option value="3dstar.mxmod.z">3dstar.mxmod.z</option>
         <option value="UFO3.mxmod.z">UFO3.mxmod.z</option>
@@ -1551,6 +1550,10 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
         <option value="ufox.mxmod.z">ufox.mxmod.z</option>
         <option value="uv_sphere.mxmod.z">uv_sphere.mxmod.z</option>
         </select>
+        <div style="display: flex; align-items: center; gap: 5px; padding: 4px 8px; background: #2a2a2a; border-radius: 4px;">
+            <input type="checkbox" id="shader-3d-mode" style="width: 16px; height: 16px; cursor: pointer; margin: 0;">
+            <label for="shader-3d-mode" style="color: #ccc; font-size: 12px; cursor: pointer; margin: 0; white-space: nowrap;">3D Mode</label>
+        </div>
         </div>
 
     <!-- Mobile Controls -->
@@ -1560,6 +1563,10 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
             <select id="mobile-shader" class="mobile-select">
                 <option value="0">Loading...</option>
             </select>
+            <label style="display: flex; align-items: center; gap: 4px; background: rgba(40,40,40,0.9); padding: 6px 8px; border-radius: 6px; cursor: pointer;">
+                <input type="checkbox" id="mobile-3d-mode" style="width: 16px; height: 16px; cursor: pointer; margin: 0;">
+                <span style="color: #ccc; font-size: 11px; white-space: nowrap;">3D</span>
+            </label>
             <select id="mobile-model-selector" class="mobile-select">
                 <option value="quad">quad.mxmod.z</option>
                 <option value="3dplus.mxmod.z">3dplus.mxmod.z</option>
@@ -1660,11 +1667,6 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
                         <button id="template-basic">Basic Template</button>
                         <button id="template-ripple">Ripple Effect</button>
                         <button id="template-color">Color Shift</button>
-                    </div>
-                    <br>
-                    <div style="margin-bottom: 10px; display: flex; align-items: center; gap: 8px;">
-                        <input type="checkbox" id="shader-3d-mode" style="width: 18px; height: 18px; cursor: pointer;">
-                        <label for="shader-3d-mode" style="color: #aaa; font-size: 12px; cursor: pointer; margin: 0;">3D Mode</label>
                     </div>
                 </div>
                 <textarea id="shader-code-textarea" spellcheck="false"></textarea>
@@ -3512,6 +3514,7 @@ void main(void) {
         let croppedCtx = null;
         let recordingAnimationFrame = null;
         let lastRecordingDuration = 0; // Store duration for FFmpeg progress tracking
+        let lastRecordingFps = 30; // Store FPS for FFmpeg conversion
         
         // FFmpeg.wasm instance for WebM to MP4 conversion
         let ffmpeg = null;
@@ -3697,10 +3700,11 @@ void main(void) {
             if (overlay) overlay.style.display = 'none';
         }
         
-        async function convertWebMtoMP4(webmBlob) {
+        async function convertWebMtoMP4(webmBlob, fps = 30) {
             showConversionOverlay();
             updateConversionProgress(5);
             updateConversionStatus('Loading FFmpeg...');
+            console.log('Converting with target FPS:', fps);
             
             try {
                 // Load FFmpeg if not already loaded
@@ -3770,7 +3774,7 @@ void main(void) {
                 try {
                     await ffmpeg.run(
                         '-i', 'input.webm',
-                        '-r', '30',             // Force 30fps output - fixes playback speed
+                        '-r', String(fps),      // Match recording FPS
                         '-c:v', 'libx264',      // H.264 codec
                         '-preset', 'ultrafast', // Fastest encoding
                         '-crf', '23',           // Good quality
@@ -3872,26 +3876,56 @@ void main(void) {
 
         function startRecording() {
             try {
+                // Check if 3D mode is enabled via checkbox ONLY
+                const checkbox3D = document.getElementById('shader-3d-mode');
+                const is3DMode = checkbox3D?.checked || false;
+                
+                // Get the actual canvas being rendered to (Module.canvas might differ from canvas)
+                const renderCanvas = Module.canvas || canvas;
+                
                 // Get display dimensions from C++ (the non-letterboxed area)
                 const displayX = Module.getDisplayX();
                 const displayY = Module.getDisplayY();
                 const displayW = Module.getDisplayWidth();
                 const displayH = Module.getDisplayHeight();
                 
-                console.log(`Recording display area: ${displayX},${displayY} ${displayW}x${displayH}`);
-                console.log(`Canvas: ${canvas.width}x${canvas.height}`);
-                console.log(`Canvas client: ${canvas.clientWidth}x${canvas.clientHeight}`);
-                const canvasScale = canvas.width / canvas.clientWidth;
+                // Use the render canvas dimensions
+                const canvasW = renderCanvas.width;
+                const canvasH = renderCanvas.height;
+                
+                // Get the CSS display size of the canvas (what user actually sees)
+                const cssWidth = renderCanvas.clientWidth;
+                const cssHeight = renderCanvas.clientHeight;
+                
+                console.log('=== RECORDING START ===');
+                console.log('3D Mode checkbox:', is3DMode);
+                console.log(`Canvas internal: ${canvasW}x${canvasH}`);
+                console.log(`Canvas CSS display: ${cssWidth}x${cssHeight}`);
+                console.log(`Display area: ${displayX},${displayY} ${displayW}x${displayH}`);
+                
+                const canvasScale = canvasW / cssWidth;
                 console.log(`Canvas scale: ${canvasScale}`);
                 
                 // Helper to ensure even dimensions (required for H.264 encoding)
                 const makeEven = (n) => Math.floor(n / 2) * 2;
                 
-                // Calculate the cropped source region (removing letterboxing)
-                const srcX = Math.floor(displayX * canvasScale);
-                const srcY = Math.floor(displayY * canvasScale);
-                const srcW = Math.floor(displayW * canvasScale);
-                const srcH = Math.floor(displayH * canvasScale);
+                let srcX, srcY, srcW, srcH;
+                
+                if (is3DMode) {
+                    // In 3D mode: Record the FULL canvas - the 3D model renders across entire canvas
+                    srcX = 0;
+                    srcY = 0;
+                    srcW = canvasW;
+                    srcH = canvasH;
+                    console.log(`3D mode: Recording full canvas ${srcW}x${srcH} (no cropping)`);
+                } else {
+                    // 2D mode: Crop to the display area (removes letterboxing, matches content)
+                    srcX = Math.floor(displayX * canvasScale);
+                    srcY = Math.floor(displayY * canvasScale);
+                    srcW = Math.floor(displayW * canvasScale);
+                    srcH = Math.floor(displayH * canvasScale);
+                    console.log(`2D mode: Cropping to display area ${srcX},${srcY} ${srcW}x${srcH}`);
+                }
                 
                 console.log(`Source crop region: ${srcX},${srcY} ${srcW}x${srcH}`);
                 
@@ -3899,13 +3933,45 @@ void main(void) {
                 let recordWidth = srcW;
                 let recordHeight = srcH;
                 
-                // Enforce minimum 720p resolution for recording on mobile
+                // On mobile, match the screen's display aspect ratio
+                // The internal canvas may have a 2x multiplier, but we want the output to match what's shown
                 const isMobile = window.innerWidth <= 768;
-                if (isMobile && recordWidth < 1280) {
-                    const aspectRatio = recordHeight / recordWidth;
-                    recordWidth = 1280;
-                    recordHeight = Math.floor(1280 * aspectRatio);
-                    console.log(`Upscaling to minimum 720p: ${recordWidth}x${recordHeight}`);
+                
+                if (isMobile) {
+                    // Use CSS display dimensions as the target aspect ratio
+                    // This ensures the video matches what's shown on screen
+                    const targetAspectRatio = cssHeight / cssWidth; // portrait ratio
+                    
+                    // Calculate recording dimensions that match screen aspect ratio
+                    // Target 1440p (2x 720p) for good quality on mobile
+                    const minDimension = 1440;
+                    
+                    if (targetAspectRatio >= 1) {
+                        // Portrait: height is larger
+                        recordHeight = Math.max(minDimension, Math.round(srcH));
+                        recordWidth = Math.round(recordHeight / targetAspectRatio);
+                    } else {
+                        // Landscape: width is larger
+                        recordWidth = Math.max(minDimension, Math.round(srcW));
+                        recordHeight = Math.round(recordWidth * targetAspectRatio);
+                    }
+                    console.log(`Mobile: Target aspect ratio ${targetAspectRatio.toFixed(3)}, recording at ${recordWidth}x${recordHeight}`);
+                }
+                
+                // Ensure minimum 1440p on the larger dimension (2x 720p for better quality)
+                const minDimension = 1440;
+                if (recordWidth < minDimension && recordHeight < minDimension) {
+                    const aspectRatio = recordWidth / recordHeight;
+                    if (aspectRatio >= 1) {
+                        const scale = minDimension / recordWidth;
+                        recordWidth = minDimension;
+                        recordHeight = Math.round(recordHeight * scale);
+                    } else {
+                        const scale = minDimension / recordHeight;
+                        recordHeight = minDimension;
+                        recordWidth = Math.round(recordWidth * scale);
+                    }
+                    console.log(`Upscaled to minimum 1440p: ${recordWidth}x${recordHeight}`);
                 }
                 
                 // Ensure dimensions are even (required for H.264/MP4)
@@ -3913,8 +3979,8 @@ void main(void) {
                 recordHeight = makeEven(recordHeight);
                 console.log(`Final recording dimensions (even): ${recordWidth}x${recordHeight}`);
                 
-                // Store crop parameters for the animation loop
-                const cropParams = { srcX, srcY, srcW, srcH };
+                // Store crop parameters and source canvas for the animation loop
+                const cropParams = { srcX, srcY, srcW, srcH, sourceCanvas: renderCanvas };
                 
                 // Create recording canvas at the cropped size
                 croppedCanvas = document.createElement('canvas');
@@ -3930,13 +3996,14 @@ void main(void) {
                 croppedCtx.imageSmoothingQuality = 'high';
                 
                 // Draw initial frame - crop to display area
-                croppedCtx.drawImage(canvas, cropParams.srcX, cropParams.srcY, cropParams.srcW, cropParams.srcH, 0, 0, recordWidth, recordHeight);
+                croppedCtx.drawImage(cropParams.sourceCanvas, cropParams.srcX, cropParams.srcY, cropParams.srcW, cropParams.srcH, 0, 0, recordWidth, recordHeight);
                 
                 console.log(`Recording at resolution: ${croppedCanvas.width}x${croppedCanvas.height} (${(croppedCanvas.width * croppedCanvas.height / 1000000).toFixed(2)} megapixels}`);
                 
                 // Get selected frame rate from UI
                 const fpsSelect = document.getElementById('record-fps') || document.getElementById('mobile-record-fps');
                 const selectedFps = fpsSelect ? parseInt(fpsSelect.value) : 60;
+                lastRecordingFps = selectedFps; // Save for MP4 conversion
                 console.log(`Recording at ${selectedFps} fps`);
                 
                 // Use selected fps for capture stream
@@ -3994,6 +4061,13 @@ void main(void) {
                 
                 mediaRecorder.onstop = async () => {
                     console.log(`Total chunks: ${recordedChunks.length}`);
+                    
+                    // IMPORTANT: Save dimensions NOW before async operations
+                    // because croppedCanvas gets cleaned up in stopRecording()
+                    const videoWidth = croppedCanvas ? croppedCanvas.width : 1280;
+                    const videoHeight = croppedCanvas ? croppedCanvas.height : 720;
+                    console.log(`Saved video dimensions: ${videoWidth}x${videoHeight}`);
+                    
                     const mimeType = mediaRecorder.mimeType || 'video/webm';
                     const webmBlob = new Blob(recordedChunks, { type: mimeType });
                     console.log(`Final blob size: ${webmBlob.size} bytes`);
@@ -4013,8 +4087,8 @@ void main(void) {
                     if (selectedFormat === 'mp4') {
                         // Convert WebM to MP4 using FFmpeg
                         try {
-                            console.log('Converting WebM to MP4...');
-                            finalBlob = await convertWebMtoMP4(webmBlob);
+                            console.log('Converting WebM to MP4 at ' + lastRecordingFps + ' fps...');
+                            finalBlob = await convertWebMtoMP4(webmBlob, lastRecordingFps);
                             extension = 'mp4';
                             console.log(`MP4 blob size: ${finalBlob.size} bytes`);
                         } catch (error) {
@@ -4031,18 +4105,179 @@ void main(void) {
                     }
                     
                     const url = URL.createObjectURL(finalBlob);
-                    
-                    // Create download link
-                    const a = document.createElement('a');
-                    a.href = url;
-                    const videoWidth = croppedCanvas.width;
-                    const videoHeight = croppedCanvas.height;
+                    // Use the dimensions we saved at the start of onstop (videoWidth, videoHeight already defined above)
                     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-                    a.download = `acmx2.visualizer.${videoWidth}x${videoHeight}.${timestamp}.${extension}`;
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
-                    setTimeout(() => URL.revokeObjectURL(url), 60000); // 60 seconds
+                    const filename = `acmx2.visualizer.${videoWidth}x${videoHeight}.${timestamp}.${extension}`;
+                    
+                    // Detect mobile and iOS/Android
+                    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+                    const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+                    const isAndroid = /Android/i.test(navigator.userAgent);
+                    
+                    console.log('Download: isMobile=' + isMobile + ', isIOS=' + isIOS + ', isAndroid=' + isAndroid + ', format=' + extension);
+                    console.log('Blob size:', finalBlob.size, 'type:', finalBlob.type);
+                    
+                    // Helper function to trigger share
+                    async function triggerShare() {
+                        if (navigator.share && navigator.canShare) {
+                            try {
+                                const file = new File([finalBlob], filename, { type: finalBlob.type });
+                                console.log('Created File for sharing:', file.name, file.size, file.type);
+                                if (navigator.canShare({ files: [file] })) {
+                                    await navigator.share({
+                                        files: [file],
+                                        title: 'MX2 Visualizer Recording'
+                                    });
+                                    return true;
+                                } else {
+                                    console.log('canShare returned false for this file');
+                                }
+                            } catch (e) {
+                                if (e.name !== 'AbortError') {
+                                    console.error('Share failed:', e);
+                                }
+                                return e.name === 'AbortError'; // User cancelled is still "handled"
+                            }
+                        }
+                        return false;
+                    }
+                    
+                    // Helper to force download using an anchor with data URL (more reliable on Android)
+                    async function forceDownload() {
+                        try {
+                            // Create a fresh blob URL
+                            const downloadUrl = URL.createObjectURL(finalBlob);
+                            const a = document.createElement('a');
+                            a.style.display = 'none';
+                            a.href = downloadUrl;
+                            a.download = filename;
+                            a.setAttribute('target', '_blank');
+                            document.body.appendChild(a);
+                            
+                            // Use a slight delay on Android
+                            await new Promise(r => setTimeout(r, 100));
+                            a.click();
+                            
+                            // Clean up after delay
+                            setTimeout(() => {
+                                document.body.removeChild(a);
+                                URL.revokeObjectURL(downloadUrl);
+                            }, 10000);
+                            
+                            return true;
+                        } catch (e) {
+                            console.error('Force download failed:', e);
+                            return false;
+                        }
+                    }
+                    
+                    if (isMobile) {
+                        // Mobile: Show a modal with the video for preview and manual save
+                        const modal = document.createElement('div');
+                        modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.95);z-index:100000;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;overflow-y:auto;';
+                        
+                        const title = document.createElement('div');
+                        title.textContent = '✅ Video Ready!';
+                        title.style.cssText = 'color:white;font-size:24px;margin-bottom:10px;';
+                        
+                        const sizeInfo = document.createElement('div');
+                        sizeInfo.textContent = `${(finalBlob.size / (1024 * 1024)).toFixed(1)} MB • ${extension.toUpperCase()}`;
+                        sizeInfo.style.cssText = 'color:#888;font-size:14px;margin-bottom:15px;';
+                        
+                        const video = document.createElement('video');
+                        video.src = url;
+                        video.controls = true;
+                        video.playsInline = true;
+                        video.autoplay = false;
+                        video.muted = true;
+                        video.style.cssText = 'max-width:90%;max-height:35vh;border-radius:8px;background:#000;';
+                        
+                        const instructions = document.createElement('div');
+                        instructions.style.cssText = 'color:#ccc;font-size:14px;margin:15px 0;text-align:center;line-height:1.5;';
+                        
+                        if (isAndroid) {
+                            instructions.innerHTML = '<b>Tap "Download" or "Share"</b> to save the video';
+                        } else if (isIOS) {
+                            instructions.innerHTML = '<b>To save:</b> Tap <b>"Share"</b> → <b>"Save Video"</b>';
+                        } else {
+                            instructions.innerHTML = 'Tap a button below to save';
+                        }
+                        
+                        const btnContainer = document.createElement('div');
+                        btnContainer.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:12px;margin-top:10px;width:100%;max-width:300px;';
+                        
+                        // Download button - primary for Android
+                        const downloadBtn = document.createElement('button');
+                        downloadBtn.textContent = '⬇️ Download Video';
+                        downloadBtn.style.cssText = 'background:linear-gradient(135deg, #4CAF50, #45a049);color:white;padding:18px 40px;border-radius:12px;border:none;font-size:20px;font-weight:bold;cursor:pointer;box-shadow:0 4px 15px rgba(76,175,80,0.4);width:100%;';
+                        downloadBtn.onclick = async () => {
+                            downloadBtn.textContent = '⏳ Starting...';
+                            downloadBtn.disabled = true;
+                            const success = await forceDownload();
+                            if (success) {
+                                downloadBtn.textContent = '✅ Download Started!';
+                                setTimeout(() => {
+                                    downloadBtn.textContent = '⬇️ Download Video';
+                                    downloadBtn.disabled = false;
+                                }, 2000);
+                            } else {
+                                downloadBtn.textContent = '❌ Failed - Try Share';
+                                downloadBtn.disabled = false;
+                            }
+                        };
+                        btnContainer.appendChild(downloadBtn);
+                        
+                        // Share button
+                        const shareBtn = document.createElement('button');
+                        shareBtn.textContent = '📤 Share / Save to...';
+                        shareBtn.style.cssText = 'background:#2196F3;color:white;padding:14px 30px;border-radius:10px;border:none;font-size:18px;cursor:pointer;width:100%;';
+                        shareBtn.onclick = async () => {
+                            const shared = await triggerShare();
+                            if (!shared) {
+                                alert('Share not available. Use Download button or tap and hold the video to save.');
+                            }
+                        };
+                        btnContainer.appendChild(shareBtn);
+                        
+                        // Open in browser (sometimes works better)
+                        const openBtn = document.createElement('button');
+                        openBtn.textContent = '🔗 Open in Browser';
+                        openBtn.style.cssText = 'background:#666;color:white;padding:10px 20px;border-radius:8px;border:none;font-size:14px;cursor:pointer;width:100%;';
+                        openBtn.onclick = () => {
+                            window.open(url, '_blank');
+                        };
+                        btnContainer.appendChild(openBtn);
+                        
+                        const closeBtn = document.createElement('button');
+                        closeBtn.textContent = '✕ Close';
+                        closeBtn.style.cssText = 'background:transparent;color:#999;padding:15px 25px;border:1px solid #666;border-radius:8px;font-size:16px;margin-top:15px;cursor:pointer;';
+                        closeBtn.onclick = () => {
+                            document.body.removeChild(modal);
+                            // Don't revoke URL immediately - give time for downloads
+                            setTimeout(() => URL.revokeObjectURL(url), 60000);
+                        };
+                        
+                        modal.appendChild(title);
+                        modal.appendChild(sizeInfo);
+                        modal.appendChild(video);
+                        modal.appendChild(instructions);
+                        modal.appendChild(btnContainer);
+                        modal.appendChild(closeBtn);
+                        document.body.appendChild(modal);
+                        
+                        // Try to load the video
+                        video.load();
+                    } else {
+                        // Desktop: Use traditional download link
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = filename;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        setTimeout(() => URL.revokeObjectURL(url), 60000);
+                    }
+                    
                     recordedChunks = [];
                     console.log('Recording saved!');
                 };
@@ -4074,8 +4309,8 @@ void main(void) {
                     lastFrameTime = currentTime;
                     
                     try {
-                        // Draw cropped region - removes letterboxing
-                        croppedCtx.drawImage(canvas, cropParams.srcX, cropParams.srcY, cropParams.srcW, cropParams.srcH, 0, 0, croppedCanvas.width, croppedCanvas.height);
+                        // Draw cropped region from source canvas
+                        croppedCtx.drawImage(cropParams.sourceCanvas, cropParams.srcX, cropParams.srcY, cropParams.srcW, cropParams.srcH, 0, 0, croppedCanvas.width, croppedCanvas.height);
                     } catch (e) {
                         console.error('Error updating recording canvas:', e);
                     }
@@ -4093,6 +4328,12 @@ void main(void) {
                 recordBtn.textContent = '⏹ Stop';
                 recordTimer.classList.add('visible');
                 recordingIndicator.classList.add('visible');
+                
+                // Disable 3D checkboxes during recording
+                const desktop3DCheckbox = document.getElementById('shader-3d-mode');
+                const mobile3DCheckbox = document.getElementById('mobile-3d-mode');
+                if (desktop3DCheckbox) desktop3DCheckbox.disabled = true;
+                if (mobile3DCheckbox) mobile3DCheckbox.disabled = true;
                 
                 // Start timer
                 recordingTimerInterval = setInterval(updateRecordingTimer, 100);
@@ -4169,6 +4410,12 @@ void main(void) {
             recordTimer.textContent = '00:00';
             recordingIndicator.classList.remove('visible');
             recordingTime.textContent = '00:00';
+            
+            // Re-enable 3D checkboxes after recording
+            const desktop3DCheckbox = document.getElementById('shader-3d-mode');
+            const mobile3DCheckbox = document.getElementById('mobile-3d-mode');
+            if (desktop3DCheckbox) desktop3DCheckbox.disabled = false;
+            if (mobile3DCheckbox) mobile3DCheckbox.disabled = false;
             
             console.log('Recording stopped');
         }
@@ -4513,7 +4760,10 @@ void main(void) {
         const modelSelector = document.getElementById('model-selector');
         modelSelector.addEventListener('change', (e) => {
             const selectedModel = e.target.value;
-            if (selectedModel) {
+            const is3DMode = document.getElementById('shader-3d-mode')?.checked || false;
+            
+            // Only load the model if 3D mode is enabled
+            if (selectedModel && is3DMode) {
                 loadModel(selectedModel);
             }
         });
@@ -4533,9 +4783,13 @@ void main(void) {
         }
 
         const shader3DModeCheckbox = document.getElementById('shader-3d-mode');
+        let lastSelectedModel = '3dplus.mxmod.z'; // Default 3D model
+        
         shader3DModeCheckbox.addEventListener('change', (e) => {
             const is3DMode = e.target.checked;
             console.log('3D Mode:', is3DMode ? 'enabled' : 'disabled');
+            
+            // Call the C++ setShader3DMode function
             if (typeof Module !== 'undefined' && Module.setShader3DMode) {
                 try {
                     Module.setShader3DMode(is3DMode);
@@ -4543,12 +4797,31 @@ void main(void) {
                     console.error('Error setting 3D mode:', error);
                 }
             }
+            
+            // Also load appropriate model
+            if (typeof Module !== 'undefined' && Module.loadModel) {
+                try {
+                    if (is3DMode) {
+                        // Switch to 3D model
+                        const modelSelector = document.getElementById('model-selector');
+                        const selectedModel = modelSelector.value || lastSelectedModel;
+                        Module.loadModel(selectedModel);
+                        console.log('Loaded 3D model:', selectedModel);
+                    } else {
+                        // Switch back to 2D quad
+                        Module.loadModel('quad');
+                        console.log('Loaded 2D quad');
+                    }
+                } catch (error) {
+                    console.error('Error loading model:', error);
+                }
+            }
+            
+            // Save preference
+            localStorage.setItem('shader3DMode', is3DMode);
         });
 
-        const saved3DMode = localStorage.getItem('shader3DMode');
-        if (saved3DMode === 'true') {
-            shader3DModeCheckbox.checked = true;
-        }
+        // 3D mode always starts unchecked - don't restore from localStorage
 
         const shaderSelect = document.getElementById('shader');
         shaderSelect.addEventListener('change', (e) => {
@@ -4634,13 +4907,19 @@ void main(void) {
             });
             mobileModelSelect.addEventListener('change', (e) => {
                 const selectedModel = e.target.value;
-                if (selectedModel && typeof Module !== 'undefined' && Module.loadModel) {
+                const is3DMode = document.getElementById('mobile-3d-mode')?.checked || document.getElementById('shader-3d-mode')?.checked || false;
+                
+                // Only load model if 3D mode is enabled
+                if (selectedModel && is3DMode && typeof Module !== 'undefined' && Module.loadModel) {
                     try {
                         Module.loadModel(selectedModel);
                         desktopModelSelect.value = selectedModel;
                     } catch (error) {
                         console.error('Error loading model:', error);
                     }
+                } else {
+                    // Just sync the selector without loading
+                    desktopModelSelect.value = selectedModel;
                 }
             });
             document.getElementById('mobile-prev-shader').addEventListener('click', () => {
@@ -4706,6 +4985,25 @@ void main(void) {
             document.getElementById('record-format').addEventListener('change', (e) => {
                 document.getElementById('mobile-record-format').value = e.target.value;
             });
+
+            // Sync 3D mode checkbox between mobile and desktop
+            const mobile3DCheckbox = document.getElementById('mobile-3d-mode');
+            const desktop3DCheckbox = document.getElementById('shader-3d-mode');
+            
+            // Initialize mobile checkbox from desktop state
+            if (mobile3DCheckbox && desktop3DCheckbox) {
+                mobile3DCheckbox.checked = desktop3DCheckbox.checked;
+                
+                mobile3DCheckbox.addEventListener('change', (e) => {
+                    desktop3DCheckbox.checked = e.target.checked;
+                    // Trigger the desktop checkbox's change event to run all the 3D mode logic
+                    desktop3DCheckbox.dispatchEvent(new Event('change'));
+                });
+                
+                desktop3DCheckbox.addEventListener('change', () => {
+                    mobile3DCheckbox.checked = desktop3DCheckbox.checked;
+                });
+            }
 
             document.getElementById('mobile-shader-editor-btn').addEventListener('click', () => {
                 shaderEditorModal.classList.add('visible');
