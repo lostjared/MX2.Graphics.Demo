@@ -203,6 +203,134 @@
             border: 1px solid #D32F2F !important;
         }
 
+        #video-file-btn {
+            background: #FF5722 !important;
+            border: 1px solid #E64A19 !important;
+        }
+
+        #video-file-btn:hover {
+            background: #E64A19 !important;
+        }
+
+        #video-file-btn.active {
+            background: #F44336 !important;
+            border: 1px solid #D32F2F !important;
+        }
+
+        #video-file-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+        }
+
+        #video-file-modal.visible {
+            display: flex;
+        }
+
+        #video-file-container {
+            background: #1e1e1e;
+            border-radius: 8px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
+            max-width: 90vw;
+            max-height: 85vh;
+        }
+
+        #video-file-player {
+            max-width: 640px;
+            max-height: 480px;
+            width: 100%;
+            background: #000;
+            border-radius: 4px;
+        }
+
+        #video-file-canvas {
+            display: none;
+        }
+
+        #video-file-controls {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        #video-file-controls button {
+            padding: 10px 20px;
+            font-size: 14px;
+            cursor: pointer;
+            background: #333;
+            color: #fff;
+            border: 1px solid #555;
+            border-radius: 4px;
+            transition: background 0.2s;
+        }
+
+        #video-file-controls button:hover {
+            background: #555;
+        }
+
+        #start-video-stream-btn {
+            background: #4CAF50 !important;
+            border: 1px solid #388E3C !important;
+        }
+
+        #start-video-stream-btn:hover {
+            background: #388E3C !important;
+        }
+
+        #start-video-stream-btn.streaming {
+            background: #f44336 !important;
+            border: 1px solid #d32f2f !important;
+        }
+
+        #video-seek-container {
+            width: 100%;
+            max-width: 640px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        #video-seek-bar {
+            flex: 1;
+            height: 6px;
+            -webkit-appearance: none;
+            appearance: none;
+            background: #555;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+
+        #video-seek-bar::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 14px;
+            height: 14px;
+            background: #FF5722;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+
+        #video-time-display {
+            color: #fff;
+            font-size: 12px;
+            font-family: monospace;
+            min-width: 100px;
+            text-align: center;
+        }
+
         #camera-modal {
             display: none;
             position: fixed;
@@ -1320,7 +1448,7 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
 </head>
 <body>
     <div id="loading-overlay">
-        <div id="loading-title">ACMX2 Interactive Visualizer v1.2 - Initializing...</div>
+        <div id="loading-title">ACMX2 Interactive Visualizer v1.3 - Initializing...</div>
         <div id="loading-output"></div>
     </div>
     <div id="canvas-container">
@@ -1356,6 +1484,7 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
         </select>
         <span id="record-timer">00:00</span>
         <button id="camera-btn">📷 Camera</button>
+        <button id="video-file-btn">🎬 Video File</button>
         <button id="shader-editor-btn">✏️ Custom Shader</button>
         <button id="uniforms-btn" title="Uniform Controls">⚙️</button>
         <span id="shader-info">Double-tap to cycle: <a href="/activity/demo/shaders/index.html" target="_blank">List ES3 Shaders</a></span>        
@@ -1461,6 +1590,7 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
             <label class="mobile-btn primary" for="mobile-file-input">🖼️ Load</label>
             <input type="file" id="mobile-file-input" accept=".png,.jpg,.jpeg" style="display:none;">
             <button class="mobile-btn" id="mobile-camera-btn" style="background: linear-gradient(135deg, #E91E63 0%, #C2185B 100%);">📷</button>
+            <button class="mobile-btn" id="mobile-video-file-btn" style="background: linear-gradient(135deg, #FF5722 0%, #E64A19 100%);">🎬</button>
             <button class="mobile-btn" id="mobile-record-btn" style="background: linear-gradient(135deg, #673AB7 0%, #512DA8 100%);">🔴</button>
             <select id="mobile-record-format" class="mobile-btn" style="padding: 10px 8px; min-width: 55px; font-size: 12px;">
                 <option value="mp4">MP4</option>
@@ -1586,6 +1716,45 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
         </div>
     </div>
 
+    <!-- Video File Modal -->
+    <div id="video-file-modal">
+        <div id="video-file-container">
+            <div id="video-file-header" style="display: flex; justify-content: space-between; align-items: center; width: 100%; margin-bottom: 10px;">
+                <h2 style="color: #fff; margin: 0;">🎬 Video File</h2>
+                <button id="close-video-file-header-btn" style="background: #f44336; color: white; border: none; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center; transition: all 0.2s ease;">✕</button>
+            </div>
+            <div id="video-file-drop-zone" style="width: 100%; max-width: 640px; min-height: 200px; border: 2px dashed #555; border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 15px; padding: 20px; box-sizing: border-box; transition: all 0.2s ease;">
+                <span style="font-size: 48px;">📁</span>
+                <p style="color: #aaa; margin: 0; text-align: center;">Drag & drop a video file here<br>or click to browse</p>
+                <input type="file" id="video-file-input" accept="video/*" style="display: none;">
+                <button id="browse-video-btn" style="padding: 10px 20px; font-size: 14px; background: #FF5722; color: #fff; border: none; border-radius: 4px; cursor: pointer;">Browse Files</button>
+            </div>
+            <video id="video-file-player" style="display: none;" playsinline></video>
+            <canvas id="video-file-canvas"></canvas>
+            <div id="video-seek-container" style="display: none;">
+                <span id="video-time-current" style="color: #fff; font-size: 12px; font-family: monospace;">0:00</span>
+                <input type="range" id="video-seek-bar" min="0" max="100" value="0">
+                <span id="video-time-duration" style="color: #fff; font-size: 12px; font-family: monospace;">0:00</span>
+            </div>
+            <div id="video-file-status" style="color: #aaa; font-size: 12px; text-align: center;">Load a video file to begin</div>
+            <div id="video-file-settings" style="display: none; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; justify-content: center; align-items: center;">
+                <label style="color: #fff; display: flex; align-items: center; gap: 5px;">
+                    <input type="checkbox" id="video-loop-checkbox" checked>
+                    Loop Video
+                </label>
+                <label style="color: #fff; display: flex; align-items: center; gap: 5px;">
+                    <input type="checkbox" id="video-audio-checkbox" checked>
+                    Include Audio in Recording
+                </label>
+            </div>
+            <div id="video-file-controls" style="display: none;">
+                <button id="play-pause-video-btn">▶ Play</button>
+                <button id="start-video-stream-btn">▶ Start Streaming</button>
+                <button id="close-video-file-btn">✕ Close</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Uniforms Control Panel Modal -->
     <div id="uniforms-modal">
         <div id="uniforms-container">
@@ -1674,7 +1843,7 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
             var output = document.getElementById('loading-output');
             if (output) {
                 output.innerHTML = '<span class="info">Initializing WebGL...</span>\n' +
-                                   '<span class="normal">Loading ACMX2 v1.2...</span>\n';
+                                   '<span class="normal">Loading ACMX2 v1.3...</span>\n';
             }
         })();
         
@@ -2799,6 +2968,431 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
                     await startCamera();
                     if (wasStreaming) {
                         setTimeout(() => startStreaming(), 500);
+                    }
+                }
+            });
+        }
+
+        // Video File functionality
+        const videoFileBtn = document.getElementById('video-file-btn');
+        const videoFileModal = document.getElementById('video-file-modal');
+        const videoFilePlayer = document.getElementById('video-file-player');
+        const videoFileCanvas = document.getElementById('video-file-canvas');
+        const videoFileInput = document.getElementById('video-file-input');
+        const browseVideoBtn = document.getElementById('browse-video-btn');
+        const videoFileDropZone = document.getElementById('video-file-drop-zone');
+        const videoFileStatus = document.getElementById('video-file-status');
+        const videoFileSettings = document.getElementById('video-file-settings');
+        const videoFileControls = document.getElementById('video-file-controls');
+        const playPauseVideoBtn = document.getElementById('play-pause-video-btn');
+        const startVideoStreamBtn = document.getElementById('start-video-stream-btn');
+        const closeVideoFileBtn = document.getElementById('close-video-file-btn');
+        const closeVideoFileHeaderBtn = document.getElementById('close-video-file-header-btn');
+        const videoSeekContainer = document.getElementById('video-seek-container');
+        const videoSeekBar = document.getElementById('video-seek-bar');
+        const videoTimeCurrent = document.getElementById('video-time-current');
+        const videoTimeDuration = document.getElementById('video-time-duration');
+        const videoLoopCheckbox = document.getElementById('video-loop-checkbox');
+        const videoAudioCheckbox = document.getElementById('video-audio-checkbox');
+
+        let videoFileStream = null; // MediaStream from video for audio capture
+        let isVideoStreaming = false;
+        let videoAnimationFrameId = null;
+        let videoFileBuffer = null;
+        let videoFileBufferSize = 0;
+        let videoFileCtx = null;
+        let currentVideoFile = null;
+        let videoFileURL = null;
+
+        function formatTime(seconds) {
+            const mins = Math.floor(seconds / 60);
+            const secs = Math.floor(seconds % 60);
+            return `${mins}:${secs.toString().padStart(2, '0')}`;
+        }
+
+        function updateVideoSeekBar() {
+            if (videoFilePlayer && videoFilePlayer.duration) {
+                const progress = (videoFilePlayer.currentTime / videoFilePlayer.duration) * 100;
+                videoSeekBar.value = progress;
+                videoTimeCurrent.textContent = formatTime(videoFilePlayer.currentTime);
+            }
+        }
+
+        function loadVideoFile(file) {
+            if (!file || !file.type.startsWith('video/')) {
+                videoFileStatus.textContent = 'Error: Please select a valid video file';
+                return;
+            }
+
+            // Clean up previous video
+            if (videoFileURL) {
+                URL.revokeObjectURL(videoFileURL);
+            }
+            if (videoFileStream) {
+                videoFileStream.getTracks().forEach(track => track.stop());
+                videoFileStream = null;
+            }
+
+            currentVideoFile = file;
+            videoFileURL = URL.createObjectURL(file);
+            videoFilePlayer.src = videoFileURL;
+            videoFilePlayer.load();
+
+            videoFileStatus.textContent = `Loading: ${file.name}`;
+
+            videoFilePlayer.onloadedmetadata = () => {
+                videoFilePlayer.style.display = 'block';
+                videoFileDropZone.style.display = 'none';
+                videoFileControls.style.display = 'flex';
+                videoFileSettings.style.display = 'flex';
+                videoSeekContainer.style.display = 'flex';
+
+                videoTimeDuration.textContent = formatTime(videoFilePlayer.duration);
+                videoSeekBar.max = 100;
+                videoSeekBar.value = 0;
+
+                videoFileStatus.textContent = `Loaded: ${file.name} (${videoFilePlayer.videoWidth}×${videoFilePlayer.videoHeight})`;
+
+                // Capture MediaStream from video element for audio
+                try {
+                    videoFileStream = videoFilePlayer.captureStream();
+                    const audioTracks = videoFileStream.getAudioTracks();
+                    if (audioTracks.length > 0) {
+                        videoFileStatus.textContent += ' | 🔊 Audio available';
+                        console.log('Video audio track captured:', audioTracks[0].label);
+                    } else {
+                        videoFileStatus.textContent += ' | 🔇 No audio track';
+                        console.log('Video has no audio track');
+                    }
+                } catch (err) {
+                    console.warn('Could not capture video stream for audio:', err);
+                    videoFileStream = null;
+                }
+            };
+
+            videoFilePlayer.onerror = (e) => {
+                videoFileStatus.textContent = `Error loading video: ${videoFilePlayer.error?.message || 'Unknown error'}`;
+                console.error('Video load error:', e);
+            };
+        }
+
+        function captureVideoFrame() {
+            if (!videoFilePlayer || videoFilePlayer.paused || videoFilePlayer.ended) {
+                return;
+            }
+
+            const videoWidth = videoFilePlayer.videoWidth;
+            const videoHeight = videoFilePlayer.videoHeight;
+
+            if (videoWidth === 0 || videoHeight === 0) {
+                return;
+            }
+
+            // Resize canvas if needed
+            if (videoFileCanvas.width !== videoWidth || videoFileCanvas.height !== videoHeight) {
+                videoFileCanvas.width = videoWidth;
+                videoFileCanvas.height = videoHeight;
+                videoFileCtx = null;
+            }
+
+            if (!videoFileCtx) {
+                videoFileCtx = videoFileCanvas.getContext('2d', { willReadFrequently: true });
+            }
+
+            // Draw video frame to canvas
+            videoFileCtx.drawImage(videoFilePlayer, 0, 0, videoWidth, videoHeight);
+
+            const imageData = videoFileCtx.getImageData(0, 0, videoWidth, videoHeight);
+            const rgbaData = imageData.data;
+
+            if (typeof Module === 'undefined' || !Module._malloc || !Module.HEAPU8 || !Module.loadImageRGBAPtr) {
+                return;
+            }
+
+            const dataSize = rgbaData.length;
+
+            // Allocate or reuse buffer in WASM memory
+            if (!videoFileBuffer || videoFileBufferSize !== dataSize) {
+                if (videoFileBuffer) {
+                    Module._free(videoFileBuffer);
+                }
+                videoFileBuffer = Module._malloc(dataSize);
+                videoFileBufferSize = dataSize;
+            }
+
+            // Fast bulk copy using HEAPU8.set()
+            Module.HEAPU8.set(rgbaData, videoFileBuffer);
+
+            try {
+                Module.loadImageRGBAPtr(videoFileBuffer, videoWidth, videoHeight);
+            } catch (error) {
+                console.error('Error sending video frame:', error);
+            }
+        }
+
+        function videoStreamLoop() {
+            if (!isVideoStreaming) return;
+            captureVideoFrame();
+            updateVideoSeekBar();
+            videoAnimationFrameId = requestAnimationFrame(videoStreamLoop);
+        }
+
+        function startVideoStreaming() {
+            if (!videoFilePlayer || !videoFilePlayer.src) {
+                videoFileStatus.textContent = 'Please load a video file first';
+                return;
+            }
+
+            // Stop camera streaming if active
+            if (isStreaming) {
+                stopStreaming();
+            }
+
+            isVideoStreaming = true;
+            videoFilePlayer.loop = videoLoopCheckbox.checked;
+            
+            // Start playback if paused
+            if (videoFilePlayer.paused) {
+                videoFilePlayer.play();
+                playPauseVideoBtn.textContent = '⏸ Pause';
+            }
+
+            startVideoStreamBtn.textContent = '⏹ Stop Streaming';
+            startVideoStreamBtn.classList.add('streaming');
+            videoFileBtn.classList.add('active');
+            videoFileStatus.textContent = `Streaming: ${videoFilePlayer.videoWidth}×${videoFilePlayer.videoHeight}`;
+
+            // If audio checkbox is checked, set up audio stream for recording
+            if (videoAudioCheckbox.checked && videoFileStream) {
+                const audioTracks = videoFileStream.getAudioTracks();
+                if (audioTracks.length > 0) {
+                    // Store as cameraAudioStream so recording picks it up
+                    // Stop any existing camera audio first
+                    if (cameraAudioStream) {
+                        cameraAudioStream.getTracks().forEach(track => track.stop());
+                    }
+                    // Create a new MediaStream with just the audio track
+                    cameraAudioStream = new MediaStream([audioTracks[0]]);
+                    videoFileStatus.textContent += ' | 🔊 Audio recording enabled';
+                    console.log('Video audio stream set for recording');
+                }
+            }
+
+            // Close the modal so user can see the visualizer
+            videoFileModal.classList.remove('visible');
+
+            // Start the streaming loop
+            videoStreamLoop();
+        }
+
+        function stopVideoStreaming() {
+            isVideoStreaming = false;
+            if (videoAnimationFrameId) {
+                cancelAnimationFrame(videoAnimationFrameId);
+                videoAnimationFrameId = null;
+            }
+            startVideoStreamBtn.textContent = '▶ Start Streaming';
+            startVideoStreamBtn.classList.remove('streaming');
+            videoFileBtn.classList.remove('active');
+            
+            // Clear the video audio from recording stream
+            if (cameraAudioStream && videoFileStream) {
+                // Only clear if it's the video's audio
+                const videoAudioTrack = videoFileStream.getAudioTracks()[0];
+                const recordingAudioTrack = cameraAudioStream.getAudioTracks()[0];
+                if (videoAudioTrack && recordingAudioTrack && videoAudioTrack.id === recordingAudioTrack.id) {
+                    cameraAudioStream = null;
+                }
+            }
+            
+            if (videoFilePlayer) {
+                videoFileStatus.textContent = `Streaming stopped`;
+            }
+        }
+
+        function closeVideoFile() {
+            stopVideoStreaming();
+            
+            if (videoFilePlayer) {
+                videoFilePlayer.pause();
+                videoFilePlayer.src = '';
+                videoFilePlayer.style.display = 'none';
+            }
+            
+            if (videoFileURL) {
+                URL.revokeObjectURL(videoFileURL);
+                videoFileURL = null;
+            }
+            
+            if (videoFileStream) {
+                videoFileStream.getTracks().forEach(track => track.stop());
+                videoFileStream = null;
+            }
+            
+            if (videoFileBuffer && typeof Module !== 'undefined' && Module._free) {
+                Module._free(videoFileBuffer);
+                videoFileBuffer = null;
+                videoFileBufferSize = 0;
+            }
+            
+            videoFileCtx = null;
+            currentVideoFile = null;
+            
+            // Reset UI
+            videoFileDropZone.style.display = 'flex';
+            videoFileControls.style.display = 'none';
+            videoFileSettings.style.display = 'none';
+            videoSeekContainer.style.display = 'none';
+            playPauseVideoBtn.textContent = '▶ Play';
+            videoFileStatus.textContent = 'Load a video file to begin';
+            
+            videoFileModal.classList.remove('visible');
+        }
+
+        // Event listeners for video file functionality
+        if (videoFileBtn) {
+            videoFileBtn.addEventListener('click', () => {
+                videoFileModal.classList.add('visible');
+            });
+        }
+
+        if (browseVideoBtn) {
+            browseVideoBtn.addEventListener('click', () => {
+                videoFileInput.click();
+            });
+        }
+
+        if (videoFileInput) {
+            videoFileInput.addEventListener('change', (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    loadVideoFile(file);
+                }
+            });
+        }
+
+        // Drag and drop support
+        if (videoFileDropZone) {
+            videoFileDropZone.addEventListener('click', (e) => {
+                if (e.target === videoFileDropZone || e.target.tagName === 'P' || e.target.tagName === 'SPAN') {
+                    videoFileInput.click();
+                }
+            });
+
+            videoFileDropZone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                videoFileDropZone.style.borderColor = '#FF5722';
+                videoFileDropZone.style.background = 'rgba(255, 87, 34, 0.1)';
+            });
+
+            videoFileDropZone.addEventListener('dragleave', (e) => {
+                e.preventDefault();
+                videoFileDropZone.style.borderColor = '#555';
+                videoFileDropZone.style.background = 'transparent';
+            });
+
+            videoFileDropZone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                videoFileDropZone.style.borderColor = '#555';
+                videoFileDropZone.style.background = 'transparent';
+                
+                const file = e.dataTransfer.files[0];
+                if (file) {
+                    loadVideoFile(file);
+                }
+            });
+        }
+
+        if (playPauseVideoBtn) {
+            playPauseVideoBtn.addEventListener('click', () => {
+                if (videoFilePlayer.paused) {
+                    videoFilePlayer.play();
+                    playPauseVideoBtn.textContent = '⏸ Pause';
+                } else {
+                    videoFilePlayer.pause();
+                    playPauseVideoBtn.textContent = '▶ Play';
+                }
+            });
+        }
+
+        if (startVideoStreamBtn) {
+            startVideoStreamBtn.addEventListener('click', () => {
+                if (isVideoStreaming) {
+                    stopVideoStreaming();
+                } else {
+                    startVideoStreaming();
+                }
+            });
+        }
+
+        if (videoSeekBar) {
+            videoSeekBar.addEventListener('input', () => {
+                if (videoFilePlayer && videoFilePlayer.duration) {
+                    const seekTime = (videoSeekBar.value / 100) * videoFilePlayer.duration;
+                    videoFilePlayer.currentTime = seekTime;
+                    videoTimeCurrent.textContent = formatTime(seekTime);
+                }
+            });
+        }
+
+        if (videoFilePlayer) {
+            videoFilePlayer.addEventListener('timeupdate', updateVideoSeekBar);
+            
+            videoFilePlayer.addEventListener('ended', () => {
+                if (!videoLoopCheckbox.checked) {
+                    playPauseVideoBtn.textContent = '▶ Play';
+                    if (isVideoStreaming) {
+                        stopVideoStreaming();
+                    }
+                }
+            });
+
+            videoFilePlayer.addEventListener('play', () => {
+                playPauseVideoBtn.textContent = '⏸ Pause';
+            });
+
+            videoFilePlayer.addEventListener('pause', () => {
+                playPauseVideoBtn.textContent = '▶ Play';
+            });
+        }
+
+        if (videoLoopCheckbox) {
+            videoLoopCheckbox.addEventListener('change', () => {
+                if (videoFilePlayer) {
+                    videoFilePlayer.loop = videoLoopCheckbox.checked;
+                }
+            });
+        }
+
+        if (closeVideoFileBtn) {
+            closeVideoFileBtn.addEventListener('click', closeVideoFile);
+        }
+
+        if (closeVideoFileHeaderBtn) {
+            closeVideoFileHeaderBtn.addEventListener('click', closeVideoFile);
+        }
+
+        if (videoFileModal) {
+            videoFileModal.addEventListener('click', (e) => {
+                if (e.target === videoFileModal) {
+                    // Don't close if streaming, just hide modal
+                    if (isVideoStreaming) {
+                        videoFileModal.classList.remove('visible');
+                    } else {
+                        closeVideoFile();
+                    }
+                }
+            });
+        }
+
+        // Prevent video modal from interfering with keyboard shortcuts
+        if (videoFileModal) {
+            videoFileModal.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') {
+                    if (isVideoStreaming) {
+                        videoFileModal.classList.remove('visible');
+                    } else {
+                        closeVideoFile();
                     }
                 }
             });
@@ -4123,6 +4717,10 @@ void main(void) {
             document.getElementById('mobile-camera-btn').addEventListener('click', () => {
                 cameraModal.classList.add('visible');
                 startCamera();
+            });
+
+            document.getElementById('mobile-video-file-btn').addEventListener('click', () => {
+                videoFileModal.classList.add('visible');
             });
 
             document.getElementById('mobile-record-btn').addEventListener('click', () => {
