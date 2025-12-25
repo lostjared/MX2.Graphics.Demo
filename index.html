@@ -1448,7 +1448,7 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
 </head>
 <body>
     <div id="loading-overlay">
-        <div id="loading-title">ACMX2 Interactive Visualizer v1.3 - Initializing...</div>
+        <div id="loading-title">ACMX2 Interactive Visualizer v1.3.2 - Initializing...</div>
         <div id="loading-output"></div>
     </div>
     <div id="canvas-container">
@@ -1845,7 +1845,7 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
             var output = document.getElementById('loading-output');
             if (output) {
                 output.innerHTML = '<span class="info">Initializing WebGL...</span>\n' +
-                                   '<span class="normal">Loading ACMX2 v1.3...</span>\n';
+                                   '<span class="normal">Loading ACMX2 v1.3.2 ...</span>\n';
             }
         })();
         
@@ -2847,10 +2847,21 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
         }
 
         // Enable Microphone button click handler - explicit permission request for mobile Chrome
+        // Also toggles mic off if already on
         if (enableMicBtn) {
             enableMicBtn.addEventListener('click', async () => {
                 console.log('Enable Mic button clicked');
-                await requestMicrophonePermission();
+                // If mic is already on, turn it off
+                if (cameraAudioStream) {
+                    cameraAudioStream.getTracks().forEach(track => track.stop());
+                    cameraAudioStream = null;
+                    updateMicButtonState();
+                    cameraStatus.textContent = cameraStatus.textContent.split(' | ')[0] + ' | 🎤 Mic disabled';
+                    console.log('Microphone turned off');
+                } else {
+                    // Otherwise, enable the mic
+                    await requestMicrophonePermission();
+                }
             });
         }
 
@@ -3830,10 +3841,11 @@ void main(void) {
 
         async function startRecording() {
             try {
-                // On mobile, request microphone if not already enabled
+                // On mobile, only request microphone if user has already granted permission via the mic button
+                // If mic button is off (micPermissionGranted is false), don't auto-enable
                 const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
                 
-                if (isMobileDevice && !cameraAudioStream) {
+                if (isMobileDevice && !cameraAudioStream && micPermissionGranted) {
                     try {
                         cameraAudioStream = await navigator.mediaDevices.getUserMedia({
                             video: false,
