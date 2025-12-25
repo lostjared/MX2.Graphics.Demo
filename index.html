@@ -4863,7 +4863,13 @@ void main(void) {
         (function() {
             const shader3DInit = document.getElementById('shader-3d-mode');
             if (shader3DInit) {
-                shader3DInit.checked = false; // force unchecked on load
+                shader3DInit.checked = false; // force desktop checkbox unchecked on load
+            }
+
+            // Also ensure mobile 3D checkbox is unchecked by default
+            const mobile3DInit = document.getElementById('mobile-3d-mode');
+            if (mobile3DInit) {
+                mobile3DInit.checked = false; // force mobile checkbox unchecked on load
             }
 
             const modelSelectorInit = document.getElementById('model-selector');
