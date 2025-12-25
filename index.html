@@ -3731,7 +3731,8 @@ void main(void) {
                 requestAnimationFrame(pollProgress);
                 
                 // Convert WebM to MP4 (0.11.x uses ffmpeg.run)
-                // Include audio mapping explicitly
+                // Recording is already at correct dimensions (1080x1920 portrait or 1920x1080 landscape on mobile)
+                // No scaling/padding needed - just convert codec
                 try {
                     await ffmpeg.run(
                         '-i', 'input.webm',
@@ -3915,45 +3916,70 @@ void main(void) {
                 let recordWidth = srcW;
                 let recordHeight = srcH;
                 
-                // On mobile, match the screen's display aspect ratio
-                // The internal canvas may have a 2x multiplier, but we want the output to match what's shown
+                // On mobile, force exact 1080x1920 (portrait) or 1920x1080 (landscape) output
+                // Scale to FILL the frame (crop edges if needed) to avoid black bars
                 const isMobile = window.innerWidth <= 768;
                 
-                if (isMobile) {
-                    // Use CSS display dimensions as the target aspect ratio
-                    // This ensures the video matches what's shown on screen
-                    const targetAspectRatio = cssHeight / cssWidth; // portrait ratio
-                    
-                    // Calculate recording dimensions that match screen aspect ratio
-                    // Target 1440p (2x 720p) for good quality on mobile
-                    const minDimension = 1440;
-                    
-                    if (targetAspectRatio >= 1) {
-                        // Portrait: height is larger
-                        recordHeight = Math.max(minDimension, Math.round(srcH));
-                        recordWidth = Math.round(recordHeight / targetAspectRatio);
-                    } else {
-                        // Landscape: width is larger
-                        recordWidth = Math.max(minDimension, Math.round(srcW));
-                        recordHeight = Math.round(recordWidth * targetAspectRatio);
-                    }
-                    console.log(`Mobile: Target aspect ratio ${targetAspectRatio.toFixed(3)}, recording at ${recordWidth}x${recordHeight}`);
-                }
+                // Store scale-to-fill parameters for the recording loop
+                let scaleToFill = false;
+                let fillSrcX = srcX, fillSrcY = srcY, fillSrcW = srcW, fillSrcH = srcH;
                 
-                // Ensure minimum 1440p on the larger dimension (2x 720p for better quality)
-                const minDimension = 1440;
-                if (recordWidth < minDimension && recordHeight < minDimension) {
-                    const aspectRatio = recordWidth / recordHeight;
-                    if (aspectRatio >= 1) {
-                        const scale = minDimension / recordWidth;
-                        recordWidth = minDimension;
-                        recordHeight = Math.round(recordHeight * scale);
+                if (isMobile) {
+                    // Determine if portrait or landscape based on screen orientation
+                    const isPortrait = window.innerHeight > window.innerWidth;
+                    
+                    if (isPortrait) {
+                        // Portrait: 1080x1920 (9:16 aspect ratio)
+                        recordWidth = 1080;
+                        recordHeight = 1920;
                     } else {
-                        const scale = minDimension / recordHeight;
-                        recordHeight = minDimension;
-                        recordWidth = Math.round(recordWidth * scale);
+                        // Landscape: 1920x1080 (16:9 aspect ratio)
+                        recordWidth = 1920;
+                        recordHeight = 1080;
                     }
-                    console.log(`Upscaled to minimum 1440p: ${recordWidth}x${recordHeight}`);
+                    
+                    // Calculate scale-to-fill cropping (no black bars)
+                    // This crops the source to match target aspect ratio
+                    const targetAspect = recordWidth / recordHeight;
+                    const srcAspect = srcW / srcH;
+                    
+                    if (srcAspect > targetAspect) {
+                        // Source is wider - crop sides
+                        const newSrcW = srcH * targetAspect;
+                        fillSrcX = srcX + (srcW - newSrcW) / 2;
+                        fillSrcY = srcY;
+                        fillSrcW = newSrcW;
+                        fillSrcH = srcH;
+                        scaleToFill = true;
+                        console.log(`Mobile: Cropping width from ${srcW} to ${newSrcW} to match ${recordWidth}x${recordHeight}`);
+                    } else if (srcAspect < targetAspect) {
+                        // Source is taller - crop top/bottom
+                        const newSrcH = srcW / targetAspect;
+                        fillSrcX = srcX;
+                        fillSrcY = srcY + (srcH - newSrcH) / 2;
+                        fillSrcW = srcW;
+                        fillSrcH = newSrcH;
+                        scaleToFill = true;
+                        console.log(`Mobile: Cropping height from ${srcH} to ${newSrcH} to match ${recordWidth}x${recordHeight}`);
+                    }
+                    
+                    console.log(`Mobile: Recording at exact ${recordWidth}x${recordHeight} (${isPortrait ? 'portrait' : 'landscape'})`);
+                } else {
+                    // Desktop: Ensure minimum 1440p on the larger dimension
+                    const minDimension = 1440;
+                    if (recordWidth < minDimension && recordHeight < minDimension) {
+                        const aspectRatio = recordWidth / recordHeight;
+                        if (aspectRatio >= 1) {
+                            const scale = minDimension / recordWidth;
+                            recordWidth = minDimension;
+                            recordHeight = Math.round(recordHeight * scale);
+                        } else {
+                            const scale = minDimension / recordHeight;
+                            recordHeight = minDimension;
+                            recordWidth = Math.round(recordWidth * scale);
+                        }
+                        console.log(`Desktop: Upscaled to minimum 1440p: ${recordWidth}x${recordHeight}`);
+                    }
                 }
                 
                 // Ensure dimensions are even (required for H.264/MP4)
@@ -3962,9 +3988,12 @@ void main(void) {
                 console.log(`Final recording dimensions (even): ${recordWidth}x${recordHeight}`);
                 
                 // Store crop parameters and source canvas for the animation loop
-                const cropParams = { srcX, srcY, srcW, srcH, sourceCanvas: renderCanvas };
+                // Use scale-to-fill params on mobile to avoid black bars
+                const cropParams = scaleToFill 
+                    ? { srcX: fillSrcX, srcY: fillSrcY, srcW: fillSrcW, srcH: fillSrcH, sourceCanvas: renderCanvas }
+                    : { srcX, srcY, srcW, srcH, sourceCanvas: renderCanvas };
                 
-                // Create recording canvas at the cropped size
+                // Create recording canvas at the target size
                 croppedCanvas = document.createElement('canvas');
                 croppedCanvas.width = recordWidth;
                 croppedCanvas.height = recordHeight;
