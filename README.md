@@ -16,8 +16,8 @@ partially by me, some by different LLMs, improving each other.
 
 Uses libmx2 found here: https://github.com/lostjared/libmx2/
 
-### 🎨 92+ Built-in Shaders
-Explore a diverse collection of visually stunning shader effects including:
+### 🎨 400+ Built-in Shaders
+Explore a diverse collection of visually stunning shader effects, including:
 - **Kaleidoscope effects** - Symmetrical fractal patterns with real-time transformations
 - **Distortion effects** - Wave, ripple, twist, and bend distortions
 - **Psychedelic effects** - Color shifts, rainbow effects, and chromatic aberration
