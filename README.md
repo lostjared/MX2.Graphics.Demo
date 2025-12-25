@@ -68,7 +68,7 @@ make -f Makefile.em
 Open `index.html` in a modern web browser (Chrome, Firefox, Edge)
 inside a running web server. If you have Python, you can start one with
 <br>
-$ python3 -m http.server 3000
+$ python3 server.py
 <br>
 Then navigate to localhost:3000
 <br>
