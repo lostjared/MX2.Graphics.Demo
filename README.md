@@ -9,6 +9,11 @@ A powerful web-based demonstration application featuring real-time shader effect
 
 ## Features
 
+UI and Web functionality written with Claude Opus 4.5
+MX2-based C++ I wrote, and Claude wrote some functionality
+The GLSL shaders are a collection of different resources
+partially by me, some by different LLMs, improving each other.
+
 Uses libmx2 found here: https://github.com/lostjared/libmx2/
 
 ### 🎨 92+ Built-in Shaders
