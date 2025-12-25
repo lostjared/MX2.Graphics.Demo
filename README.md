@@ -53,6 +53,8 @@ Write and compile your own GLSL ES 3.0 fragment shaders with:
 ## Installation
 
 ### Web Version (Emscripten)
+build and install MX2 with Emscripten: https://github.com/lostjared/libacmx2/
+then
 
 ```bash
 # Build with Emscripten
@@ -227,20 +229,6 @@ libmx2/gl_about/
 ├── Makefile.em         # Emscripten build configuration
 └── data/
     └── logo.png        # Default texture
-```
-
-### Adding New Shaders
-
-1. Create shader source string:
-```cpp
-const char *szNewShader = R"(#version 300 es
-// ... shader code ...
-)";
-```
-
-2. Add to `shaderSources` vector:
-```cpp
-{"ShaderName", szNewShader}
 ```
 
 ### Building Custom Versions
