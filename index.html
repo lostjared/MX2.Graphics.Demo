@@ -1,4 +1,4 @@
-<!-- Most of this HTML/JavaScript was generated with Claude Cpus -->
+<!-- Most of this HTML/JavaScript was generated with Claude Cpus 4.5 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -2594,57 +2594,9 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
                 });
                 cameraVideo.srcObject = cameraStream;
                 
-                // Also request audio stream separately for recording (using selected microphone)
-                const selectedMicId = microphoneDeviceSelect.value;
-                if (selectedMicId && selectedMicId !== 'none') {
-                    try {
-                        // Stop existing audio stream if any
-                        if (cameraAudioStream) {
-                            cameraAudioStream.getTracks().forEach(track => track.stop());
-                        }
-                        
-                        const audioConstraints = {
-                            echoCancellation: true,
-                            noiseSuppression: true,
-                            autoGainControl: true
-                        };
-                        
-                        // Use specific device if selected (use 'ideal' not 'exact' for mobile compatibility)
-                        if (selectedMicId) {
-                            audioConstraints.deviceId = { ideal: selectedMicId };
-                        }
-                        
-                        cameraAudioStream = await navigator.mediaDevices.getUserMedia({
-                            video: false,
-                            audio: audioConstraints
-                        });
-                        console.log('Audio stream captured for recording from:', selectedMicId);
-                    } catch (audioErr) {
-                        console.warn('Could not capture audio:', audioErr.message);
-                        // Try again without deviceId constraint as fallback
-                        try {
-                            cameraAudioStream = await navigator.mediaDevices.getUserMedia({
-                                video: false,
-                                audio: {
-                                    echoCancellation: true,
-                                    noiseSuppression: true,
-                                    autoGainControl: true
-                                }
-                            });
-                            console.log('Audio stream captured (fallback - default mic)');
-                        } catch (fallbackErr) {
-                            console.warn('Fallback audio capture failed:', fallbackErr.message);
-                            cameraAudioStream = null;
-                        }
-                    }
-                } else {
-                    // User selected "No Audio"
-                    if (cameraAudioStream) {
-                        cameraAudioStream.getTracks().forEach(track => track.stop());
-                        cameraAudioStream = null;
-                    }
-                    console.log('Audio recording disabled by user');
-                }
+                // Audio is NOT automatically started - user must click "Enable Mic" button
+                // This prevents unwanted microphone permission prompts on camera open
+                console.log('Camera started without audio - use Enable Mic button to enable microphone');
                 
                 // Update the select to show currently active camera
                 const activeTrack = cameraStream.getVideoTracks()[0];
@@ -2660,10 +2612,8 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
                     let statusText = `Camera ready: ${cameraVideo.videoWidth}×${cameraVideo.videoHeight}`;
                     if (cameraAudioStream) {
                         statusText += ' | 🎤 Mic active';
-                    } else if (microphoneDeviceSelect.value === 'none') {
-                        statusText += ' | 🔇 No audio';
                     } else {
-                        statusText += ' | 🔇 No mic';
+                        statusText += ' | 🔇 Tap Enable Mic for audio';
                     }
                     cameraStatus.textContent = statusText;
                 };
