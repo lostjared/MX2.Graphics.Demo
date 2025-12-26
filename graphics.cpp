@@ -65,6 +65,7 @@ static std::vector<ShaderInfo> shaderSources = {
     {"Abilify", srcShaderAbilify},
     {"Pastel", srcShaderPinkClouds},
     {"KaleidoCloud", srcShaderKaleidoCloud},
+    {"KaleidoFromTex", srcShaderKaleidoFromTex},
     {"Kaleidoscope", srcShader2},
     {"KaleidoscopeAlt", srcShader3},
     {"Scramble", srcShader4},

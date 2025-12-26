@@ -635,6 +635,119 @@ void main(void) {
 }
 )";
 
+inline const char *srcShaderKaleidoFromTex = R"(#version 300 es
+precision highp float;
+precision highp int;
+
+out vec4 FragColor;
+in vec2 TexCoord;
+
+uniform sampler2D textTexture;
+uniform float time_f;
+uniform vec2 iResolution;
+const float PI = 3.1415926535897932384626433832795;
+)" COMMON_UNIFORMS COLOR_HELPERS R"(
+
+float hash21(vec2 p) {
+    p = fract(p * vec2(234.34, 435.345));
+    p += dot(p, p + 34.45);
+    return fract(p.x * p.y);
+}
+
+float noise(vec2 p) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+
+    float a = hash21(i + vec2(0.0, 0.0));
+    float b = hash21(i + vec2(1.0, 0.0));
+    float c = hash21(i + vec2(0.0, 1.0));
+    float d = hash21(i + vec2(1.0, 1.0));
+
+    return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+}
+
+float fbm(vec2 p) {
+    float v = 0.0;
+    float a = 0.5;
+    for (int i = 0; i < 4; i++) {
+        v += a * noise(p);
+        p *= 2.1;
+        a *= 0.5;
+    }
+    return v;
+}
+
+vec2 kaleidoFold(vec2 p, float segments) {
+    float r = length(p);
+    float a = atan(p.y, p.x);
+    float seg = 6.2831853 / segments;
+    a = mod(a, seg);
+    a = abs(a - seg * 0.5);
+    return vec2(cos(a), sin(a)) * r;
+}
+
+void main(void) {
+    float time = time_f * iSpeed;
+
+    vec2 uv = applyZoomRotation(TexCoord, vec2(0.5));
+
+    vec2 s = uv - 0.5;
+    float aspect = iResolution.x / iResolution.y;
+    s.x *= aspect;
+
+    float segs = 6.0 + 6.0 * clamp(iFrequency, 0.0, 1.0);
+    vec2 k = kaleidoFold(s, segs);
+
+    float baseFreq = mix(0.8, 2.5, clamp(iFrequency, 0.0, 1.0));
+    vec2 flowCoord = k * baseFreq;
+    flowCoord += vec2(time * 0.18, -time * 0.14);
+    float f1 = fbm(flowCoord);
+    float f2 = fbm(flowCoord * 1.9 + vec2(-time * 0.11, time * 0.09));
+
+    float amp = mix(0.02, 0.16, clamp(iAmplitude, 0.0, 1.0));
+    vec2 flow = vec2(f1 - 0.5, f2 - 0.5) * amp;
+
+    vec2 pTex = k;
+    pTex.x /= aspect;
+    vec2 uvK = pTex + 0.5;
+    uvK += flow;
+
+    vec3 src = mxTexture(textTexture, uvK).rgb;
+    float l = dot(src, vec3(0.299, 0.587, 0.114));
+
+    vec2 texDisp = (src.rg - 0.5) * (amp * 2.0);
+    uvK += texDisp;
+
+    vec2 uvH  = vec2(1.0 - uvK.x, uvK.y);
+    vec2 uvV  = vec2(uvK.x, 1.0 - uvK.y);
+    vec2 uvHV = vec2(1.0 - uvK.x, 1.0 - uvK.y);
+    vec2 uvR1 = vec2(uvK.y, uvK.x);
+    vec2 uvR2 = vec2(1.0 - uvK.y, uvK.x);
+
+    vec3 c0 = mxTexture(textTexture, uvK ).rgb;
+    vec3 c1 = mxTexture(textTexture, uvH  ).rgb;
+    vec3 c2 = mxTexture(textTexture, uvV  ).rgb;
+    vec3 c3 = mxTexture(textTexture, uvHV ).rgb;
+    vec3 c4 = mxTexture(textTexture, uvR1 ).rgb;
+    vec3 c5 = mxTexture(textTexture, uvR2 ).rgb;
+
+    vec3 col = (c0 + c1 + c2 + c3 + c4 + c5) / 6.0;
+
+    float ring = smoothstep(0.15, 0.0, abs(length(s) - 0.6));
+    float pulse = 0.5 + 0.5 * sin(time * 0.7 + l * 8.0);
+    col *= 0.7 + 0.6 * ring * pulse;
+
+    vec3 brightTex = mxTexture(textTexture, uv).rgb;
+    float mask = smoothstep(0.25, 0.8, l);
+    col = mix(brightTex, col, mask);
+
+    col = applyColorAdjustments(col);
+
+    FragColor = vec4(col, 1.0);
+}
+)";
+
 
 inline const char *srcShader4 = R"(#version 300 es
 precision highp float;
