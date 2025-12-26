@@ -321,6 +321,321 @@ void main(void) {
 }
 )";
 
+inline const char *srcShaderAbilify = R"(#version 300 es
+precision highp float;
+precision highp int;
+
+out vec4 FragColor;
+in vec2 TexCoord;
+
+uniform sampler2D textTexture;
+uniform float time_f;
+uniform vec2 iResolution;
+)" COMMON_UNIFORMS COLOR_HELPERS R"(
+
+float hash11(float n) {
+    return fract(sin(n) * 43758.5453123);
+}
+
+vec2 hash22(vec2 p) {
+    float n = sin(dot(p, vec2(41.0, 289.0)));
+    return fract(vec2(262144.0, 32768.0) * n);
+}
+
+float voronoiEdge(vec2 x) {
+    vec2 n = floor(x);
+    vec2 f = fract(x);
+    float md = 8.0;
+    float sd = 8.0;
+    for (int j = -1; j <= 1; j++) {
+        for (int i = -1; i <= 1; i++) {
+            vec2 g = vec2(float(i), float(j));
+            vec2 o = hash22(n + g);
+            o = 0.4 + 0.6 * o;
+            vec2 r = g + o - f;
+            float d = dot(r, r);
+            if (d < md) {
+                sd = md;
+                md = d;
+            } else if (d < sd) {
+                sd = d;
+            }
+        }
+    }
+    return sd - md;
+}
+
+vec3 palette(float t) {
+    vec3 a = vec3(0.55, 0.40, 0.90);
+    vec3 b = vec3(0.45, 0.60, 0.30);
+    vec3 c = vec3(1.0, 1.3, 2.0);
+    vec3 d = vec3(0.10, 0.20, 0.30);
+    return a + b * cos(6.28318 * (c * t + d));
+}
+
+void main(void) {
+    float time = time_f * iSpeed;
+
+    vec2 uv = applyZoomRotation(TexCoord, vec2(0.5));
+
+    vec2 p = uv * 2.0 - 1.0;
+    float aspect = iResolution.x / iResolution.y;
+    p.x *= aspect;
+
+    float amp = iAmplitude;
+    float swirl = 0.6 * amp;
+    float r = length(p);
+    float a = atan(p.y, p.x);
+    a += swirl * 0.3 * sin(time * 0.4 + r * 4.0);
+    p = vec2(cos(a), sin(a)) * r;
+
+    float freq = mix(1.5, 5.0, clamp(iFrequency, 0.0, 1.0));
+    vec2 vcoord = p * freq + vec2(0.7 * time, 0.3 * time);
+
+    float edge = voronoiEdge(vcoord);
+
+    float cells = smoothstep(0.02, 0.0, edge);
+    float innerGlow = smoothstep(0.40, 0.0, edge);
+    float bands = 0.5 + 0.5 * sin(10.0 * edge * freq + time * 2.0);
+
+    vec3 neon = palette(edge * 3.0 + time * 0.15) * (0.4 + 0.6 * bands);
+    vec3 mesh = neon * cells * (0.5 + 0.5 * amp);
+
+    vec4 base = mxTexture(textTexture, uv);
+    vec3 col = base.rgb;
+
+    col = mix(col, col * 1.4 + mesh, 0.65 * innerGlow);
+    col += mesh * 0.6;
+
+    col = applyColorAdjustments(col);
+
+    FragColor = vec4(col, base.a);
+}
+)";
+
+inline const char *srcShaderPinkClouds = R"(#version 300 es
+precision highp float;
+precision highp int;
+
+out vec4 FragColor;
+in vec2 TexCoord;
+
+uniform sampler2D textTexture;
+uniform float time_f;
+uniform vec2 iResolution;
+)" COMMON_UNIFORMS COLOR_HELPERS R"(
+
+float hash21(vec2 p) {
+    p = fract(p * vec2(234.34, 435.345));
+    p += dot(p, p + 34.45);
+    return fract(p.x * p.y);
+}
+
+float noise(vec2 p) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+
+    float a = hash21(i + vec2(0.0, 0.0));
+    float b = hash21(i + vec2(1.0, 0.0));
+    float c = hash21(i + vec2(0.0, 1.0));
+    float d = hash21(i + vec2(1.0, 1.0));
+
+    return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+}
+
+float fbm(vec2 p) {
+    float v = 0.0;
+    float a = 0.5;
+    for (int i = 0; i < 4; i++) {
+        v += a * noise(p);
+        p *= 2.0;
+        a *= 0.5;
+    }
+    return v;
+}
+
+void main(void) {
+    float time = time_f * iSpeed;
+
+    vec2 uv = applyZoomRotation(TexCoord, vec2(0.5));
+
+    vec2 p = uv * 2.0 - 1.0;
+    float aspect = iResolution.x / iResolution.y;
+    p.x *= aspect;
+
+    float freq = mix(1.2, 3.5, clamp(iFrequency, 0.0, 1.0));
+    float amp = mix(0.02, 0.15, clamp(iAmplitude, 0.0, 1.0));
+
+    vec2 cloudCoord = p * freq;
+    cloudCoord += vec2(time * 0.10, -time * 0.06);
+
+    float n = fbm(cloudCoord);
+    float n2 = fbm(cloudCoord * 0.7 + vec2(-time * 0.04, time * 0.05));
+    float cloudMask = smoothstep(0.2, 0.85, n + 0.4 * n2);
+
+    vec2 dir = normalize(p + 0.001);
+    vec2 warp = dir * (n * 2.0 - 1.0) * amp;
+    warp += vec2(n2 - 0.5, 0.5 - n) * amp * 0.6;
+
+    vec2 warpedUV = uv + warp;
+
+    vec2 texel = 1.0 / iResolution.xy;
+    float blurRadius = mix(0.002, 0.02, clamp(iQuality, 0.0, 1.0));
+
+    vec2 off1 = vec2( blurRadius, 0.0);
+    vec2 off2 = vec2(-blurRadius, 0.0);
+    vec2 off3 = vec2(0.0,  blurRadius * aspect);
+    vec2 off4 = vec2(0.0, -blurRadius * aspect);
+
+    vec3 base = mxTexture(textTexture, warpedUV).rgb;
+    base += mxTexture(textTexture, warpedUV + off1 * texel).rgb;
+    base += mxTexture(textTexture, warpedUV + off2 * texel).rgb;
+    base += mxTexture(textTexture, warpedUV + off3 * texel).rgb;
+    base += mxTexture(textTexture, warpedUV + off4 * texel).rgb;
+    base *= 0.2;
+
+    float baseLum = dot(base, vec3(0.299, 0.587, 0.114));
+
+    vec3 pinkA = vec3(1.1, 0.78, 0.90);
+    vec3 pinkB = vec3(0.95, 0.65, 0.95);
+    vec3 pinkC = vec3(0.85, 0.75, 1.05);
+
+    float tBand = 0.5 + 0.5 * sin(time * 0.5 + n * 4.0 + n2 * 6.0);
+    vec3 pinkCloud = mix(pinkA, pinkB, n);
+    pinkCloud = mix(pinkCloud, pinkC, tBand);
+    pinkCloud *= 0.7 + 0.6 * baseLum;
+    float centerGlow = smoothstep(1.2, 0.2, length(p));
+    float glow = clamp(cloudMask * (0.6 + 0.4 * centerGlow), 0.0, 1.0);
+    vec3 col = mix(base, pinkCloud, glow);
+    col = applyColorAdjustments(col);
+    float alpha = 1.0;
+    FragColor = vec4(col, alpha);
+}
+)";
+
+inline const char *srcShaderKaleidoCloud = R"(#version 300 es
+precision highp float;
+precision highp int;
+
+out vec4 FragColor;
+in vec2 TexCoord;
+
+uniform sampler2D textTexture;
+uniform float time_f;
+uniform vec2 iResolution;
+)" COMMON_UNIFORMS COLOR_HELPERS R"(
+
+float hash21(vec2 p) {
+    p = fract(p * vec2(234.34, 435.345));
+    p += dot(p, p + 34.45);
+    return fract(p.x * p.y);
+}
+
+float noise(vec2 p) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+
+    float a = hash21(i + vec2(0.0, 0.0));
+    float b = hash21(i + vec2(1.0, 0.0));
+    float c = hash21(i + vec2(0.0, 1.0));
+    float d = hash21(i + vec2(1.0, 1.0));
+
+    return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+}
+
+float fbm(vec2 p) {
+    float v = 0.0;
+    float a = 0.5;
+    for (int i = 0; i < 5; i++) {
+        v += a * noise(p);
+        p *= 2.1;
+        a *= 0.5;
+    }
+    return v;
+}
+
+vec3 paletteRainbow(float t) {
+    vec3 a = vec3(0.55, 0.35, 0.80);
+    vec3 b = vec3(0.45, 0.65, 0.40);
+    vec3 c = vec3(1.0, 1.5, 2.0);
+    vec3 d = vec3(0.10, 0.25, 0.35);
+    return a + b * cos(6.28318 * (c * t + d));
+}
+
+vec2 kaleidoFold(vec2 p, float segments) {
+    float r = length(p);
+    float a = atan(p.y, p.x);
+    float seg = 6.28318 / segments;
+    a = mod(a, seg);
+    a = abs(a - seg * 0.5);
+    return vec2(cos(a), sin(a)) * r;
+}
+
+void main(void) {
+    float time = time_f * iSpeed;
+
+    vec2 uv = applyZoomRotation(TexCoord, vec2(0.5));
+
+    vec2 s = uv - 0.5;
+    s.x = abs(s.x);
+    s.y = abs(s.y);
+    vec2 uvSym = s + 0.5;
+
+    vec2 p = uvSym * 2.0 - 1.0;
+    float aspect = iResolution.x / iResolution.y;
+    p.x *= aspect;
+
+    float segs = 8.0 + 4.0 * clamp(iFrequency, 0.0, 1.0);
+    vec2 k = kaleidoFold(p, segs);
+
+    float baseFreq = mix(1.2, 3.5, clamp(iFrequency, 0.0, 1.0));
+    float warpAmp = mix(0.02, 0.18, clamp(iAmplitude, 0.0, 1.0));
+
+    vec2 c1 = k * baseFreq + vec2(time * 0.22, -time * 0.18);
+    vec2 c2 = k * (baseFreq * 1.7) + vec2(-time * 0.13, time * 0.19);
+    vec2 c3 = k * (baseFreq * 2.7) + vec2(time * 0.31, time * 0.27);
+
+    float n1 = fbm(c1);
+    float n2 = fbm(c2);
+    float n3 = fbm(c3);
+
+    float mixMask = smoothstep(0.25, 0.85, n1 + 0.5 * n2);
+    float streaks = smoothstep(0.2, 0.0, abs(n3 - 0.5));
+
+    vec3 layer1 = paletteRainbow(n1 * 2.0 + time * 0.10);
+    vec3 layer2 = paletteRainbow(n2 * 3.0 - time * 0.08 + 1.3);
+    vec3 layer3 = paletteRainbow(n3 * 4.0 + time * 0.18 + 2.1);
+
+    vec3 colorField = mix(layer1, layer2, mixMask);
+    colorField = mix(colorField, layer3, streaks * 0.8);
+
+    float centerGlow = smoothstep(1.3, 0.15, length(p));
+    colorField *= 0.6 + 0.8 * centerGlow;
+
+    vec2 baseWarp = vec2(n1 - 0.5, n2 - 0.5) * warpAmp;
+    vec2 baseUV = uvSym + baseWarp;
+
+    vec4 tex0 = mxTexture(textTexture, baseUV);
+    vec4 tex1 = mxTexture(textTexture, baseUV + 0.003 * vec2(1.0, 0.0));
+    vec4 tex2 = mxTexture(textTexture, baseUV + 0.003 * vec2(-1.0, 0.0));
+    vec4 tex3 = mxTexture(textTexture, baseUV + 0.003 * vec2(0.0, 1.0));
+    vec4 tex4 = mxTexture(textTexture, baseUV + 0.003 * vec2(0.0, -1.0));
+    vec3 baseTex = (tex0.rgb + tex1.rgb + tex2.rgb + tex3.rgb + tex4.rgb) * 0.2;
+
+    float baseLum = dot(baseTex, vec3(0.299, 0.587, 0.114));
+
+    vec3 col = mix(baseTex, colorField, 0.55 + 0.35 * baseLum);
+    col += colorField * 0.35 * streaks;
+
+    col = applyColorAdjustments(col);
+
+    FragColor = vec4(col, 1.0);
+}
+)";
+
+
 inline const char *srcShader4 = R"(#version 300 es
 precision highp float;
 precision highp int;
