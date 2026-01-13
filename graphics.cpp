@@ -191,7 +191,8 @@ static std::vector<ShaderInfo> shaderSources = {
     {"mirror_bowl", mirror_bowl},
     {"mirror_atan", mirror_atan},
     {"gpt_halluc", gpt_halluc},
-    {"psych_block", szBlock}
+    {"psych_block", szBlock},
+    {"psychedelic_energy", psychedelic_energy}
 };
 
 class ShaderLibrary {

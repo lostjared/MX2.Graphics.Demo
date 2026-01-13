@@ -2140,4 +2140,154 @@ void main(void) {
 }
 )SHD1";
 
+inline const char *psychedelic_energy = R"SHD1(#version 300 es
+precision highp float;
+precision highp int;
+out vec4 color;
+in vec2 TexCoord;
+uniform sampler2D textTexture;
+uniform vec2 iResolution;
+uniform float time_f;
+uniform vec4 iMouse;
+
+// Map ACMX2 sliders to effect parameters
+uniform float amp;  // Distortion Strength
+uniform float uamp; // Speed/Frequency
+
+)SHD1" COMMON_UNIFORMS COLOR_HELPERS R"SHD1(
+
+// --- Internal Helpers ---
+
+// IQ's Cosine Palette for psychedelic colors
+vec3 palette(float t) {
+    vec3 a = vec3(0.5, 0.5, 0.5);
+    vec3 b = vec3(0.5, 0.5, 0.5);
+    vec3 c = vec3(1.0, 1.0, 1.0);
+    vec3 d = vec3(0.263, 0.416, 0.557); 
+    return a + b * cos(6.28318 * (c * t + d));
+}
+
+// Basic Noise
+float hash(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+}
+
+float noise(vec2 p) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    float a = hash(i + vec2(0.0, 0.0));
+    float b = hash(i + vec2(1.0, 0.0));
+    float c = hash(i + vec2(0.0, 1.0));
+    float d = hash(i + vec2(1.0, 1.0));
+    return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+}
+
+float fbm(vec2 p, bool ridges) {
+    float v = 0.0;
+    float a = 0.5;
+    for (int i = 0; i < 4; i++) {
+        float n = noise(p);
+        if (ridges) n = 1.0 - abs(n * 2.0 - 1.0);
+        v += a * n;
+        p *= 2.05;
+        a *= 0.5;
+    }
+    return v;
+}
+
+vec2 kaleido(vec2 p, float slices) {
+    float pi = 3.14159265359;
+    float r = length(p);
+    float a = atan(p.y, p.x);
+    float sector = pi * 2.0 / slices;
+    a = mod(a, sector);
+    a = abs(a - sector * 0.5);
+    return vec2(cos(a), sin(a)) * r;
+}
+
+mat2 rot(float a) {
+    float c = cos(a), s = sin(a);
+    return mat2(c, -s, s, c);
+}
+
+// Core Rendering Logic
+vec3 renderEnergy(vec2 uv, float t, float strength, vec2 center, vec2 res) {
+    float aspect = res.x / res.y;
+    vec2 p = (uv - center) * vec2(aspect, 1.0);
+    
+    // Slight rotation over time
+    p *= rot(t * 0.1);
+    
+    // Domain Warping
+    vec2 q = vec2(0.0);
+    q.x = fbm(p + vec2(0.0, 0.0) + t * 0.2, false);
+    q.y = fbm(p + vec2(5.2, 1.3) - t * 0.15, false);
+
+    vec2 r = vec2(0.0);
+    r.x = fbm(p + 4.0 * q + vec2(t * 0.5, 9.2), true); 
+    r.y = fbm(p + 4.0 * q + vec2(8.3, 2.8), false);
+
+    vec2 warpedUV = p + strength * r;
+    
+    // Dynamic Kaleidoscope
+    float slices = 6.0 + 10.0 * sin(t * 0.1) * amp;
+    vec2 k = kaleido(warpedUV, max(3.0, slices));
+    
+    vec2 texUV = k / vec2(aspect, 1.0) + center;
+    texUV += r * 0.1;
+    
+    // Use standard texture lookup, wrapping handled by wrapUV inside main if needed,
+    // or just rely on GL_REPEAT if set. Here we use wrapUV logic implicitly via logic.
+    // But for safety with non-power-of-two, we clamp or wrap manually.
+    vec2 finalUV = wrapUV(texUV);
+    vec3 texCol = texture(textTexture, finalUV).rgb;
+    
+    float warpLen = length(r);
+    float electric = pow(warpLen, 3.0); 
+    
+    // Palette injection
+    vec3 pal = palette(length(q) + t * 0.4);
+    
+    // Mix texture and palette
+    vec3 finalCol = mix(texCol, pal, 0.5); 
+    finalCol += pal * electric * strength; 
+    finalCol += vec3(smoothstep(0.8, 1.0, electric)) * 2.0; 
+
+    return finalCol;
+}
+
+void main() {
+    vec2 uv = TexCoord;
+    uv = wrapUV(uv); 
+
+    // Use 'uamp' for speed control, 'amp' for strength
+    float t = time_f * (0.2 + uamp * 0.5);
+    float strength = amp * 1.5;
+
+    vec2 center = vec2(0.5);
+    if (iMouse.z > 0.0) {
+        center = iMouse.xy / iResolution;
+    }
+
+    // Chromatic Aberration loop
+    vec3 col;
+    vec2 offset = vec2(0.005 * strength, 0.0);
+    
+    col.r = renderEnergy(uv + offset, t, strength, center, iResolution).r;
+    col.g = renderEnergy(uv, t, strength, center, iResolution).g;
+    col.b = renderEnergy(uv - offset, t, strength, center, iResolution).b;
+
+    // Vignette
+    vec2 vUV = uv * (1.0 - uv.yx); 
+    float vig = vUV.x * vUV.y * 15.0; 
+    vig = pow(vig, 0.25);
+    col *= vig;
+
+    // Apply standard ACMX2 color controls (Brightness, Hue, etc.)
+    color = vec4(col, 1.0);
+    color.rgb = applyColorAdjustments(color.rgb);
+}
+)SHD1";
+
 #endif
