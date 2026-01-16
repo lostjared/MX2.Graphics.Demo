@@ -1501,11 +1501,8 @@ About *about_ptr = nullptr;
         }
     }
 
-    // Fast version using raw pointer - called from JavaScript with HEAPU8
     void loadImageRGBAPtr(uintptr_t dataPtr, int width, int height) {
         uint8_t* rgbaData = reinterpret_cast<uint8_t*>(dataPtr);
-        size_t expectedSize = static_cast<size_t>(width * height * 4);
-        
         SDL_Surface *surface = SDL_CreateRGBSurfaceWithFormatFrom(
             rgbaData,
             width, height,
@@ -1519,25 +1516,14 @@ About *about_ptr = nullptr;
             return;
         }
         
-        SDL_Surface *converted = SDL_CreateRGBSurfaceWithFormat(0, width, height, 32, SDL_PIXELFORMAT_RGBA32);
-        if(!converted) {
-            mx::system_err << "Failed to create converted surface: " << SDL_GetError() << "\n";
-            SDL_FreeSurface(surface);
-            return;
-        }
-        
-        SDL_BlitSurface(surface, NULL, converted, NULL);
-        SDL_FreeSurface(surface);
-        
-        if(converted && main_w && main_w->object) {
+        if(main_w && main_w->object) {
             About *about = dynamic_cast<About*>(main_w->object.get());
             if(about) {
-                about->loadNewTexture(converted, main_w);
+                about->loadNewTexture(surface, main_w);
             }
         }
-        if(converted) {
-            SDL_FreeSurface(converted);
-        }
+        
+        SDL_FreeSurface(surface);
     }
 
      std::string compileCustomShaderWeb(const std::string &fragmentSource) {
