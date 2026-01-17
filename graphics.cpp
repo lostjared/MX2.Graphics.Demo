@@ -298,17 +298,142 @@ class About : public gl::GLObject {
     bool is3d = false;
     ShaderLibrary library;
     int currentFileIndex = 0;
+    GLuint passFBO[2] = {0, 0};
+    GLuint passTexture[2] = {0, 0};
+    int passFBOWidth = 0, passFBOHeight = 0;
+    bool multipassEnabled = false;
+    std::vector<int> shaderPassList;  
 public:
     About() = default;
     virtual ~About() override {
         if(texture != 0) {
             glDeleteTextures(1, &texture);
         }
+        for(int i = 0; i < 2; ++i) {
+            if(passFBO[i] != 0) {
+                glDeleteFramebuffers(1, &passFBO[i]);
+            }
+            if(passTexture[i] != 0) {
+                glDeleteTextures(1, &passTexture[i]);
+            }
+        }
     }
 
     void set3DMode(bool is3d_m) {
         is3d = is3d_m;
     }
+    
+    // Multipass FBO management
+    void initPassFBOs(int w, int h) {
+        if(passFBO[0] != 0 && passFBOWidth == w && passFBOHeight == h) {
+            return;  // Already initialized at correct size
+        }
+        
+        // Cleanup existing FBOs
+        for(int i = 0; i < 2; ++i) {
+            if(passFBO[i] != 0) {
+                glDeleteFramebuffers(1, &passFBO[i]);
+                passFBO[i] = 0;
+            }
+            if(passTexture[i] != 0) {
+                glDeleteTextures(1, &passTexture[i]);
+                passTexture[i] = 0;
+            }
+        }
+        
+        passFBOWidth = w;
+        passFBOHeight = h;
+        
+        for(int i = 0; i < 2; ++i) {
+            glGenFramebuffers(1, &passFBO[i]);
+            glGenTextures(1, &passTexture[i]);
+            glBindTexture(GL_TEXTURE_2D, passTexture[i]);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+            glBindFramebuffer(GL_FRAMEBUFFER, passFBO[i]);
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, passTexture[i], 0);
+            if(glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+                printf("Error: Pass FBO %d is not complete!\n", i);
+            }
+        }
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glBindTexture(GL_TEXTURE_2D, 0);
+        printf("Multipass FBOs initialized: %dx%d\n", w, h);
+    }
+    
+    void enableMultipass(bool enable) {
+        multipassEnabled = enable;
+        printf("Multipass %s\n", enable ? "enabled" : "disabled");
+    }
+    
+    bool isMultipassEnabled() const {
+        return multipassEnabled;
+    }
+    
+    void clearShaderPasses() {
+        shaderPassList.clear();
+        printf("Shader pass list cleared\n");
+    }
+    
+    void addShaderPass(int shaderIndex) {
+        if(shaderIndex >= 0 && shaderIndex < static_cast<int>(shaders2.size())) {
+            shaderPassList.push_back(shaderIndex);
+            printf("Added shader pass: %d (%s)\n", shaderIndex, 
+                   shaderIndex < static_cast<int>(shader_names.size()) ? shader_names[shaderIndex].c_str() : "unknown");
+        }
+    }
+    
+    void setShaderPasses(const std::vector<int>& passes) {
+        shaderPassList = passes;
+        printf("Set %zu shader passes\n", passes.size());
+    }
+    
+    std::vector<int> getShaderPasses() const {
+        return shaderPassList;
+    }
+    
+    void updateShaderUniforms(gl::ShaderProgram* shader, float deltaTime) {
+        shader->setUniform("time_f", animation);
+        shader->setUniform("iTime", animation);
+        shader->setUniform("iTimeDelta", deltaTime);
+        shader->setUniform("iFrame", static_cast<float>(frameCount));
+        shader->setUniform("iSeconds", iSeconds);
+        shader->setUniform("iMinutes", iMinutes);
+        shader->setUniform("iHours", iHours);
+        shader->setUniform("iResolution", glm::vec2(canvasWidth, canvasHeight));
+        glm::vec4 adjMouse = mouse;
+        adjMouse.x -= displayX;
+        adjMouse.y -= displayY;
+        shader->setUniform("iMouse", adjMouse);
+        shader->setUniform("iMouseNormalized", glm::vec2(adjMouse.x / displayW, 1.0f - adjMouse.y / displayH));
+        shader->setUniform("iMouseActive", iMouseClick);
+        shader->setUniform("iMouseVelocity", iMouseVelocity);
+        shader->setUniform("iMouseClick", iMouseClick);
+        shader->setUniform("iAspectRatio", static_cast<float>(canvasWidth) / static_cast<float>(canvasHeight));
+        shader->setUniform("iSpeed", iSpeed);
+        shader->setUniform("iFrequency", iFrequency);
+        shader->setUniform("iAmplitude", iAmplitude);
+        shader->setUniform("iHueShift", iHueShift);
+        shader->setUniform("iSaturation", iSaturation);
+        shader->setUniform("iBrightness", iBrightness);
+        shader->setUniform("iContrast", iContrast);
+        shader->setUniform("iZoom", iZoom);
+        shader->setUniform("iRotation", iRotation);
+        shader->setUniform("iCameraPos", iCameraPos);
+        shader->setUniform("iBeat", beatValue);
+        shader->setUniform("iAudioLevel", audioLevel);
+        shader->setUniform("iDebugMode", iDebugMode);
+        shader->setUniform("iQuality", iQuality);
+        shader->setUniform("alpha", 1.0f);
+        shader->setUniform("amp", 0.5f);
+        shader->setUniform("uamp", 0.5f);
+        shader->setUniform("mv_matrix", glm::mat4(1.0f));
+        shader->setUniform("proj_matrix", glm::mat4(1.0f));
+    }
+
     int getShaderIndex() const { return currentShaderIndex; }
     void setShaderIndex(int index) { currentShaderIndex = index; }
     int getShaderCount() { return static_cast<int>(shader_names.size());  }
@@ -987,10 +1112,57 @@ public:
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         update(deltaTime);
         sprite.initSize(canvasWidth, canvasHeight);
-        if(is3d)
-            drawModel(win);
-        else
-            drawModel2D(win);
+        
+        if(multipassEnabled && !shaderPassList.empty() && !is3d) {
+            initPassFBOs(canvasWidth, canvasHeight);    
+            GLuint inputTex = texture;
+            int pingpong = 0;
+            for(size_t i = 0; i < shaderPassList.size(); ++i) {
+                int shaderIdx = shaderPassList[i];
+                if(shaderIdx >= 0 && shaderIdx < static_cast<int>(shaders2.size())) {
+                    gl::ShaderProgram* passShader = shaders2[shaderIdx].get();
+                    if(passShader) {
+                        glBindFramebuffer(GL_FRAMEBUFFER, passFBO[pingpong]);
+                        glViewport(0, 0, canvasWidth, canvasHeight);
+                        glClear(GL_COLOR_BUFFER_BIT);
+                        
+                        passShader->useProgram();
+                        updateShaderUniforms(passShader, deltaTime);
+                        passShader->setUniform("textTexture", 0);
+                        
+                        glActiveTexture(GL_TEXTURE0);
+                        glBindTexture(GL_TEXTURE_2D, inputTex);
+                        
+                        sprite.setShader(passShader);
+                        sprite.setName("textTexture");
+                        sprite.draw(inputTex, 0, 0, canvasWidth, canvasHeight);
+        
+                        inputTex = passTexture[pingpong];
+                        pingpong = 1 - pingpong;
+                    }
+                }
+            }
+            
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            glViewport(0, 0, canvasWidth, canvasHeight);
+            
+            gl::ShaderProgram* finalShader = shaders2[currentShaderIndex].get();
+            finalShader->useProgram();
+            updateShaderUniforms(finalShader, deltaTime);
+            finalShader->setUniform("textTexture", 0);
+            
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, inputTex);
+            
+            sprite.setShader(finalShader);
+            sprite.setName("textTexture");
+            sprite.draw(inputTex, displayX, displayY, displayW, displayH);
+        } else {
+            if(is3d)
+                drawModel(win);
+            else
+                drawModel2D(win);
+        }
 
         if (captureNextFrame) {
             captureNextFrame = false;
@@ -1707,6 +1879,33 @@ About *about_ptr = nullptr;
         if(about_ptr) about_ptr->adjustCameraDistance(delta);
     }
 
+    // Multipass API wrapper functions
+    void enableMultipassWeb(bool enable) {
+        if(about_ptr) about_ptr->enableMultipass(enable);
+    }
+    
+    bool isMultipassEnabledWeb() {
+        if(about_ptr) return about_ptr->isMultipassEnabled();
+        return false;
+    }
+    
+    void clearShaderPassesWeb() {
+        if(about_ptr) about_ptr->clearShaderPasses();
+    }
+    
+    void addShaderPassWeb(int shaderIndex) {
+        if(about_ptr) about_ptr->addShaderPass(shaderIndex);
+    }
+    
+    void setShaderPassesWeb(std::vector<int> passes) {
+        if(about_ptr) about_ptr->setShaderPasses(passes);
+    }
+    
+    std::vector<int> getShaderPassesWeb() {
+        if(about_ptr) return about_ptr->getShaderPasses();
+        return std::vector<int>();
+    }
+
     EMSCRIPTEN_BINDINGS(image_loader) {
         emscripten::function("nextShaderWeb", &nextShaderWeb);
         emscripten::function("prevShaderWeb", &prevShaderWeb);
@@ -1758,6 +1957,14 @@ About *about_ptr = nullptr;
         emscripten::function("setShaderIndex", &setShaderIndex);
         emscripten::function("getShaderCount", &getShaderCount);
         emscripten::function("getShaderNameAt", &getShaderNameAt);
+        // Multipass API
+        emscripten::function("enableMultipass", &enableMultipassWeb);
+        emscripten::function("isMultipassEnabled", &isMultipassEnabledWeb);
+        emscripten::function("clearShaderPasses", &clearShaderPassesWeb);
+        emscripten::function("addShaderPass", &addShaderPassWeb);
+        emscripten::function("setShaderPasses", &setShaderPassesWeb);
+        emscripten::function("getShaderPasses", &getShaderPassesWeb);
+        emscripten::register_vector<int>("VectorInt");
     };
 
 #endif
