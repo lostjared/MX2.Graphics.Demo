@@ -323,13 +323,12 @@ public:
         is3d = is3d_m;
     }
     
-    // Multipass FBO management
+    
     void initPassFBOs(int w, int h) {
         if(passFBO[0] != 0 && passFBOWidth == w && passFBOHeight == h) {
-            return;  // Already initialized at correct size
+            return;  
         }
         
-        // Cleanup existing FBOs
         for(int i = 0; i < 2; ++i) {
             if(passFBO[i] != 0) {
                 glDeleteFramebuffers(1, &passFBO[i]);
@@ -785,7 +784,8 @@ public:
     }
 
 
-    void drawModel(gl::GLWindow *win) {
+    void drawModel(gl::GLWindow *win, GLuint textureToUse = 0) {
+        GLuint meshTexture = (textureToUse != 0) ? textureToUse : texture;
         glEnable(GL_DEPTH_TEST);
         glDepthFunc(GL_LESS);
         glDepthMask(GL_TRUE);
@@ -877,10 +877,15 @@ public:
         glm::mat4 mvMatrix = viewMatrix * modelMatrix;
         gl::ShaderProgram *activeShader;
         activeShader = shaders[currentShaderIndex].get();
+        activeShader->useProgram();
         activeShader->setUniform("mv_matrix", mvMatrix);
         activeShader->setUniform("proj_matrix", projectionMatrix);
+        activeShader->setUniform("time_f", animation);
+        activeShader->setUniform("iTime", animation);
+        activeShader->setUniform("iResolution", glm::vec2(canvasWidth, canvasHeight));
+        
         glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, texture);
+        glBindTexture(GL_TEXTURE_2D, meshTexture);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
@@ -889,7 +894,7 @@ public:
         model->setShaderProgram(activeShader);    
         for(auto &m : model->meshes) {
             glActiveTexture(GL_TEXTURE0);
-            glBindTexture(GL_TEXTURE_2D, texture);
+            glBindTexture(GL_TEXTURE_2D, meshTexture);
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
@@ -1113,10 +1118,13 @@ public:
         update(deltaTime);
         sprite.initSize(canvasWidth, canvasHeight);
         
-        if(multipassEnabled && !shaderPassList.empty() && !is3d) {
+        if(multipassEnabled && !shaderPassList.empty()) {
             initPassFBOs(canvasWidth, canvasHeight);    
             GLuint inputTex = texture;
             int pingpong = 0;
+            
+            
+            glDisable(GL_DEPTH_TEST);
             for(size_t i = 0; i < shaderPassList.size(); ++i) {
                 int shaderIdx = shaderPassList[i];
                 if(shaderIdx >= 0 && shaderIdx < static_cast<int>(shaders2.size())) {
@@ -1129,6 +1137,8 @@ public:
                         passShader->useProgram();
                         updateShaderUniforms(passShader, deltaTime);
                         passShader->setUniform("textTexture", 0);
+                        passShader->setUniform("mv_matrix", glm::mat4(1.0f));
+                        passShader->setUniform("proj_matrix", glm::mat4(1.0f));
                         
                         glActiveTexture(GL_TEXTURE0);
                         glBindTexture(GL_TEXTURE_2D, inputTex);
@@ -1146,17 +1156,26 @@ public:
             glBindFramebuffer(GL_FRAMEBUFFER, 0);
             glViewport(0, 0, canvasWidth, canvasHeight);
             
-            gl::ShaderProgram* finalShader = shaders2[currentShaderIndex].get();
-            finalShader->useProgram();
-            updateShaderUniforms(finalShader, deltaTime);
-            finalShader->setUniform("textTexture", 0);
-            
-            glActiveTexture(GL_TEXTURE0);
-            glBindTexture(GL_TEXTURE_2D, inputTex);
-            
-            sprite.setShader(finalShader);
-            sprite.setName("textTexture");
-            sprite.draw(inputTex, displayX, displayY, displayW, displayH);
+            if(is3d) {
+                glEnable(GL_DEPTH_TEST);
+                glDepthFunc(GL_LESS);
+                glDepthMask(GL_TRUE);
+                glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+                drawModel(win, inputTex);
+            } else {
+                
+                gl::ShaderProgram* finalShader = shaders2[currentShaderIndex].get();
+                finalShader->useProgram();
+                updateShaderUniforms(finalShader, deltaTime);
+                finalShader->setUniform("textTexture", 0);
+                
+                glActiveTexture(GL_TEXTURE0);
+                glBindTexture(GL_TEXTURE_2D, inputTex);
+                
+                sprite.setShader(finalShader);
+                sprite.setName("textTexture");
+                sprite.draw(inputTex, displayX, displayY, displayW, displayH);
+            }
         } else {
             if(is3d)
                 drawModel(win);
@@ -1879,7 +1898,7 @@ About *about_ptr = nullptr;
         if(about_ptr) about_ptr->adjustCameraDistance(delta);
     }
 
-    // Multipass API wrapper functions
+    
     void enableMultipassWeb(bool enable) {
         if(about_ptr) about_ptr->enableMultipass(enable);
     }
@@ -1957,7 +1976,6 @@ About *about_ptr = nullptr;
         emscripten::function("setShaderIndex", &setShaderIndex);
         emscripten::function("getShaderCount", &getShaderCount);
         emscripten::function("getShaderNameAt", &getShaderNameAt);
-        // Multipass API
         emscripten::function("enableMultipass", &enableMultipassWeb);
         emscripten::function("isMultipassEnabled", &isMultipassEnabledWeb);
         emscripten::function("clearShaderPasses", &clearShaderPassesWeb);

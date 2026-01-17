@@ -1581,6 +1581,55 @@ body.mobile-mode #uniforms-modal {
     max-width: none;
 }
 
+body.mobile-mode #multipass-modal {
+    width: 95%;
+    max-width: none;
+    max-height: 85vh;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 10001;
+}
+
+body.mobile-mode #multipass-overlay {
+    z-index: 10000;
+}
+
+body.mobile-mode #multipass-modal .multipass-controls {
+    flex-direction: column;
+}
+
+body.mobile-mode #multipass-modal .multipass-controls select {
+    width: 100%;
+    padding: 12px;
+    font-size: 16px;
+}
+
+body.mobile-mode #multipass-modal .multipass-controls button {
+    width: 100%;
+    padding: 12px;
+    font-size: 16px;
+}
+
+body.mobile-mode #multipass-modal #shader-pass-list {
+    max-height: 200px;
+}
+
+body.mobile-mode #multipass-modal .shader-pass-item {
+    padding: 12px;
+}
+
+body.mobile-mode #multipass-modal #multipass-footer {
+    flex-direction: column;
+    gap: 8px;
+}
+
+body.mobile-mode #multipass-modal #multipass-footer button {
+    width: 100%;
+    padding: 14px;
+    font-size: 16px;
+}
+
 body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
     width: 24px;
     height: 24px;
@@ -1886,6 +1935,7 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
             </select>
             <button class="mobile-btn" id="mobile-shader-editor-btn" style="background: linear-gradient(135deg, #9C27B0 0%, #7B1FA2 100%);">✏️</button>
             <button class="mobile-btn" id="mobile-uniforms-btn">⚙️</button>
+            <button class="mobile-btn" id="mobile-multipass-btn" style="background: linear-gradient(135deg, #FF9800 0%, #F57C00 100%);">🔗</button>
             <button class="mobile-btn" id="mobile-help-btn">❓</button>
         </div>
         <div id="mobile-shader-info">Swipe to rotate • Pinch to zoom • Double-tap to change shader</div>
@@ -5607,6 +5657,12 @@ void main(void) {
 
             document.getElementById('mobile-uniforms-btn').addEventListener('click', () => {
                 uniformsModal.classList.add('visible');
+            });
+
+            document.getElementById('mobile-multipass-btn').addEventListener('click', () => {
+                populateShaderPassSelector();
+                multipassModal.classList.add('visible');
+                multipassOverlay.classList.add('visible');
             });
 
             document.getElementById('mobile-help-btn').addEventListener('click', () => {
