@@ -1,5 +1,9 @@
 3dplus.mxmod.z
 3dstar.mxmod.z
+triforce.mxmod.z
+merkaba.mxmod.z
+geosphere.mxmod.z
+trefoil_knot.mxmod.z       
 UFO3.mxmod.z
 bird.mxmod.z
 cigar_tube.mxmod.z
@@ -59,3 +63,4 @@ ufo.mxmod.z
 ufo_model.mxmod.z
 ufox.mxmod.z
 uv_sphere.mxmod.z
+menger_spong.mxmod.z
