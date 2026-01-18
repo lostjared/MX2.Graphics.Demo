@@ -2,7 +2,9 @@
 3dstar.mxmod.z
 triforce.mxmod.z
 merkaba.mxmod.z
+sacred_sphere_opt.mxmod.z
 geosphere.mxmod.z
+icosahedron.mxmod.z
 trefoil_knot.mxmod.z       
 UFO3.mxmod.z
 bird.mxmod.z
@@ -64,3 +66,4 @@ ufo_model.mxmod.z
 ufox.mxmod.z
 uv_sphere.mxmod.z
 menger_spong.mxmod.z
+fruit_of_life.mxmod.z
