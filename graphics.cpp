@@ -707,11 +707,16 @@ public:
     }
     float cameraYaw = 270.0f;   
     float cameraPitch = 0.0f; 
+    float cameraRoll = 0.0f;
     const float cameraRotationSpeed = 5.0f; 
     bool viewRotationActive = false; 
     bool oscillateScale = false;
     float cameraDistance = 0.0f;
     float movementSpeed = 0.01f;
+    float modelSize = 1.0f;  
+    float cameraOffsetX = 0.0f;
+    float cameraOffsetY = 0.0f;
+    float cameraOffsetZ = 0.0f;
 
     void adjustCameraYaw(float delta) {
         cameraYaw += delta;
@@ -725,10 +730,23 @@ public:
     }
 
     void adjustCameraDistance(float delta) {
-        cameraDistance += delta;
-        if (cameraDistance < -2.0f) cameraDistance = -2.0f;
-        if (cameraDistance > 2.0f) cameraDistance = 2.0f;
+        cameraDistance += delta * modelSize * 0.1f;
     }
+
+    void setCameraX(float x) { cameraOffsetX = x * modelSize * 0.5f; }
+    void setCameraY(float y) { cameraOffsetY = y * modelSize * 0.5f; }
+    void setCameraZ(float z) { cameraOffsetZ = z * modelSize * 0.5f; }
+    float getCameraX() const { return modelSize > 0.001f ? cameraOffsetX / (modelSize * 0.5f) : 0.0f; }
+    float getCameraY() const { return modelSize > 0.001f ? cameraOffsetY / (modelSize * 0.5f) : 0.0f; }
+    float getCameraZ() const { return modelSize > 0.001f ? cameraOffsetZ / (modelSize * 0.5f) : 0.0f; }
+    float getModelSize() const { return modelSize; }
+    
+    void setRotationX(float x) { cameraPitch = x * 89.0f; }  
+    void setRotationY(float y) { cameraYaw = (y + 1.0f) * 180.0f; }  
+    void setRotationZ(float z) { cameraRoll = z * 180.0f; }  
+    float getRotationX() const { return cameraPitch / 89.0f; }
+    float getRotationY() const { return (cameraYaw / 180.0f) - 1.0f; }
+    float getRotationZ() const { return cameraRoll / 180.0f; }
 
     void loadModelFile(const std::string &m_file_path) {
         if(m_file_path.find("quad") != std::string::npos) {
@@ -760,6 +778,35 @@ public:
         model.reset(new mx::Model());
         if(!model->openModel(m_file_path)) {
             throw mx::Exception("Could not open model: " + m_file_path);
+        }
+        
+        
+        if(!model->meshes.empty()) {
+            float minX = std::numeric_limits<float>::max();
+            float minY = std::numeric_limits<float>::max();
+            float minZ = std::numeric_limits<float>::max();
+            float maxX = std::numeric_limits<float>::lowest();
+            float maxY = std::numeric_limits<float>::lowest();
+            float maxZ = std::numeric_limits<float>::lowest();
+            for(const auto &mesh : model->meshes) {
+                for(size_t i = 0; i + 2 < mesh.vert.size(); i += 3) {
+                    float x = mesh.vert[i];
+                    float y = mesh.vert[i + 1];
+                    float z = mesh.vert[i + 2];
+                    minX = std::min(minX, x);
+                    minY = std::min(minY, y);
+                    minZ = std::min(minZ, z);
+                    maxX = std::max(maxX, x);
+                    maxY = std::max(maxY, y);
+                    maxZ = std::max(maxZ, z);
+                }
+            }
+            float dx = maxX - minX;
+            float dy = maxY - minY;
+            float dz = maxZ - minZ;
+            modelSize = std::sqrt(dx * dx + dy * dy + dz * dz);
+            if(modelSize < 0.001f) modelSize = 1.0f; 
+            printf("Model bounding diagonal: %f\n", modelSize);
         }
     }
 
@@ -810,12 +857,12 @@ public:
             }
 
             if (keystate[SDL_SCANCODE_EQUALS] || keystate[SDL_SCANCODE_KP_PLUS]) {
-                cameraDistance += movementSpeed;
+                cameraDistance += movementSpeed * modelSize * 0.1f;
                 mx::system_out << "acmx2: cameraDistance increased: " << cameraDistance << "\n";
                 fflush(stdout);
             }
             if (keystate[SDL_SCANCODE_MINUS] || keystate[SDL_SCANCODE_KP_MINUS]) {
-                cameraDistance -= movementSpeed;
+                cameraDistance -= movementSpeed * modelSize * 0.1f;
                 mx::system_out << "acmx2: cameraDistance decreased: " << cameraDistance << "\n";
                 fflush(stdout);
             }
@@ -865,8 +912,15 @@ public:
 
         float finalOffset = oscillateScale ? oscOffset : cameraDistance;
         glm::vec3 cameraPos = cameraPosBase - glm::normalize(lookDirection) * finalOffset;
+        cameraPos += glm::vec3(cameraOffsetX, cameraOffsetY, cameraOffsetZ);
         glm::vec3 cameraTarget = cameraPos + lookDirection;
         glm::vec3 cameraUp = glm::vec3(0.0f, 1.0f, 0.0f);
+        if(std::abs(cameraRoll) > 0.001f) {
+            float rollRad = glm::radians(cameraRoll);
+            glm::vec3 forward = glm::normalize(lookDirection);
+            glm::mat4 rollMatrix = glm::rotate(glm::mat4(1.0f), rollRad, forward);
+            cameraUp = glm::vec3(rollMatrix * glm::vec4(cameraUp, 0.0f));
+        }
         glm::mat4 viewMatrix = glm::lookAt(cameraPos, cameraTarget, cameraUp);
         glm::mat4 projectionMatrix = glm::perspective(
             glm::radians(120.0f),
@@ -1898,8 +1952,55 @@ About *about_ptr = nullptr;
         if(about_ptr) about_ptr->adjustCameraDistance(delta);
     }
 
+    void setCameraXWeb(float x) {
+        if(about_ptr) about_ptr->setCameraX(x);
+    }
+    void setCameraYWeb(float y) {
+        if(about_ptr) about_ptr->setCameraY(y);
+    }
+    void setCameraZWeb(float z) {
+        if(about_ptr) about_ptr->setCameraZ(z);
+    }
+    float getCameraXWeb() {
+        if(about_ptr) return about_ptr->getCameraX();
+        return 0.0f;
+    }
+    float getCameraYWeb() {
+        if(about_ptr) return about_ptr->getCameraY();
+        return 0.0f;
+    }
+    float getCameraZWeb() {
+        if(about_ptr) return about_ptr->getCameraZ();
+        return 0.0f;
+    }
+    float getModelSizeWeb() {
+        if(about_ptr) return about_ptr->getModelSize();
+        return 1.0f;
+    }
     
-    void enableMultipassWeb(bool enable) {
+    void setRotationXWeb(float x) {
+        if(about_ptr) about_ptr->setRotationX(x);
+    }
+    void setRotationYWeb(float y) {
+        if(about_ptr) about_ptr->setRotationY(y);
+    }
+    void setRotationZWeb(float z) {
+        if(about_ptr) about_ptr->setRotationZ(z);
+    }
+    float getRotationXWeb() {
+        if(about_ptr) return about_ptr->getRotationX();
+        return 0.0f;
+    }
+    float getRotationYWeb() {
+        if(about_ptr) return about_ptr->getRotationY();
+        return 0.0f;
+    }
+    float getRotationZWeb() {
+        if(about_ptr) return about_ptr->getRotationZ();
+        return 0.0f;
+    }
+
+        void enableMultipassWeb(bool enable) {
         if(about_ptr) about_ptr->enableMultipass(enable);
     }
     
@@ -1970,6 +2071,19 @@ About *about_ptr = nullptr;
         emscripten::function("touchRotateX", &touchRotateX);
         emscripten::function("touchRotateY", &touchRotateY);
         emscripten::function("touchZoom", &touchZoom);
+        emscripten::function("setCameraX", &setCameraXWeb);
+        emscripten::function("setCameraY", &setCameraYWeb);
+        emscripten::function("setCameraZ", &setCameraZWeb);
+        emscripten::function("getCameraX", &getCameraXWeb);
+        emscripten::function("getCameraY", &getCameraYWeb);
+        emscripten::function("getCameraZ", &getCameraZWeb);
+        emscripten::function("getModelSize", &getModelSizeWeb);
+        emscripten::function("setRotationX", &setRotationXWeb);
+        emscripten::function("setRotationY", &setRotationYWeb);
+        emscripten::function("setRotationZ", &setRotationZWeb);
+        emscripten::function("getRotationX", &getRotationXWeb);
+        emscripten::function("getRotationY", &getRotationYWeb);
+        emscripten::function("getRotationZ", &getRotationZWeb);
         emscripten::function("getIndex", &getIndex);
         emscripten::function("loadModel", &loadModel);
         emscripten::function("setShader3DMode", &set3D);

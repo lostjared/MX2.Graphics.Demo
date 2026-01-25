@@ -1756,7 +1756,7 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
 </head>
 <body>
     <div id="loading-overlay">
-        <div id="loading-title">ACMX2 Interactive Visualizer v1.5.0 - Initializing...</div>
+        <div id="loading-title">ACMX2 Interactive Visualizer v1.6.0 - Initializing...</div>
         <div id="loading-output"></div>
     </div>
     <div id="canvas-container">
@@ -2156,6 +2156,44 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
                         <input type="checkbox" id="iDebugMode">
                     </div>
                 </div>
+                
+                <div class="uniform-section">
+                    <h3>Camera Position</h3>
+                    <div class="uniform-control">
+                        <label>Camera X</label>
+                        <input type="range" id="iCameraX" min="-2" max="2" step="0.01" value="0">
+                        <span id="iCameraX-value">0.00</span>
+                    </div>
+                    <div class="uniform-control">
+                        <label>Camera Y</label>
+                        <input type="range" id="iCameraY" min="-2" max="2" step="0.01" value="0">
+                        <span id="iCameraY-value">0.00</span>
+                    </div>
+                    <div class="uniform-control">
+                        <label>Camera Z</label>
+                        <input type="range" id="iCameraZ" min="-2" max="2" step="0.01" value="0">
+                        <span id="iCameraZ-value">0.00</span>
+                    </div>
+                </div>
+                
+                <div class="uniform-section">
+                    <h3>Camera Rotation</h3>
+                    <div class="uniform-control">
+                        <label>Rotation X (Pitch)</label>
+                        <input type="range" id="iRotationX" min="-1" max="1" step="0.01" value="0">
+                        <span id="iRotationX-value">0.00</span>
+                    </div>
+                    <div class="uniform-control">
+                        <label>Rotation Y (Yaw)</label>
+                        <input type="range" id="iRotationY" min="-1" max="1" step="0.01" value="0.5">
+                        <span id="iRotationY-value">0.50</span>
+                    </div>
+                    <div class="uniform-control">
+                        <label>Rotation Z (Roll)</label>
+                        <input type="range" id="iRotationZ" min="-1" max="1" step="0.01" value="0">
+                        <span id="iRotationZ-value">0.00</span>
+                    </div>
+                </div>
             </div>
             <div id="uniforms-footer">
                 <button id="reset-uniforms-btn">🔄 Reset All</button>
@@ -2201,7 +2239,7 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
             var output = document.getElementById('loading-output');
             if (output) {
                 output.innerHTML = '<span class="info">Initializing WebGL...</span>\n' +
-                                   '<span class="normal">Loading ACMX2 v1.5.0 ...</span>\n';
+                                   '<span class="normal">Loading ACMX2 v1.6.0 ...</span>\n';
             }
         })();
            
@@ -2475,7 +2513,13 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
             'iZoom': 1.0,
             'iRotation': 0.0,
             'iQuality': 1.0,
-            'iDebugMode': false
+            'iDebugMode': false,
+            'iCameraX': 0.0,
+            'iCameraY': 0.0,
+            'iCameraZ': 0.0,
+            'iRotationX': 0.0,
+            'iRotationY': 0.5,
+            'iRotationZ': 0.0
         };
 
         const uniformSetters = {
@@ -2489,7 +2533,13 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
             'iZoom': 'setUniformZoom',
             'iRotation': 'setUniformRotation',
             'iQuality': 'setUniformQuality',
-            'iDebugMode': 'setUniformDebugMode'
+            'iDebugMode': 'setUniformDebugMode',
+            'iCameraX': 'setCameraX',
+            'iCameraY': 'setCameraY',
+            'iCameraZ': 'setCameraZ',
+            'iRotationX': 'setRotationX',
+            'iRotationY': 'setRotationY',
+            'iRotationZ': 'setRotationZ'
         };
 
         function updateUniformDisplay(uniformName) {
