@@ -1556,13 +1556,21 @@ public:
                     String(now.getHours()).padStart(2, '0') + '-' + 
                     String(now.getMinutes()).padStart(2, '0') + '-' + 
                     String(now.getSeconds()).padStart(2, '0');
-                
-                var link = document.createElement('a');
-                link.download = 'acmx2.visualizer.' + finalW + 'x' + finalH + '.' + timestamp + '.png';
-                link.href = outCanvas.toDataURL('image/png');
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
+
+                var dataUrl = outCanvas.toDataURL('image/png');
+                var filename = 'acmx2.visualizer.' + finalW + 'x' + finalH + '.' + timestamp + '.png';
+
+                if (typeof window.AndroidInterface !== 'undefined' &&
+                    typeof window.AndroidInterface.saveImage === 'function') {
+                    window.AndroidInterface.saveImage(dataUrl);
+                } else {
+                    var link = document.createElement('a');
+                    link.download = filename;
+                    link.href = dataUrl;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                }
                 
                 console.log('Image saved:', finalW, 'x', finalH);
             } catch (e) {

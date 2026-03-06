@@ -1756,7 +1756,7 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
 </head>
 <body>
     <div id="loading-overlay">
-        <div id="loading-title">ACMX2 Interactive Visualizer v1.6.0 - Initializing...</div>
+        <div id="loading-title">ACMX2 Interactive Visualizer v1.7.0 - Initializing...</div>
         <div id="loading-output"></div>
     </div>
     <div id="canvas-container">
@@ -2235,11 +2235,101 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
     </div>
 
     <script>
+        // -----------------------------------------------------------------------
+        // AndroidInterface download interceptor
+        // Android WebView ignores browser-style downloads such as:
+        //   - <a download href="data:image/png;base64,...">
+        //   - <a download href="blob:..."> for video
+        // This bridge reroutes both image and video saves through the Android
+        // Java interface so they can be written into MediaStore/Gallery.
+        // -----------------------------------------------------------------------
+        (function() {
+            if (window.__acmxAndroidBridgeInstalled) return;
+            window.__acmxAndroidBridgeInstalled = true;
+
+            function hasImageSave() {
+                return typeof window.AndroidInterface !== 'undefined' &&
+                       typeof window.AndroidInterface.saveImage === 'function';
+            }
+
+            function hasVideoSave() {
+                return typeof window.AndroidInterface !== 'undefined' &&
+                       typeof window.AndroidInterface.startVideoSave === 'function' &&
+                       typeof window.AndroidInterface.appendVideoChunk === 'function' &&
+                       typeof window.AndroidInterface.finalizeVideoSave === 'function';
+            }
+
+            function payloadFromDataUrl(value) {
+                var text = String(value || '');
+                var comma = text.indexOf(',');
+                return comma >= 0 ? text.slice(comma + 1) : text;
+            }
+
+            function mimeFromName(name, fallback) {
+                var lower = String(name || '').toLowerCase();
+                if (lower.endsWith('.mp4')) return 'video/mp4';
+                if (lower.endsWith('.webm')) return 'video/webm';
+                return fallback || 'video/mp4';
+            }
+
+            async function saveBlobToAndroid(blob, filename, mimeType) {
+                if (!hasVideoSave()) return false;
+
+                var safeName = filename || ('acmx2_' + Date.now() + (((mimeType || blob.type || '').indexOf('webm') !== -1) ? '.webm' : '.mp4'));
+                var finalMime = mimeType || blob.type || mimeFromName(safeName, 'video/mp4');
+                var chunkSize = 1024 * 1024;
+
+                window.AndroidInterface.startVideoSave(safeName);
+
+                for (var start = 0; start < blob.size; start += chunkSize) {
+                    var chunk = blob.slice(start, start + chunkSize);
+                    var base64 = await new Promise(function(resolve, reject) {
+                        var reader = new FileReader();
+                        reader.onloadend = function() { resolve(reader.result || ''); };
+                        reader.onerror = function() { reject(reader.error || new Error('FileReader failed')); };
+                        reader.readAsDataURL(chunk);
+                    });
+                    window.AndroidInterface.appendVideoChunk(payloadFromDataUrl(base64));
+                }
+
+                window.AndroidInterface.finalizeVideoSave(finalMime);
+                return true;
+            }
+
+            window.__acmxSaveBlobToAndroid = saveBlobToAndroid;
+
+            var _origAnchorClick = HTMLAnchorElement.prototype.click;
+            HTMLAnchorElement.prototype.click = function() {
+                var href = this.getAttribute('href') || this.href || '';
+                var dl   = this.getAttribute('download') || this.download || '';
+
+                if (dl && href.indexOf('data:image/') === 0 && hasImageSave()) {
+                    window.AndroidInterface.saveImage(href);
+                    return;
+                }
+
+                if (dl && (href.indexOf('blob:') === 0 || href.indexOf('data:video/') === 0) && hasVideoSave()) {
+                    Promise.resolve().then(async function() {
+                        try {
+                            var response = await fetch(href);
+                            var blob = await response.blob();
+                            await saveBlobToAndroid(blob, dl, blob.type || mimeFromName(dl, 'video/mp4'));
+                        } catch (error) {
+                            console.error('Android video save bridge failed:', error);
+                        }
+                    });
+                    return;
+                }
+
+                _origAnchorClick.call(this);
+            };
+        })();
+
         (function() {
             var output = document.getElementById('loading-output');
             if (output) {
                 output.innerHTML = '<span class="info">Initializing WebGL...</span>\n' +
-                                   '<span class="normal">Loading ACMX2 v1.6.0 ...</span>\n';
+                                   '<span class="normal">Loading ACMX2 v1.7.0 ...</span>\n';
             }
         })();
            
@@ -3887,29 +3977,60 @@ void main(void) {
         let ffmpegLoaded = false;
         let ffmpegLoading = false;
         let ffmpegSupported = typeof SharedArrayBuffer !== 'undefined';
-        
-        // Check if MP4 conversion is supported and update UI accordingly
+        let nativeMp4Supported = typeof MediaRecorder !== 'undefined' && (
+            MediaRecorder.isTypeSupported('video/mp4;codecs=h264,aac') ||
+            MediaRecorder.isTypeSupported('video/mp4;codecs=avc1.42E01E,mp4a.40.2') ||
+            MediaRecorder.isTypeSupported('video/mp4')
+        );
+        let mp4OutputSupported = nativeMp4Supported || ffmpegSupported;
+
+        function updateRecordingFormatUI() {
+            const selectors = [
+                document.getElementById('record-format'),
+                document.getElementById('mobile-record-format')
+            ].filter(Boolean);
+
+            let mp4Label = 'MP4';
+            let title = 'Record as WebM or MP4';
+            let disableMp4 = false;
+
+            if (nativeMp4Supported) {
+                mp4Label = 'MP4 (native)';
+                title = 'MP4 uses native MediaRecorder support on this device';
+            } else if (ffmpegSupported) {
+                mp4Label = 'MP4 (FFmpeg)';
+                title = 'MP4 records as WebM first, then converts with FFmpeg';
+            } else {
+                mp4Label = 'MP4 (unavailable)';
+                title = 'MP4 is unavailable on this device/WebView; use WebM';
+                disableMp4 = true;
+            }
+
+            selectors.forEach((select) => {
+                const mp4Option = select.querySelector('option[value="mp4"]');
+                if (mp4Option) {
+                    mp4Option.textContent = mp4Label;
+                    mp4Option.disabled = disableMp4;
+                }
+                select.title = title;
+                if (disableMp4 && select.value === 'mp4') {
+                    select.value = 'webm';
+                }
+            });
+        }
+
         if (!ffmpegSupported) {
-            console.warn('SharedArrayBuffer not available - MP4 conversion disabled');
-            console.warn('To enable MP4, serve with these headers:');
+            console.warn('SharedArrayBuffer not available - FFmpeg MP4 conversion disabled');
+            console.warn('To enable FFmpeg.wasm MP4 conversion, serve with these headers:');
             console.warn('  Cross-Origin-Opener-Policy: same-origin');
             console.warn('  Cross-Origin-Embedder-Policy: require-corp');
-            // Set format selectors to WebM only
-            setTimeout(() => {
-                const formatSelect = document.getElementById('record-format');
-                const mobileFormatSelect = document.getElementById('mobile-record-format');
-                if (formatSelect) {
-                    formatSelect.value = 'webm';
-                    formatSelect.disabled = true;
-                    formatSelect.title = 'MP4 requires server CORS headers (SharedArrayBuffer)';
-                }
-                if (mobileFormatSelect) {
-                    mobileFormatSelect.value = 'webm';
-                    mobileFormatSelect.disabled = true;
-                    mobileFormatSelect.title = 'MP4 requires server CORS headers (SharedArrayBuffer)';
-                }
-            }, 100);
         }
+
+        if (!nativeMp4Supported) {
+            console.warn('Native MediaRecorder MP4 is not supported on this device/WebView');
+        }
+
+        setTimeout(updateRecordingFormatUI, 100);
         
         async function loadFFmpeg() {
             if (!ffmpegSupported) {
@@ -4218,31 +4339,42 @@ void main(void) {
             }
         }
 
-        function getSupportedMimeType() {
-            // Check for audio+video codecs first if we have audio
+        function getSupportedMimeType(preferredFormat = 'webm') {
             const hasAudio = cameraAudioStream && cameraAudioStream.getAudioTracks().length > 0;
-            
-            const types = hasAudio ? [
+
+            const mp4Types = hasAudio ? [
+                'video/mp4;codecs=h264,aac',
+                'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
+                'video/mp4'
+            ] : [
+                'video/mp4;codecs=h264',
+                'video/mp4;codecs=avc1.42E01E',
+                'video/mp4'
+            ];
+
+            const webmTypes = hasAudio ? [
                 'video/webm;codecs=vp9,opus',
                 'video/webm;codecs=vp8,opus',
                 'video/webm;codecs=vp9',
                 'video/webm;codecs=vp8',
-                'video/webm',
-                'video/mp4'
+                'video/webm'
             ] : [
                 'video/webm;codecs=vp9',
                 'video/webm;codecs=vp8',
-                'video/webm',
-                'video/mp4'
+                'video/webm'
             ];
-            
+
+            const types = preferredFormat === 'mp4'
+                ? [...mp4Types, ...webmTypes]
+                : [...webmTypes, ...mp4Types];
+
             for (const type of types) {
                 if (MediaRecorder.isTypeSupported(type)) {
-                    console.log('Using mimeType:', type);
+                    console.log('Using mimeType:', type, 'preferredFormat:', preferredFormat);
                     return type;
                 }
             }
-            return 'video/webm';
+            return preferredFormat === 'mp4' ? 'video/mp4' : 'video/webm';
         }
 
         async function startRecording() {
@@ -4477,11 +4609,17 @@ void main(void) {
                     videoBitsPerSecond: 10000000,
                     audioBitsPerSecond: 128000
                 };
-                
-                // Only set mimeType if no audio (canvas-only recording)
-                if (!audioAdded) {
-                    recorderOptions.mimeType = getSupportedMimeType();
+
+                const formatSelect = document.getElementById('record-format') || document.getElementById('mobile-record-format');
+                let selectedFormat = formatSelect ? formatSelect.value : 'webm';
+
+                if (selectedFormat === 'mp4' && !mp4OutputSupported) {
+                    alert('MP4 is not available on this device/WebView. Recording will be saved as WebM.');
+                    selectedFormat = 'webm';
+                    if (formatSelect) formatSelect.value = 'webm';
                 }
+
+                recorderOptions.mimeType = getSupportedMimeType(selectedFormat);
                 
                 mediaRecorder = new MediaRecorder(recordingStream, recorderOptions);
                 
@@ -4514,13 +4652,17 @@ void main(void) {
                     
                     // Get selected format
                     const formatSelect = document.getElementById('record-format') || document.getElementById('mobile-record-format');
-                    const selectedFormat = formatSelect ? formatSelect.value : 'mp4';
+                    const selectedFormat = formatSelect ? formatSelect.value : 'webm';
                     
                     let finalBlob;
                     let extension;
                     
-                    if (selectedFormat === 'mp4') {
-                        // Convert WebM to MP4 using FFmpeg
+                    if (selectedFormat === 'mp4' && mimeType.indexOf('mp4') !== -1) {
+                        console.log('Using native MP4 recording output');
+                        finalBlob = webmBlob;
+                        extension = 'mp4';
+                    } else if (selectedFormat === 'mp4') {
+                        // Convert WebM to MP4 using FFmpeg when native MP4 recording is unavailable
                         try {
                             console.log('Converting WebM to MP4 at ' + lastRecordingFps + ' fps...');
                             finalBlob = await convertWebMtoMP4(webmBlob, lastRecordingFps);
@@ -4577,9 +4719,13 @@ void main(void) {
                         return false;
                     }
                     
-                    // Helper to force download using an anchor with data URL (more reliable on Android)
+                    // Helper to save via Android bridge when available, else fall back to an anchor download
                     async function forceDownload() {
                         try {
+                            if (typeof window.__acmxSaveBlobToAndroid === 'function') {
+                                return await window.__acmxSaveBlobToAndroid(finalBlob, filename, finalBlob.type || (extension === 'mp4' ? 'video/mp4' : 'video/webm'));
+                            }
+
                             // Create a fresh blob URL
                             const downloadUrl = URL.createObjectURL(finalBlob);
                             const a = document.createElement('a');
