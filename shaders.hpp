@@ -748,7 +748,6 @@ void main(void) {
 }
 )";
 
-
 inline const char *srcShader4 = R"(#version 300 es
 precision highp float;
 precision highp int;
@@ -13482,7 +13481,6 @@ void main(void) {
 }
 )SHD";
 
-
 inline const char *color_shader02 = R"(#version 300 es
 precision highp float;
 precision highp int;
@@ -13607,6 +13605,5 @@ void main(void) {
     color = vec4(finalRGB, tex.a);
 }
 )";
-
 
 #endif
