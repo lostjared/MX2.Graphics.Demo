@@ -122,6 +122,13 @@
             background: #388E3C !important;
         }
 
+        #save-image:disabled {
+            background: #888 !important;
+            border-color: #666 !important;
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+
         #record-btn {
             background: #673AB7 !important;
             border: 1px solid #512DA8 !important;
@@ -5022,6 +5029,7 @@ void main(void) {
         saveButton.addEventListener('click', () => {
             console.log('Save button clicked');
             
+            if (saveButton.disabled) return;
             
             if (typeof Module === 'undefined') {
                 console.error('Module is undefined');
@@ -5045,12 +5053,29 @@ void main(void) {
             }
             console.log('Saving with scale:', scale);
             
+            // Disable save buttons to prevent rapid clicks
+            saveButton.disabled = true;
+            const mobileSaveBtn = document.getElementById('mobile-save-image');
+            if (mobileSaveBtn) mobileSaveBtn.disabled = true;
+            saveButton.textContent = '⏳ Saving...';
+            if (mobileSaveBtn) mobileSaveBtn.textContent = '⏳ Saving...';
+            
             try {
                 Module.saveImage(scale);
                 console.log('saveImage called successfully');
             } catch (error) {
                 console.error('Error calling saveImage:', error);
                 alert('Failed to save: ' + error.message);
+            } finally {
+                // Re-enable after a delay to allow the save to complete
+                setTimeout(() => {
+                    saveButton.disabled = false;
+                    saveButton.textContent = '💾 Save';
+                    if (mobileSaveBtn) {
+                        mobileSaveBtn.disabled = false;
+                        mobileSaveBtn.textContent = '💾 Save';
+                    }
+                }, 4000);
             }
         });
 
