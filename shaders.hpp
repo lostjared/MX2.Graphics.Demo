@@ -9541,7 +9541,7 @@ vec3 limitHighlights(vec3 c) {
     return c;
 }
 
-// Spiral / sector warp from the extra shader, amplitude–aware.
+// Spiral / sector warp from the extra shader, amplitudeaware.
 vec2 spiralWarp(vec2 tcIn, float tBase, float a01, out float ringMirrorOut) {
     float loopDuration = 25.0;
     float t = mod(tBase * (0.6 + 1.8 * a01), loopDuration);

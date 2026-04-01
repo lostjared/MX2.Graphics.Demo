@@ -563,11 +563,11 @@ class About : public gl::GLObject {
                     var ok = $1;
                     var ok2 = $2;
                     if (ok && ok2) {
-                        window.addLoadingMessage('    ✓ ' + name + ' - OK', 'success');
+                        window.addLoadingMessage('     ' + name + ' - OK', 'success');
                     } else if (ok || ok2) {
-                        window.addLoadingMessage('    ⚠ ' + name + ' - Partial', 'info');
+                        window.addLoadingMessage('     ' + name + ' - Partial', 'info');
                     } else {
-                        window.addLoadingMessage('    ✗ ' + name + ' - FAILED', 'error');
+                        window.addLoadingMessage('     ' + name + ' - FAILED', 'error');
                     }
                 } }, info.name.c_str(), success ? 1 : 0, success2 ? 1 : 0);
 #endif

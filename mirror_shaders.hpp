@@ -2117,7 +2117,7 @@ void main(void) {
     float leftSide = step(uv.x, splitX);
     vec2 sampleUV = uvR * (1.0 - leftSide) + uvL * leftSide;
 
-    // Tile a bit so extreme warping stays “filled”
+    // Tile a bit so extreme warping stays filled
     sampleUV = fract(sampleUV);
 
     vec4 texColor = mxTexture(textTexture, sampleUV);

@@ -16,7 +16,7 @@ partially by me, some by different LLMs, improving each other.
 
 Uses libmx2 found here: https://github.com/lostjared/libmx2/
 
-### 🎨 400+ Built-in Shaders
+###  400+ Built-in Shaders
 Explore a diverse collection of visually stunning shader effects, including:
 - **Kaleidoscope effects** - Symmetrical fractal patterns with real-time transformations
 - **Distortion effects** - Wave, ripple, twist, and bend distortions
@@ -25,7 +25,7 @@ Explore a diverse collection of visually stunning shader effects, including:
 - **Noise & chaos** - Scrambling, VHS effects, and digital artifacts
 - **Interactive effects** - Mouse-controlled swirls, zooms, and fractal folding
 
-### ✏️ Custom Shader Editor
+###  Custom Shader Editor
 Write and compile your own GLSL ES 3.0 fragment shaders with:
 - Real-time shader code editing
 - Instant compilation feedback with detailed error messages
@@ -33,22 +33,22 @@ Write and compile your own GLSL ES 3.0 fragment shaders with:
 - Live preview of your custom effects
 - Shader compilation validation before applying
 
-### 🖼️ Image Loading
+###  Image Loading
 - Load PNG and JPG images directly into the application
 - Apply any shader effect to your own images
 - Supports file selection
 - Dynamic texture replacement at runtime
 
-### 💾 Screenshot Capture
+###  Screenshot Capture
 - Save the current rendered output as PNG
 - Automatically timestamped filenames
 - High-quality WebGL canvas capture
 
-### ⌨️ Keyboard & Mouse Controls
+###  Keyboard & Mouse Controls
 - **Arrow Keys / Spacebar** - Cycle through shaders
 - **Mouse Movement** - Control interactive shader parameters
 - **Mouse Click & Drag** - Manipulate focal points in mouse-aware effects
-- **Custom Shader Panel** - Press `✏️ Custom Shader` button to edit
+- **Custom Shader Panel** - Press ` Custom Shader` button to edit
 
 ## Installation
 
@@ -78,27 +78,27 @@ Then navigate to localhost:3000
 ### Navigation
 
 1. **Browsing Shaders:**
-   - Click `◀ Prev` and `Next ▶` buttons
-   - Use arrow keys (↑↓) or spacebar
+   - Click ` Prev` and `Next ` buttons
+   - Use arrow keys () or spacebar
    - Each shader is instantly applied
 
 2. **Loading Custom Images:**
-   - Click `🖼️ Load Image` button
+   - Click ` Load Image` button
    - Select a PNG or JPG file
    - The image is loaded into the current shader
    - Try different shaders on your image
 
 3. **Creating Custom Shaders:**
-   - Click `✏️ Custom Shader` button
+   - Click ` Custom Shader` button
    - The shader editor modal opens
    - Choose a template or start from scratch
    - Edit the GLSL code
-   - Click `▶ Compile & Apply` to test
+   - Click ` Compile & Apply` to test
    - Compilation errors appear in red in the log
-   - Reset to defaults with `🔄 Reset`
+   - Reset to defaults with ` Reset`
 
 4. **Saving Screenshots:**
-   - Click `💾 Save Image` button
+   - Click ` Save Image` button
    - Or press `S` key
    - PNG saves with timestamp: `mx2_shader_YYYYMMDD_HHMMSS.png`
 
@@ -188,12 +188,12 @@ void main(void) {
 
 | Action | Web 
 |--------|-----
-| Next Shader | `Next ▶` button or `↓` 
-| Prev Shader | `◀ Prev` button or `↑` 
-| Load Image | `🖼️ Load Image` button 
-| Save Screenshot | `💾 Save Image` or `S` 
-| Open Shader Editor | `✏️ Custom Shader` button 
-| Close Editor | `✕ Close` or `Esc` 
+| Next Shader | `Next ` button or `` 
+| Prev Shader | ` Prev` button or `` 
+| Load Image | ` Load Image` button 
+| Save Screenshot | ` Save Image` or `S` 
+| Open Shader Editor | ` Custom Shader` button 
+| Close Editor | ` Close` or `Esc` 
 | Interact with Effect | Mouse movement/click 
 
 ## Troubleshooting
@@ -211,7 +211,7 @@ void main(void) {
 - Check browser console for errors
 
 ### Custom shader not showing
-- Click `▶ Compile & Apply` button
+- Click ` Compile & Apply` button
 - Check compilation log for errors
 - Ensure the shader has a `main()` function
 - Verify all uniforms are declared
@@ -226,11 +226,11 @@ void main(void) {
 ### Project Structure
 ```
 libmx2/gl_about/
-├── graphics.cpp           # Main application and shader definitions
-├── index.html          # Web interface and controls
-├── Makefile.em         # Emscripten build configuration
-└── data/
-    └── logo.png        # Default texture
+ graphics.cpp           # Main application and shader definitions
+ index.html          # Web interface and controls
+ Makefile.em         # Emscripten build configuration
+ data/
+     logo.png        # Default texture
 ```
 
 ### Building Custom Versions
