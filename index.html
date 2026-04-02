@@ -2261,11 +2261,10 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
 
             function hasVideoSave() {
                 return typeof window.AndroidInterface !== 'undefined' &&
-                       typeof window.AndroidInterface.startVideoSave === 'function' &&
-                       typeof window.AndroidInterface.appendVideoChunk === 'function' &&
-                       typeof window.AndroidInterface.finalizeVideoSave === 'function';
+                typeof window.AndroidInterface.startVideoSave === 'function' &&
+                typeof window.AndroidInterface.appendVideoChunk === 'function' &&
+                typeof window.AndroidInterface.finalizeVideoSave === 'function';
             }
-
             function payloadFromDataUrl(value) {
                 var text = String(value || '');
                 var comma = text.indexOf(',');
@@ -2283,7 +2282,8 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
                 if (!hasVideoSave()) return false;
 
                 var safeName = filename || ('acmx2_' + Date.now() + (((mimeType || blob.type || '').indexOf('webm') !== -1) ? '.webm' : '.mp4'));
-                var finalMime = mimeType || blob.type || mimeFromName(safeName, 'video/mp4');
+                var rawMime = mimeType || blob.type || mimeFromName(safeName, 'video/mp4');
+                var finalMime = rawMime.split(';')[0];
                 var chunkSize = 1024 * 1024;
 
                 window.AndroidInterface.startVideoSave(safeName);
@@ -4726,11 +4726,19 @@ void main(void) {
                         return false;
                     }
                     
+                    
+                    
+                    
+                    // Helper to save via Android bridge when available, else fall back to an anchor download
                     // Helper to save via Android bridge when available, else fall back to an anchor download
                     async function forceDownload() {
                         try {
                             if (typeof window.__acmxSaveBlobToAndroid === 'function') {
-                                return await window.__acmxSaveBlobToAndroid(finalBlob, filename, finalBlob.type || (extension === 'mp4' ? 'video/mp4' : 'video/webm'));
+                                // FIXED: Strip the codec data before sending to Android MediaStore
+                                let rawMime = finalBlob.type || (extension === 'mp4' ? 'video/mp4' : 'video/webm');
+                                let cleanMime = rawMime.split(';')[0];
+                                
+                                return await window.__acmxSaveBlobToAndroid(finalBlob, filename, cleanMime);
                             }
 
                             // Create a fresh blob URL
