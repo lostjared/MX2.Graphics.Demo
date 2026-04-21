@@ -434,10 +434,14 @@ class About : public gl::GLObject {
     }
 
     int getShaderIndex() const { return currentShaderIndex; }
-    void setShaderIndex(int index) { currentShaderIndex = index; }
-    int getShaderCount() { return static_cast<int>(shader_names.size()); }
+    void setShaderIndex(int index) {
+        if (index >= 0 && index < static_cast<int>(shaders.size())) {
+            currentShaderIndex = static_cast<size_t>(index);
+        }
+    }
+    int getShaderCount() { return static_cast<int>(shaders.size()); }
     std::string getShaderNameAt(int index) {
-        if (index >= 0 && index < shader_names.size())
+        if (index >= 0 && index < static_cast<int>(shader_names.size()))
             return shader_names[index];
         return "";
     }
@@ -1048,13 +1052,13 @@ class About : public gl::GLObject {
     void nextShader(gl::GLWindow *win) {
         currentShaderIndex = (currentShaderIndex + 1) % shaders.size();
         switchShader(currentShaderIndex, win);
-        mx::system_out << "Switched to shader: " << shaderSources[currentShaderIndex].name << "\n";
+        mx::system_out << "Switched to shader: " << getShaderNameAt(static_cast<int>(currentShaderIndex)) << "\n";
     }
 
     void prevShader(gl::GLWindow *win) {
         currentShaderIndex = (currentShaderIndex == 0) ? shaders.size() - 1 : currentShaderIndex - 1;
         switchShader(currentShaderIndex, win);
-        mx::system_out << "Switched to shader: " << shaderSources[currentShaderIndex].name << "\n";
+        mx::system_out << "Switched to shader: " << getShaderNameAt(static_cast<int>(currentShaderIndex)) << "\n";
     }
 
     void draw(gl::GLWindow *win) override {
@@ -1418,12 +1422,19 @@ class About : public gl::GLObject {
         customShader1->setSilent(true);
         customShader2->setSilent(true);
         static bool hasCustomShader = false;
+        static const std::string customShaderName = "Custom Shader";
         if (hasCustomShader && !shaders.empty() && !shaders2.empty()) {
             shaders.back() = std::move(customShader1);
             shaders2.back() = std::move(customShader2);
+            if (!shader_names.empty()) {
+                shader_names.back() = customShaderName;
+            } else {
+                shader_names.push_back(customShaderName);
+            }
         } else {
             shaders.push_back(std::move(customShader1));
             shaders2.push_back(std::move(customShader2));
+            shader_names.push_back(customShaderName);
             hasCustomShader = true;
         }
         currentShaderIndex = shaders.size() - 1;
@@ -1604,8 +1615,8 @@ About *about_ptr = nullptr;
 #ifdef __EMSCRIPTEN__
 
 void setShaderIndex(int index) {
-    if (about_ptr) {
-        about_ptr->setShaderIndex(index);
+    if (about_ptr && main_w && index >= 0) {
+        about_ptr->switchShader(static_cast<size_t>(index), main_w);
     }
 }
 
