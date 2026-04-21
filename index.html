@@ -1763,7 +1763,7 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
 </head>
 <body>
     <div id="loading-overlay">
-        <div id="loading-title">ACMX2 Interactive Visualizer v1.8.0 - Initializing...</div>
+        <div id="loading-title">ACMX2 Interactive Visualizer v1.9.0 - Initializing...</div>
         <div id="loading-output"></div>
     </div>
     <div id="canvas-container">
@@ -1796,6 +1796,11 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
             <option value="30">30fps</option>
             <option value="60" selected>60fps</option>
             <option value="120">120fps</option>
+        </select>
+        <select id="record-quality" style="padding: 6px 8px; font-size: 12px; background: #333; color: #fff; border: 1px solid #555; border-radius: 4px; cursor: pointer; min-width: 76px;" title="Recording Quality">
+            <option value="balanced" selected>Balanced</option>
+            <option value="high">High</option>
+            <option value="ultra">Ultra</option>
         </select>
         <span id="record-timer">00:00</span>
         <button id="camera-btn">📷 Camera</button>
@@ -1936,6 +1941,11 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
                 <option value="30">30</option>
                 <option value="60" selected>60</option>
                 <option value="120">120</option>
+            </select>
+            <select id="mobile-record-quality" class="mobile-btn" style="padding: 10px 8px; min-width: 72px; font-size: 12px;">
+                <option value="balanced" selected>Bal</option>
+                <option value="high">High</option>
+                <option value="ultra">Ultra</option>
             </select>
             <button class="mobile-btn success" id="mobile-save-image">💾 Save</button>
             <select id="mobile-save-scale" class="mobile-btn" style="padding: 10px 8px; min-width: 50px;">
@@ -2336,7 +2346,7 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
             var output = document.getElementById('loading-output');
             if (output) {
                 output.innerHTML = '<span class="info">Initializing WebGL...</span>\n' +
-                                   '<span class="normal">Loading ACMX2 v1.8.0 ...</span>\n';
+                                   '<span class="normal">Loading ACMX2 v1.9.0 ...</span>\n';
             }
         })();
            
@@ -3976,6 +3986,7 @@ void main(void) {
         let croppedCanvas = null; 
         let croppedCtx = null;
         let recordingAnimationFrame = null;
+        let recordingFlushInterval = null;
         let lastRecordingDuration = 0; // Store duration for FFmpeg progress tracking
         let lastRecordingFps = 30; // Store FPS for FFmpeg conversion
         
@@ -4194,11 +4205,18 @@ void main(void) {
             if (overlay) overlay.style.display = 'none';
         }
         
-        async function convertWebMtoMP4(webmBlob, fps = 30) {
+        async function convertWebMtoMP4(webmBlob, fps = 30, qualityProfile = 'balanced') {
             showConversionOverlay();
             updateConversionProgress(5);
             updateConversionStatus('Loading FFmpeg...');
             console.log('Converting with target FPS:', fps);
+
+            const mp4Quality = {
+                balanced: { preset: 'veryfast', crf: '21', videoBitrate: '14M', audioBitrate: '160k' },
+                high: { preset: 'medium', crf: '19', videoBitrate: '20M', audioBitrate: '192k' },
+                ultra: { preset: 'slow', crf: '17', videoBitrate: '28M', audioBitrate: '256k' }
+            };
+            const chosenMp4Quality = mp4Quality[qualityProfile] || mp4Quality.balanced;
             
             try {
                 // Load FFmpeg if not already loaded
@@ -4268,19 +4286,22 @@ void main(void) {
                 // No scaling/padding needed - just convert codec
                 try {
                     await ffmpeg.run(
+                        '-fflags', '+genpts',
                         '-i', 'input.webm',
+                        '-avoid_negative_ts', 'make_zero',
                         '-map', '0:v:0',        // Map first video stream
                         '-map', '0:a:0?',       // Map first audio stream if present (? = optional)
                         '-r', String(fps),      // Match recording FPS
                         '-c:v', 'libx264',      // H.264 codec
-                        '-preset', 'ultrafast', // Fastest encoding
-                        '-crf', '23',           // Good quality
+                        '-preset', chosenMp4Quality.preset,
+                        '-crf', chosenMp4Quality.crf,
+                        '-b:v', chosenMp4Quality.videoBitrate,
                         '-pix_fmt', 'yuv420p',  // Compatible pixel format
                         '-c:a', 'aac',          // AAC audio
-                        '-b:a', '128k',         // Audio bitrate
+                        '-b:a', chosenMp4Quality.audioBitrate,
                         '-ac', '2',             // Stereo
                         '-ar', '44100',         // Sample rate
-                        '-movflags', '+faststart',
+                        '-movflags', '+faststart+use_metadata_tags',
                         '-y',
                         'output.mp4'
                     );
@@ -4331,6 +4352,62 @@ void main(void) {
             }
         }
 
+        async function remuxWebMWithFreshTimestamps(webmBlob) {
+            if (!ffmpegSupported) {
+                return webmBlob;
+            }
+
+            showConversionOverlay();
+            updateConversionProgress(5);
+            updateConversionStatus('Finalizing WebM metadata...');
+
+            try {
+                const loaded = await loadFFmpeg();
+                if (!loaded) {
+                    throw new Error('Failed to load FFmpeg');
+                }
+
+                updateConversionProgress(30);
+                updateConversionStatus('Rebuilding timeline index...');
+
+                const fetchFile = window.ffmpegFetchFile;
+                ffmpeg.FS('writeFile', 'input.webm', await fetchFile(webmBlob));
+
+                await ffmpeg.run(
+                    '-fflags', '+genpts',
+                    '-i', 'input.webm',
+                    '-avoid_negative_ts', 'make_zero',
+                    '-map', '0:v:0',
+                    '-map', '0:a:0?',
+                    '-c', 'copy',
+                    '-y',
+                    'output.webm'
+                );
+
+                updateConversionProgress(90);
+                updateConversionStatus('Saving WebM...');
+
+                const outputData = ffmpeg.FS('readFile', 'output.webm');
+                if (!outputData || outputData.length === 0) {
+                    throw new Error('FFmpeg produced empty WebM output');
+                }
+
+                updateConversionProgress(100);
+                return new Blob([outputData], { type: 'video/webm' });
+            } catch (error) {
+                console.warn('WebM remux failed, keeping original recording:', error);
+                return webmBlob;
+            } finally {
+                try {
+                    ffmpeg.FS('unlink', 'input.webm');
+                } catch (e) {}
+                try {
+                    ffmpeg.FS('unlink', 'output.webm');
+                } catch (e) {}
+                hideConversionOverlay();
+            }
+        }
+
         function formatTime(seconds) {
             const mins = Math.floor(seconds / 60);
             const secs = Math.floor(seconds % 60);
@@ -4343,6 +4420,57 @@ void main(void) {
                 const timeStr = formatTime(elapsed);
                 recordTimer.textContent = timeStr;
                 recordingTime.textContent = timeStr;
+            }
+        }
+
+        function setRecordingButtonState(recording) {
+            const mobileRecordBtn = document.getElementById('mobile-record-btn');
+
+            if (recording) {
+                recordBtn.classList.add('recording');
+                recordBtn.textContent = '⏹ Stop';
+                if (mobileRecordBtn) {
+                    mobileRecordBtn.textContent = '⏹';
+                    mobileRecordBtn.style.background = 'linear-gradient(135deg, #f44336 0%, #d32f2f 100%)';
+                }
+            } else {
+                recordBtn.classList.remove('recording');
+                recordBtn.textContent = '🔴 Record';
+                if (mobileRecordBtn) {
+                    mobileRecordBtn.textContent = '🔴';
+                    mobileRecordBtn.style.background = 'linear-gradient(135deg, #673AB7 0%, #512DA8 100%)';
+                }
+            }
+        }
+
+        function cleanupRecordingResources() {
+            if (recordingFlushInterval) {
+                clearInterval(recordingFlushInterval);
+                recordingFlushInterval = null;
+            }
+
+            if (window._recordingAudioContext) {
+                try {
+                    window._recordingAudioContext.close();
+                } catch (e) {}
+                window._recordingAudioContext = null;
+            }
+
+            if (recordingStream) {
+                const tracks = recordingStream.getTracks();
+                console.log(`Cleaning up ${tracks.length} stream tracks`);
+                tracks.forEach(track => {
+                    console.log(`Stopping track: ${track.kind}, state: ${track.readyState}`);
+                    track.stop();
+                });
+                recordingStream = null;
+            }
+
+            if (croppedCanvas) {
+                croppedCanvas.width = 0;
+                croppedCanvas.height = 0;
+                croppedCanvas = null;
+                croppedCtx = null;
             }
         }
 
@@ -4382,6 +4510,35 @@ void main(void) {
                 }
             }
             return preferredFormat === 'mp4' ? 'video/mp4' : 'video/webm';
+        }
+
+        function getSelectedRecordingQuality() {
+            const qualitySelect = document.getElementById('record-quality') || document.getElementById('mobile-record-quality');
+            return qualitySelect ? qualitySelect.value : 'balanced';
+        }
+
+        function getRecordingQualitySettings(qualityProfile) {
+            const qualityMap = {
+                balanced: {
+                    videoBitsPerSecond: 12000000,
+                    audioBitsPerSecond: 160000,
+                    desktopMinDimension: 1440,
+                    mobileScale: 1.0
+                },
+                high: {
+                    videoBitsPerSecond: 20000000,
+                    audioBitsPerSecond: 192000,
+                    desktopMinDimension: 1800,
+                    mobileScale: 1.2
+                },
+                ultra: {
+                    videoBitsPerSecond: 30000000,
+                    audioBitsPerSecond: 256000,
+                    desktopMinDimension: 2160,
+                    mobileScale: 1.34
+                }
+            };
+            return qualityMap[qualityProfile] || qualityMap.balanced;
         }
 
         async function startRecording() {
@@ -4470,6 +4627,8 @@ void main(void) {
                 let fillSrcX = srcX, fillSrcY = srcY, fillSrcW = srcW, fillSrcH = srcH;
                 
                 if (isMobile) {
+                    const selectedQuality = getSelectedRecordingQuality();
+                    const qualitySettings = getRecordingQualitySettings(selectedQuality);
                     // Determine if portrait or landscape based on SOURCE CONTENT (not screen)
                     const srcAspect = srcW / srcH;
                     const isSourcePortrait = srcAspect < 1; // Source is taller than wide
@@ -4482,6 +4641,11 @@ void main(void) {
                         // Source is landscape/widescreen - output 1920x1080 (16:9 aspect ratio)
                         recordWidth = 1920;
                         recordHeight = 1080;
+                    }
+
+                    if (qualitySettings.mobileScale > 1.0) {
+                        recordWidth = Math.round(recordWidth * qualitySettings.mobileScale);
+                        recordHeight = Math.round(recordHeight * qualitySettings.mobileScale);
                     }
                     
                     // Calculate scale-to-fill cropping (no black bars)
@@ -4510,8 +4674,10 @@ void main(void) {
                     
                     console.log(`Mobile: Source aspect ${srcAspect.toFixed(2)}, recording at ${recordWidth}x${recordHeight} (${isSourcePortrait ? 'portrait' : 'landscape'})`);
                 } else {
-                    // Desktop: Ensure minimum 1440p on the larger dimension
-                    const minDimension = 1440;
+                    // Desktop: Ensure minimum target dimension based on quality profile
+                    const selectedQuality = getSelectedRecordingQuality();
+                    const qualitySettings = getRecordingQualitySettings(selectedQuality);
+                    const minDimension = qualitySettings.desktopMinDimension;
                     if (recordWidth < minDimension && recordHeight < minDimension) {
                         const aspectRatio = recordWidth / recordHeight;
                         if (aspectRatio >= 1) {
@@ -4523,7 +4689,7 @@ void main(void) {
                             recordHeight = minDimension;
                             recordWidth = Math.round(recordWidth * scale);
                         }
-                        console.log(`Desktop: Upscaled to minimum 1440p: ${recordWidth}x${recordHeight}`);
+                        console.log(`Desktop: Upscaled to minimum target dimension ${minDimension}: ${recordWidth}x${recordHeight}`);
                     }
                 }
                 
@@ -4561,6 +4727,9 @@ void main(void) {
                 const selectedFps = fpsSelect ? parseInt(fpsSelect.value) : 60;
                 lastRecordingFps = selectedFps; // Save for MP4 conversion
                 console.log(`Recording at ${selectedFps} fps`);
+                const selectedQuality = getSelectedRecordingQuality();
+                const qualitySettings = getRecordingQualitySettings(selectedQuality);
+                console.log(`Recording quality: ${selectedQuality}`);
                 
                 // Use selected fps for capture stream
                 const videoStream = croppedCanvas.captureStream(selectedFps);
@@ -4613,8 +4782,8 @@ void main(void) {
                 
                 // Let browser choose mimeType for combined streams when audio is present
                 let recorderOptions = {
-                    videoBitsPerSecond: 10000000,
-                    audioBitsPerSecond: 128000
+                    videoBitsPerSecond: qualitySettings.videoBitsPerSecond,
+                    audioBitsPerSecond: qualitySettings.audioBitsPerSecond
                 };
 
                 const formatSelect = document.getElementById('record-format') || document.getElementById('mobile-record-format');
@@ -4640,6 +4809,7 @@ void main(void) {
                 };
                 
                 mediaRecorder.onstop = async () => {
+                    try {
                     console.log(`Total chunks: ${recordedChunks.length}`);
                     
                     // IMPORTANT: Save dimensions NOW before async operations
@@ -4648,11 +4818,11 @@ void main(void) {
                     const videoHeight = croppedCanvas ? croppedCanvas.height : 720;
                     console.log(`Saved video dimensions: ${videoWidth}x${videoHeight}`);
                     
-                    const mimeType = mediaRecorder.mimeType || 'video/webm';
-                    const webmBlob = new Blob(recordedChunks, { type: mimeType });
-                    console.log(`Final blob size: ${webmBlob.size} bytes`);
+                    const mimeType = (mediaRecorder && mediaRecorder.mimeType) || recorderOptions.mimeType || 'video/webm';
+                    const recordedBlob = new Blob(recordedChunks, { type: mimeType });
+                    console.log(`Final blob size: ${recordedBlob.size} bytes`);
                     
-                    if (webmBlob.size === 0) {
+                    if (recordedBlob.size === 0) {
                         alert('Recording failed: No data captured');
                         return;
                     }
@@ -4666,25 +4836,25 @@ void main(void) {
                     
                     if (selectedFormat === 'mp4' && mimeType.indexOf('mp4') !== -1) {
                         console.log('Using native MP4 recording output');
-                        finalBlob = webmBlob;
+                        finalBlob = recordedBlob;
                         extension = 'mp4';
                     } else if (selectedFormat === 'mp4') {
                         // Convert WebM to MP4 using FFmpeg when native MP4 recording is unavailable
                         try {
                             console.log('Converting WebM to MP4 at ' + lastRecordingFps + ' fps...');
-                            finalBlob = await convertWebMtoMP4(webmBlob, lastRecordingFps);
+                            finalBlob = await convertWebMtoMP4(recordedBlob, lastRecordingFps, selectedQuality);
                             extension = 'mp4';
                             console.log(`MP4 blob size: ${finalBlob.size} bytes`);
                         } catch (error) {
                             console.warn('MP4 conversion failed, falling back to WebM:', error);
                             alert('MP4 conversion failed. Saving as WebM instead.');
-                            finalBlob = webmBlob;
+                            finalBlob = await remuxWebMWithFreshTimestamps(recordedBlob);
                             extension = 'webm';
                         }
                     } else {
-                        // Use WebM directly (no conversion needed)
-                        console.log('Using WebM format (no conversion)');
-                        finalBlob = webmBlob;
+                        // Rebuild WebM timeline metadata when FFmpeg is available.
+                        console.log('Finalizing WebM timeline metadata...');
+                        finalBlob = await remuxWebMWithFreshTimestamps(recordedBlob);
                         extension = 'webm';
                     }
                     
@@ -4875,6 +5045,10 @@ void main(void) {
                     }
                     
                     recordedChunks = [];
+                    } finally {
+                        cleanupRecordingResources();
+                        mediaRecorder = null;
+                    }
                     console.log('Recording saved!');
                 };
                 
@@ -4885,9 +5059,19 @@ void main(void) {
                 };
                 
                 // Start recording
-                mediaRecorder.start(100); // Collect data every 100ms
+                mediaRecorder.start();
                 isRecording = true;
                 recordingStartTime = Date.now();
+
+                recordingFlushInterval = setInterval(() => {
+                    if (mediaRecorder && mediaRecorder.state === 'recording') {
+                        try {
+                            mediaRecorder.requestData();
+                        } catch (e) {
+                            console.warn('requestData failed:', e);
+                        }
+                    }
+                }, 1000);
                 
                 // Variables for frame timing
                 let lastFrameTime = 0;
@@ -4920,8 +5104,7 @@ void main(void) {
                 recordingAnimationFrame = requestAnimationFrame(updateCroppedCanvas);
                 
                 // Update UI
-                recordBtn.classList.add('recording');
-                recordBtn.textContent = '⏹ Stop';
+                setRecordingButtonState(true);
                 recordTimer.classList.add('visible');
                 recordingIndicator.classList.add('visible');
                 
@@ -4960,46 +5143,28 @@ void main(void) {
                 cancelAnimationFrame(recordingAnimationFrame);
                 recordingAnimationFrame = null;
             }
+
+            if (recordingFlushInterval) {
+                clearInterval(recordingFlushInterval);
+                recordingFlushInterval = null;
+            }
             
             // Stop the MediaRecorder FIRST (before stopping tracks)
             if (mediaRecorder && mediaRecorder.state !== 'inactive') {
                 console.log('Stopping MediaRecorder, state:', mediaRecorder.state);
                 try {
+                    mediaRecorder.requestData();
+                } catch (e) {
+                    console.warn('Error requesting final data chunk:', e);
+                }
+                try {
                     mediaRecorder.stop();
                 } catch (e) {
                     console.warn('Error stopping MediaRecorder:', e);
                 }
+            } else {
+                cleanupRecordingResources();
             }
-            
-            // Clean up Web Audio context used for recording
-            if (window._recordingAudioContext) {
-                try {
-                    window._recordingAudioContext.close();
-                } catch (e) {}
-                window._recordingAudioContext = null;
-            }
-            
-            // Small delay to let MediaRecorder finish processing, then clean up tracks
-            setTimeout(() => {
-                // Stop only video tracks on the recording stream (audio tracks are clones)
-                if (recordingStream) {
-                    const tracks = recordingStream.getTracks();
-                    console.log(`Cleaning up ${tracks.length} stream tracks`);
-                    tracks.forEach(track => {
-                        console.log(`Stopping track: ${track.kind}, state: ${track.readyState}`);
-                        track.stop();
-                    });
-                    recordingStream = null;
-                }
-                
-                // Clean up cropped canvas
-                if (croppedCanvas) {
-                    croppedCanvas.width = 0;
-                    croppedCanvas.height = 0;
-                    croppedCanvas = null;
-                    croppedCtx = null;
-                }
-            }, 100);
             
             // Clear timer
             if (recordingTimerInterval) {
@@ -5008,8 +5173,7 @@ void main(void) {
             }
             
             // Update UI
-            recordBtn.classList.remove('recording');
-            recordBtn.textContent = '🔴 Record';
+            setRecordingButtonState(false);
             recordTimer.classList.remove('visible');
             recordTimer.textContent = '00:00';
             recordingIndicator.classList.remove('visible');
@@ -5839,6 +6003,14 @@ void main(void) {
             });
             document.getElementById('record-format').addEventListener('change', (e) => {
                 document.getElementById('mobile-record-format').value = e.target.value;
+            });
+
+            // Sync quality selectors between mobile and desktop
+            document.getElementById('mobile-record-quality').addEventListener('change', (e) => {
+                document.getElementById('record-quality').value = e.target.value;
+            });
+            document.getElementById('record-quality').addEventListener('change', (e) => {
+                document.getElementById('mobile-record-quality').value = e.target.value;
             });
 
             // Sync 3D mode checkbox between mobile and desktop
