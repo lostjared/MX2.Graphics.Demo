@@ -2837,12 +2837,7 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
             canvas.focus();
         });
 
-        shaderEditorModal.addEventListener('click', (e) => {
-            if (e.target === shaderEditorModal) {
-                shaderEditorModal.classList.remove('visible');
-                canvas.focus();
-            }
-        });
+        // Keep shader editor open on backdrop clicks; close via the X button only.
 
         // Camera functionality
         const cameraBtn = document.getElementById('camera-btn');
@@ -5260,11 +5255,7 @@ void main(void) {
             shaderEditorModal.classList.remove('visible');
         });
 
-        shaderEditorModal.addEventListener('click', (e) => {
-            if (e.target === shaderEditorModal) {
-                shaderEditorModal.classList.remove('visible');
-            }
-        });
+        // Keep shader editor open on backdrop clicks; close via the X button only.
 
         
         document.getElementById('template-basic').addEventListener('click', () => {
