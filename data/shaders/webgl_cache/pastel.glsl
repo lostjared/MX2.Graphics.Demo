@@ -30,7 +30,7 @@ void main() {
     vec4 texColor = texture(samp, uv);
     vec2 texelSize = 1.0 / iResolution;
     vec3 result = vec3(0.0);
-    float weight[5];
+    highp float weight[5];
     weight[0] = 0.227027;
     weight[1] = 0.1945946;
     weight[2] = 0.1216216;

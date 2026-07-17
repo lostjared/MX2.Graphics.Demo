@@ -50,8 +50,8 @@ float pingPong(float x, float length) {
 vec4 blur(sampler2D image, vec2 uv, vec2 resolution) {
     vec2 texelSize = 1.0 / resolution;
     vec4 result = vec4(0.0);
-    float kernel[100];
-    float kernelVals[100] = float[](
+    highp float kernel[100];
+    highp float kernelVals[100] = float[](
         0.5, 1.0, 1.5, 2.0, 2.5, 2.5, 2.0, 1.5, 1.0, 0.5,
         1.0, 2.0, 2.5, 3.0, 3.5, 3.5, 3.0, 2.5, 2.0, 1.0,
         1.5, 2.5, 3.0, 3.5, 4.0, 4.0, 3.5, 3.0, 2.5, 1.5,

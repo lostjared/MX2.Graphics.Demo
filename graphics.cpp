@@ -65,6 +65,30 @@ namespace {
         }
     }
 
+    void qualifyArrayPrecisionForWebGL(std::string &source) {
+        // Some mobile GLSL ES compilers do not apply the default precision to
+        // array variables. Give numeric arrays an explicit qualifier while
+        // preserving declarations that already specify one.
+        static const std::regex arrayPattern(
+            R"(\b(?:float|int|uint|vec[234]|ivec[234]|uvec[234]|mat[234](?:x[234])?)\s+[A-Za-z_][A-Za-z0-9_]*\s*\[[^\]\r\n]*\])");
+        std::vector<size_t> insertions;
+        for (std::sregex_iterator it(source.begin(), source.end(), arrayPattern), end; it != end; ++it) {
+            const size_t start = static_cast<size_t>((*it).position());
+            size_t cursor = start;
+            while (cursor > 0 && std::isspace(static_cast<unsigned char>(source[cursor - 1])))
+                --cursor;
+            const size_t wordEnd = cursor;
+            while (cursor > 0 && (std::isalnum(static_cast<unsigned char>(source[cursor - 1])) ||
+                                  source[cursor - 1] == '_'))
+                --cursor;
+            const std::string previousWord = source.substr(cursor, wordEnd - cursor);
+            if (previousWord != "lowp" && previousWord != "mediump" && previousWord != "highp")
+                insertions.push_back(start);
+        }
+        for (auto it = insertions.rbegin(); it != insertions.rend(); ++it)
+            source.insert(*it, "highp ");
+    }
+
     void normalizeFloatLiteralOperands(std::string &source) {
         const auto isIdentifierCharacter = [](char c) {
             return std::isalnum(static_cast<unsigned char>(c)) || c == '_';
@@ -291,6 +315,7 @@ namespace {
             source.insert(source.find('\n', source.find("#version")) + 1, "out vec4 mxFragColor;\n");
             replaceAll(source, "gl_FragColor", "mxFragColor");
         }
+        qualifyArrayPrecisionForWebGL(source);
         makeFragmentOutputWebGLSafe(source);
         normalizeFloatLiteralOperands(source);
         return source;
@@ -1548,6 +1573,14 @@ class About : public gl::GLObject {
     bool mouseDown = false;
     glm::vec4 mouse = glm::vec4(0.0f);
 
+    void setPointerState(float x, float y, bool pressed) {
+        mouse.x = std::clamp(x, 0.0f, static_cast<float>(canvasWidth));
+        mouse.y = std::clamp(y, 0.0f, static_cast<float>(canvasHeight));
+        mouse.z = pressed ? 1.0f : 0.0f;
+        mouse.w = pressed ? 1.0f : 0.0f;
+        mouseDown = pressed;
+    }
+
     void reset() {
         animation = 0.0f;
     }
@@ -1925,6 +1958,12 @@ void setShaderIndex(int index) {
 void set3D(bool value) {
     if (about_ptr) {
         about_ptr->set3DMode(value);
+    }
+}
+
+void setMouseInput(float x, float y, bool pressed) {
+    if (about_ptr) {
+        about_ptr->setPointerState(x, y, pressed);
     }
 }
 
@@ -2446,6 +2485,7 @@ EMSCRIPTEN_BINDINGS(image_loader) {
     emscripten::function("getIndex", &getIndex);
     emscripten::function("loadModel", &loadModel);
     emscripten::function("setShader3DMode", &set3D);
+    emscripten::function("setMouseInput", &setMouseInput);
     emscripten::function("setShaderIndex", &setShaderIndex);
     emscripten::function("getShaderCount", &getShaderCount);
     emscripten::function("getShaderNameAt", &getShaderNameAt);

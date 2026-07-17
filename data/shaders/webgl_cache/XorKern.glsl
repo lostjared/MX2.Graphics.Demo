@@ -22,7 +22,7 @@ vec4 blur(sampler2D image, vec2 uv, vec2 resolution) {
     vec4 result = vec4(0.0);
     
     // 7x7 Gaussian Kernel
-    float kernel[49];
+    highp float kernel[49];
     kernel[0] = 0.5; kernel[1] = 1.0; kernel[2] = 2.0; kernel[3] = 2.5; kernel[4] = 2.0; kernel[5] = 1.0; kernel[6] = 0.5;
     kernel[7] = 1.0; kernel[8] = 2.0; kernel[9] = 3.0; kernel[10] = 3.5; kernel[11] = 3.0; kernel[12] = 2.0; kernel[13] = 1.0;
     kernel[14] = 2.0; kernel[15] = 3.0; kernel[16] = 4.0; kernel[17] = 4.5; kernel[18] = 4.0; kernel[19] = 3.0; kernel[20] = 2.0;

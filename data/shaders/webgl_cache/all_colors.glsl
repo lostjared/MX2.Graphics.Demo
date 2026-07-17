@@ -27,8 +27,8 @@ vec4 xor_RGB(vec4 a, vec4 b) {
 
 vec4 blur(sampler2D image, vec2 uv, vec2 res) {
     vec2 ts = 1.0 / res;
-    float k[100];
-    float v[100] = float[](
+    highp float k[100];
+    highp float v[100] = float[](
         0.5,1.0,1.5,2.0,2.5,2.5,2.0,1.5,1.0,0.5,
         1.0,2.0,2.5,3.0,3.5,3.5,3.0,2.5,2.0,1.0,
         1.5,2.5,3.0,3.5,4.0,4.0,3.5,3.0,2.5,1.5,

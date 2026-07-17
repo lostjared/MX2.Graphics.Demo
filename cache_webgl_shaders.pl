@@ -90,6 +90,28 @@ sub normalize_float_literals {
     return $source;
 }
 
+sub qualify_array_precision {
+    my ($source) = @_;
+    my $array = qr/\b(?:float|int|uint|vec[234]|ivec[234]|uvec[234]|mat[234](?:x[234])?)\s+[A-Za-z_][A-Za-z0-9_]*\s*\[[^\]\r\n]*\]/;
+    my $inserted = 0;
+
+    while ($source =~ /$array/g) {
+        my $start = $-[0];
+        my $end = $+[0];
+        my $before = substr($source, 0, $start);
+        next if $before =~ /\b(?:lowp|mediump|highp)\s*\z/;
+
+        substr($source, $start, 0, 'highp ');
+        ++$inserted;
+        my $line_end = index($source, "\n", $start);
+        if ($line_end > 0 && substr($source, $line_end - 1, 1) eq "\r") {
+            substr($source, $line_end - 1, 1, '');
+        }
+        pos($source) = $end + length('highp ');
+    }
+    return $source;
+}
+
 sub convert_to_webgl {
     my ($source) = @_;
     $source =~ s/^\xEF\xBB\xBF//;
@@ -113,6 +135,7 @@ sub convert_to_webgl {
         $source =~ s/(\A#version[^\r\n]*\r?\n)/$1out vec4 mxFragColor;\n/;
         $source =~ s/\bgl_FragColor\b/mxFragColor/g;
     }
+    $source = qualify_array_precision($source);
     $source = make_fragment_output_safe($source);
     $source = normalize_float_literals($source);
     return $source;

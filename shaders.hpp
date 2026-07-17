@@ -3205,8 +3205,8 @@ uniform float iTimeDelta;
 uniform vec4 iDate;
 uniform vec2 iMouseClick;
 uniform float iFrameRate;
-uniform vec3 iChannelResolution[4];
-uniform float iChannelTime[4];
+uniform highp vec3 iChannelResolution[4];
+uniform highp float iChannelTime[4];
 uniform float iSampleRate;
 
 const float PI = 3.1415926535897932384626433832795;
@@ -3335,8 +3335,8 @@ uniform float iTimeDelta;
 uniform vec4 iDate;
 uniform vec2 iMouseClick;
 uniform float iFrameRate;
-uniform vec3 iChannelResolution[4];
-uniform float iChannelTime[4];
+uniform highp vec3 iChannelResolution[4];
+uniform highp float iChannelTime[4];
 uniform float iSampleRate;
 
 const float PI = 3.1415926535897932384626433832795;
@@ -3530,8 +3530,8 @@ uniform float iTimeDelta;
 uniform vec4 iDate;
 uniform vec2 iMouseClick;
 uniform float iFrameRate;
-uniform vec3 iChannelResolution[4];
-uniform float iChannelTime[4];
+uniform highp vec3 iChannelResolution[4];
+uniform highp float iChannelTime[4];
 uniform float iSampleRate;
 
 const float PI = 3.1415926535897932384626433832795;
@@ -3660,8 +3660,8 @@ uniform float iTimeDelta;
 uniform vec4 iDate;
 uniform vec2 iMouseClick;
 uniform float iFrameRate;
-uniform vec3 iChannelResolution[4];
-uniform float iChannelTime[4];
+uniform highp vec3 iChannelResolution[4];
+uniform highp float iChannelTime[4];
 uniform float iSampleRate;
 
 const float PI = 3.1415926535897932384626433832795;
@@ -3791,8 +3791,8 @@ uniform float iTimeDelta;
 uniform vec4 iDate;
 uniform vec2 iMouseClick;
 uniform float iFrameRate;
-uniform vec3 iChannelResolution[4];
-uniform float iChannelTime[4];
+uniform highp vec3 iChannelResolution[4];
+uniform highp float iChannelTime[4];
 uniform float iSampleRate;
 
 const float PI = 3.1415926535897932384626433832795;
@@ -3961,8 +3961,8 @@ uniform float iTimeDelta;
 uniform vec4 iDate;
 uniform vec2 iMouseClick;
 uniform float iFrameRate;
-uniform vec3 iChannelResolution[4];
-uniform float iChannelTime[4];
+uniform highp vec3 iChannelResolution[4];
+uniform highp float iChannelTime[4];
 uniform float iSampleRate;
 
 const float PI = 3.1415926535897932384626433832795;
@@ -4124,8 +4124,8 @@ uniform float iTimeDelta;
 uniform vec4 iDate;
 uniform vec2 iMouseClick;
 uniform float iFrameRate;
-uniform vec3 iChannelResolution[4];
-uniform float iChannelTime[4];
+uniform highp vec3 iChannelResolution[4];
+uniform highp float iChannelTime[4];
 uniform float iSampleRate;
 
 const float PI = 3.1415926535897932384626433832795;
@@ -4294,8 +4294,8 @@ uniform float iTimeDelta;
 uniform vec4 iDate;
 uniform vec2 iMouseClick;
 uniform float iFrameRate;
-uniform vec3 iChannelResolution[4];
-uniform float iChannelTime[4];
+uniform highp vec3 iChannelResolution[4];
+uniform highp float iChannelTime[4];
 uniform float iSampleRate;
 
 const float PI = 3.1415926535897932384626433832795;
@@ -4557,8 +4557,8 @@ uniform float iTimeDelta;
 uniform vec4 iDate;
 uniform vec2 iMouseClick;
 uniform float iFrameRate;
-uniform vec3 iChannelResolution[4];
-uniform float iChannelTime[4];
+uniform highp vec3 iChannelResolution[4];
+uniform highp float iChannelTime[4];
 uniform float iSampleRate;
 
 const float PI = 3.1415926535897932384626433832795;
@@ -6013,8 +6013,8 @@ uniform float iTimeDelta;
 uniform vec4 iDate;
 uniform vec2 iMouseClick;
 uniform float iFrameRate;
-uniform vec3 iChannelResolution[4];
-uniform float iChannelTime[4];
+uniform highp vec3 iChannelResolution[4];
+uniform highp float iChannelTime[4];
 uniform float iSampleRate;
 
 const float PI = 3.1415926535897932384626433832795;
@@ -6159,8 +6159,8 @@ uniform float iTimeDelta;
 uniform vec4 iDate;
 uniform vec2 iMouseClick;
 uniform float iFrameRate;
-uniform vec3 iChannelResolution[4];
-uniform float iChannelTime[4];
+uniform highp vec3 iChannelResolution[4];
+uniform highp float iChannelTime[4];
 uniform float iSampleRate;
 
 const float PI = 3.1415926535897932384626433832795;
@@ -6309,8 +6309,8 @@ uniform float iTimeDelta;
 uniform vec4 iDate;
 uniform vec2 iMouseClick;
 uniform float iFrameRate;
-uniform vec3 iChannelResolution[4];
-uniform float iChannelTime[4];
+uniform highp vec3 iChannelResolution[4];
+uniform highp float iChannelTime[4];
 uniform float iSampleRate;
 
 const float PI = 3.1415926535897932384626433832795;
@@ -8641,24 +8641,20 @@ vec3 bilateral9(vec2 uv, float radiusScale, float sigma_r){
     vec2 o = texel * radiusScale;
     vec3 c0 = texture(textTexture, uv).rgb;
     float L0 = luma(c0);
-    vec2 offs[9] = vec2[](
-        vec2(0,0),
-        vec2( o.x, 0), vec2(-o.x, 0),
-        vec2(0,  o.y), vec2(0, -o.y),
-        vec2( o.x,  o.y), vec2(-o.x,  o.y),
-        vec2( o.x, -o.y), vec2(-o.x, -o.y)
-    );
     float wsum = 0.0;
     vec3 acc = vec3(0.0);
-    for(int i=0;i<9;i++){
-        vec3 c = texture(textTexture, uv + offs[i]).rgb;
-        float dl = luma(c) - L0;
-        float wr = exp(-(dl*dl)/(2.0*sigma_r*sigma_r));
-        float dsq = dot(offs[i]/texel, offs[i]/texel);
-        float ws = exp(-dsq/2.0);
-        float w = wr*ws;
-        acc += c*w;
-        wsum += w;
+    for(int y=-1;y<=1;y++){
+        for(int x=-1;x<=1;x++){
+            vec2 offset = vec2(float(x), float(y)) * o;
+            vec3 c = texture(textTexture, uv + offset).rgb;
+            float dl = luma(c) - L0;
+            float wr = exp(-(dl*dl)/(2.0*sigma_r*sigma_r));
+            float dsq = dot(offset/texel, offset/texel);
+            float ws = exp(-dsq/2.0);
+            float w = wr*ws;
+            acc += c*w;
+            wsum += w;
+        }
     }
     return acc / max(wsum, 1e-6);
 }
@@ -8859,24 +8855,20 @@ vec3 bilateral9(vec2 uv, float radiusScale, float sigma_r){
     vec2 o = texel * radiusScale;
     vec3 c0 = texture(textTexture, uv).rgb;
     float L0 = luma(c0);
-    vec2 offs[9] = vec2[](
-        vec2(0,0),
-        vec2( o.x, 0), vec2(-o.x, 0),
-        vec2(0,  o.y), vec2(0, -o.y),
-        vec2( o.x,  o.y), vec2(-o.x,  o.y),
-        vec2( o.x, -o.y), vec2(-o.x, -o.y)
-    );
     float wsum = 0.0;
     vec3 acc = vec3(0.0);
-    for(int i=0;i<9;i++){
-        vec3 c = texture(textTexture, uv + offs[i]).rgb;
-        float dl = luma(c) - L0;
-        float wr = exp(-(dl*dl)/(2.0*sigma_r*sigma_r));
-        float dsq = dot(offs[i]/texel, offs[i]/texel);
-        float ws = exp(-dsq/(2.0*1.0*1.0));
-        float w = wr*ws;
-        acc += c*w;
-        wsum += w;
+    for(int y=-1;y<=1;y++){
+        for(int x=-1;x<=1;x++){
+            vec2 offset = vec2(float(x), float(y)) * o;
+            vec3 c = texture(textTexture, uv + offset).rgb;
+            float dl = luma(c) - L0;
+            float wr = exp(-(dl*dl)/(2.0*sigma_r*sigma_r));
+            float dsq = dot(offset/texel, offset/texel);
+            float ws = exp(-dsq/(2.0*1.0*1.0));
+            float w = wr*ws;
+            acc += c*w;
+            wsum += w;
+        }
     }
     return acc / max(wsum, 1e-6);
 }
@@ -9013,8 +9005,8 @@ uniform float iTimeDelta;
 uniform vec4 iDate;
 uniform vec2 iMouseClick;
 uniform float iFrameRate;
-uniform vec3 iChannelResolution[4];
-uniform float iChannelTime[4];
+uniform highp vec3 iChannelResolution[4];
+uniform highp float iChannelTime[4];
 uniform float iSampleRate;
 
 float pingPong(float x, float length){
@@ -9093,24 +9085,20 @@ vec3 bilateral9(vec2 uv, float radiusScale, float sigma_r){
     vec2 o = texel * radiusScale;
     vec3 c0 = texture(textTexture, uv).rgb;
     float L0 = luma(c0);
-    vec2 offs[9] = vec2[](
-        vec2(0,0),
-        vec2( o.x, 0), vec2(-o.x, 0),
-        vec2(0,  o.y), vec2(0, -o.y),
-        vec2( o.x,  o.y), vec2(-o.x,  o.y),
-        vec2( o.x, -o.y), vec2(-o.x, -o.y)
-    );
     float wsum = 0.0;
     vec3 acc = vec3(0.0);
-    for(int i=0;i<9;i++){
-        vec3 c = texture(textTexture, uv + offs[i]).rgb;
-        float dl = luma(c) - L0;
-        float wr = exp(-(dl*dl)/(2.0*sigma_r*sigma_r));
-        float dsq = dot(offs[i]/texel, offs[i]/texel);
-        float ws = exp(-dsq/(2.0*1.0*1.0));
-        float w = wr*ws;
-        acc += c*w;
-        wsum += w;
+    for(int y=-1;y<=1;y++){
+        for(int x=-1;x<=1;x++){
+            vec2 offset = vec2(float(x), float(y)) * o;
+            vec3 c = texture(textTexture, uv + offset).rgb;
+            float dl = luma(c) - L0;
+            float wr = exp(-(dl*dl)/(2.0*sigma_r*sigma_r));
+            float dsq = dot(offset/texel, offset/texel);
+            float ws = exp(-dsq/(2.0*1.0*1.0));
+            float w = wr*ws;
+            acc += c*w;
+            wsum += w;
+        }
     }
     return acc / max(wsum, 1e-6);
 }
@@ -9666,7 +9654,7 @@ void main(void) {
     vec2 tcG = uv + vec2(rG, -0.5 * rG);
     vec2 tcB = uv + vec2(0.3 * rB, rB);
 
-    vec3 pats[4] = vec3[](vec3(1,0,1), vec3(0,1,0), vec3(1,0,0), vec3(0,0,1));
+    highp vec3 pats[4] = vec3[](vec3(1,0,1), vec3(0,1,0), vec3(1,0,0), vec3(0,0,1));
     float pspd = 4.0;
     int pidx = int(mod(floor(tBase * pspd + seed * 4.0), 4.0));
     vec3 mir = pats[pidx];
@@ -11047,7 +11035,7 @@ void main(void) {
     vec2 tcG = uv + vec2(rG, -0.5*rG);
     vec2 tcB = uv + vec2(0.3*rB, rB);
 
-    vec3 pats[4] = vec3[](vec3(1,0,1), vec3(0,1,0), vec3(1,0,0), vec3(0,0,1));
+    highp vec3 pats[4] = vec3[](vec3(1,0,1), vec3(0,1,0), vec3(1,0,0), vec3(0,0,1));
     float pspd = 4.0;
     int pidx = int(mod(floor(tBase*pspd + seed*4.0), 4.0));
     vec3 mir = pats[pidx];
@@ -11355,7 +11343,7 @@ void main(void) {
     vec2 tcG = uv + vec2(rG, -0.5 * rG);
     vec2 tcB = uv + vec2(0.3 * rB, rB);
 
-    vec3 pats[4] = vec3[](vec3(1,0,1), vec3(0,1,0), vec3(1,0,0), vec3(0,0,1));
+    highp vec3 pats[4] = vec3[](vec3(1,0,1), vec3(0,1,0), vec3(1,0,0), vec3(0,0,1));
     float pspd = 4.0;
     int pidx = int(mod(floor(tBase * pspd + seed * 4.0), 4.0));
     vec3 mir = pats[pidx];
@@ -11837,7 +11825,7 @@ void main(void){
     vec2 tcG=uv+vec2(rG,-0.5*rG);
     vec2 tcB=uv+vec2(0.3*rB,rB);
 
-    vec3 pats[4]=vec3[](vec3(1,0,1),vec3(0,1,0),vec3(1,0,0),vec3(0,0,1));
+    highp vec3 pats[4]=vec3[](vec3(1,0,1),vec3(0,1,0),vec3(1,0,0),vec3(0,0,1));
     float pspd=4.0;
     int pidx=int(mod(floor(t*pspd+seed*4.0),4.0));
     vec3 mir=pats[pidx];

@@ -90,24 +90,20 @@ vec3 bilateral9(vec2 uv, float radiusScale, float sigma_r){
     vec2 o = texel * radiusScale;
     vec3 c0 = texture(samp, uv).rgb;
     float L0 = luma(c0);
-    vec2 offs[9] = vec2[](
-        vec2(0,0),
-        vec2( o.x, 0), vec2(-o.x, 0),
-        vec2(0,  o.y), vec2(0, -o.y),
-        vec2( o.x,  o.y), vec2(-o.x,  o.y),
-        vec2( o.x, -o.y), vec2(-o.x, -o.y)
-    );
     float wsum = 0.0;
     vec3 acc = vec3(0.0);
-    for(int i=0;i<9;i++){
-        vec3 c = texture(samp, uv + offs[i]).rgb;
-        float dl = luma(c) - L0;
-        float wr = exp(-(dl*dl)/(2.0*sigma_r*sigma_r));
-        float dsq = dot(offs[i]/texel, offs[i]/texel);
-        float ws = exp(-dsq/(2.0*1.0*1.0));
-        float w = wr*ws;
-        acc += c*w;
-        wsum += w;
+    for(int y=-1;y<=1;y++){
+        for(int x=-1;x<=1;x++){
+            vec2 offset = vec2(float(x), float(y)) * o;
+            vec3 c = texture(samp, uv + offset).rgb;
+            float dl = luma(c) - L0;
+            float wr = exp(-(dl*dl)/(2.0*sigma_r*sigma_r));
+            float dsq = dot(offset/texel, offset/texel);
+            float ws = exp(-dsq/(2.0*1.0*1.0));
+            float w = wr*ws;
+            acc += c*w;
+            wsum += w;
+        }
     }
     return acc / max(wsum, 1e-6);
 }

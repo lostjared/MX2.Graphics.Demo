@@ -3026,10 +3026,18 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
           }
       })();
       
+      var acmxBuildToken = Date.now().toString();
       var Module = {
             canvas: document.getElementById('canvas'),
             preinitializedWebGLContext: window.preInitializedGL || null,
             arguments: [],
+            locateFile: function(path, prefix) {
+                var resolved = (prefix || '') + path;
+                if (path === 'MX_app.wasm' || path === 'MX_app.data') {
+                    return resolved + '?v=' + acmxBuildToken;
+                }
+                return resolved;
+            },
             print: function(text) {
                 const line = String(text || '').trim();
                 if (line.length > 0 && window.currentCompilingShader) {
@@ -3072,7 +3080,7 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
     <script>
     (function() {
         const script = document.createElement('script');
-        script.src = 'MX_app.js?v=' + Date.now();
+        script.src = 'MX_app.js?v=' + acmxBuildToken;
         document.head.appendChild(script);
     })();
     </script>
@@ -7051,6 +7059,51 @@ void main(void) {
         });
 
         
+        function is3DPointerMode() {
+            return !!(document.getElementById('shader-3d-mode')?.checked ||
+                document.getElementById('mobile-3d-mode')?.checked);
+        }
+
+        function sendShaderMouseInput(clientX, clientY, pressed) {
+            if (is3DPointerMode() || typeof Module === 'undefined' ||
+                typeof Module.setMouseInput !== 'function') {
+                return false;
+            }
+            const rect = canvas.getBoundingClientRect();
+            if (rect.width <= 0 || rect.height <= 0) return false;
+            const x = (clientX - rect.left) * canvas.width / rect.width;
+            const y = canvas.height - ((clientY - rect.top) * canvas.height / rect.height);
+            Module.setMouseInput(
+                Math.max(0, Math.min(canvas.width, x)),
+                Math.max(0, Math.min(canvas.height, y)),
+                !!pressed
+            );
+            return true;
+        }
+
+        // SDL handles desktop mouse events as well, but forwarding pointer
+        // events explicitly keeps iMouse consistent across browser/platform
+        // differences and uses the internal high-DPI canvas coordinates.
+        canvas.addEventListener('pointerdown', (event) => {
+            if (event.pointerType !== 'mouse' || is3DPointerMode()) return;
+            sendShaderMouseInput(event.clientX, event.clientY, true);
+            try {
+                canvas.setPointerCapture?.(event.pointerId);
+            } catch (error) {
+                // Synthetic events and older browsers may not allow capture.
+            }
+        });
+        canvas.addEventListener('pointermove', (event) => {
+            if (event.pointerType !== 'mouse' || is3DPointerMode()) return;
+            sendShaderMouseInput(event.clientX, event.clientY, (event.buttons & 1) !== 0);
+        });
+        const releaseDesktopShaderMouse = (event) => {
+            if (event.pointerType !== 'mouse' || is3DPointerMode()) return;
+            sendShaderMouseInput(event.clientX, event.clientY, false);
+        };
+        canvas.addEventListener('pointerup', releaseDesktopShaderMouse);
+        canvas.addEventListener('pointercancel', releaseDesktopShaderMouse);
+
         const mobileUserAgent = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
         const isMobile = mobileUserAgent
                         || (window.innerWidth <= 768 && 'ontouchstart' in window);
@@ -7381,7 +7434,12 @@ void main(void) {
                     touchState.lastX = touches[0].clientX;
                     touchState.lastY = touches[0].clientY;
                     touchState.isMultiTouch = false;
-                    touchIndicator.textContent = 'Touch: Drag to rotate';
+                    if (is3DPointerMode()) {
+                        touchIndicator.textContent = 'Touch: Drag to rotate';
+                    } else {
+                        sendShaderMouseInput(touches[0].clientX, touches[0].clientY, true);
+                        touchIndicator.textContent = 'Shader mouse: Pressed';
+                    }
                     
                     const now = Date.now();
                     if (now - touchState.lastTapTime < 300) {
@@ -7393,7 +7451,12 @@ void main(void) {
                 } else if (touches.length === 2) {
                     touchState.isMultiTouch = true;
                     touchState.startDistance = getTouchDistance(touches);
-                    touchIndicator.textContent = 'Touch: Pinch to zoom';
+                    if (is3DPointerMode()) {
+                        touchIndicator.textContent = 'Touch: Pinch to zoom';
+                    } else {
+                        sendShaderMouseInput(touches[0].clientX, touches[0].clientY, true);
+                        touchIndicator.textContent = 'Shader mouse: Pressed';
+                    }
                 }
             }, { passive: false });
 
@@ -7408,7 +7471,10 @@ void main(void) {
                     touchState.lastX = touches[0].clientX;
                     touchState.lastY = touches[0].clientY;
 
-                    if (typeof Module !== 'undefined') {
+                    if (!is3DPointerMode()) {
+                        sendShaderMouseInput(touches[0].clientX, touches[0].clientY, true);
+                        touchIndicator.textContent = 'Shader mouse: Dragging';
+                    } else if (typeof Module !== 'undefined') {
                         if (Math.abs(deltaX) > 1 && Module.touchRotateY) {
                             Module.touchRotateY(deltaX * ROTATION_SENSITIVITY);
                         }
@@ -7416,27 +7482,38 @@ void main(void) {
                         if (Math.abs(deltaY) > 1 && Module.touchRotateX) {
                             Module.touchRotateX(-deltaY * ROTATION_SENSITIVITY);
                         }
+                        touchIndicator.textContent = `Rotating: ${deltaX.toFixed(0)}, ${deltaY.toFixed(0)}`;
                     }
 
-                    touchIndicator.textContent = `Rotating: ${deltaX.toFixed(0)}, ${deltaY.toFixed(0)}`;
-                    
                 } else if (touches.length === 2) {
-                    const currentDistance = getTouchDistance(touches);
-                    const delta = currentDistance - touchState.startDistance;
-                    
-                    if (typeof Module !== 'undefined' && Module.touchZoom) {
-                        if (Math.abs(delta) > 3) {
-                            Module.touchZoom(-delta * ZOOM_SENSITIVITY);
-                            touchState.startDistance = currentDistance;
+                    if (!is3DPointerMode()) {
+                        sendShaderMouseInput(touches[0].clientX, touches[0].clientY, true);
+                        touchIndicator.textContent = 'Shader mouse: Dragging';
+                    } else {
+                        const currentDistance = getTouchDistance(touches);
+                        const delta = currentDistance - touchState.startDistance;
+
+                        if (typeof Module !== 'undefined' && Module.touchZoom) {
+                            if (Math.abs(delta) > 3) {
+                                Module.touchZoom(-delta * ZOOM_SENSITIVITY);
+                                touchState.startDistance = currentDistance;
+                            }
                         }
+
+                        touchIndicator.textContent = `Zoom: ${(delta > 0 ? '+' : '')}${delta.toFixed(0)}`;
                     }
-                    
-                    touchIndicator.textContent = `Zoom: ${(delta > 0 ? '+' : '')}${delta.toFixed(0)}`;
                 }
             }, { passive: false });
 
             touchOverlay.addEventListener('touchend', (e) => {
                 e.preventDefault();
+                if (!is3DPointerMode()) {
+                    if (e.touches.length > 0) {
+                        sendShaderMouseInput(e.touches[0].clientX, e.touches[0].clientY, true);
+                    } else if (e.changedTouches.length > 0) {
+                        sendShaderMouseInput(e.changedTouches[0].clientX, e.changedTouches[0].clientY, false);
+                    }
+                }
                 if (!touchState.isMultiTouch && e.changedTouches.length === 1) {
                     const touch = e.changedTouches[0];
                     const moveX = Math.abs(touch.clientX - touchState.startX);
@@ -7484,6 +7561,11 @@ void main(void) {
             }, { passive: false });
 
             touchOverlay.addEventListener('touchcancel', (e) => {
+                if (!is3DPointerMode()) {
+                    const touch = e.changedTouches?.[0];
+                    sendShaderMouseInput(touch?.clientX ?? touchState.lastX,
+                        touch?.clientY ?? touchState.lastY, false);
+                }
                 touchState.isDragging = false;
                 touchState.isMultiTouch = false;
                 touchIndicator.textContent = 'Touch: Ready';

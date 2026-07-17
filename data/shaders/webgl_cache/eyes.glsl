@@ -46,7 +46,7 @@ vec4 lens(vec2 uv, vec2 center, float radius, float k) {
 }
 
 void main() {
-    const vec2 centers[8] = vec2[](
+    const highp vec2 centers[8] = vec2[](
         vec2(0.35, 0.45),
         vec2(0.65, 0.45),
         vec2(0.25, 0.35),
@@ -56,7 +56,7 @@ void main() {
         vec2(0.50, 0.70),
         vec2(0.75, 0.65)
     );
-    const float radii[8] = float[](
+    const highp float radii[8] = float[](
         0.18, 0.18, 0.12, 0.12, 0.12, 0.12, 0.12, 0.12
     );
     const float k = 0.35;

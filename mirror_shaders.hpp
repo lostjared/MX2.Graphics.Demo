@@ -488,7 +488,7 @@ void main(void){
     vec2 tcG=uv+vec2(rG,-0.5*rG);
     vec2 tcB=uv+vec2(0.3*rB,rB);
 
-    vec3 pats[4]=vec3[](
+    highp vec3 pats[4]=vec3[](
         vec3(1.0,0.0,1.0),
         vec3(0.0,1.0,0.0),
         vec3(1.0,0.0,0.0),
@@ -948,7 +948,7 @@ void main(void){
     vec2 tcG=uv+vec2(rG,-0.5*rG);
     vec2 tcB=uv+vec2(0.3*rB,rB);
 
-    vec3 pats[4]=vec3[](vec3(1,0,1),vec3(0,1,0),vec3(1,0,0),vec3(0,0,1));
+    highp vec3 pats[4]=vec3[](vec3(1,0,1),vec3(0,1,0),vec3(1,0,0),vec3(0,0,1));
     float pspd=4.0;
     int pidx=int(mod(floor(t*pspd+seed*4.0),4.0));
     vec3 mir=pats[pidx];

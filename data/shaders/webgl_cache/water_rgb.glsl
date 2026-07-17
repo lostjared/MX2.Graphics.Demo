@@ -35,7 +35,7 @@ void main(void) {
     vec2 rippleTC_B = tc + vec2(rippleB * 0.3, rippleB);
 
     // Pattern configuration
-    const vec3 patterns[4] = vec3[](
+    const highp vec3 patterns[4] = vec3[](
         vec3(1.0, 0.0, 1.0), // R and B mirrored
         vec3(0.0, 1.0, 0.0), // G mirrored
         vec3(1.0, 0.0, 0.0), // R mirrored

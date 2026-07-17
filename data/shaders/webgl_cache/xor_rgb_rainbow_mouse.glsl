@@ -17,7 +17,7 @@ float pingPong(float x, float length) {
 }
 
 vec4 blur5(sampler2D image, vec2 uv, vec2 res) {
-    float k1[5] = float[](1.0, 4.0, 6.0, 4.0, 1.0);
+    highp float k1[5] = float[](1.0, 4.0, 6.0, 4.0, 1.0);
     vec2 ts = 1.0 / res;
     vec4 s = vec4(0.0);
     float wsum = 0.0;
