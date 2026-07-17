@@ -1,77 +1,14 @@
-#version 300 es
-precision highp float;
+#version 330
 
-
-in vec2 TexCoord;
-out vec4 FragColor;
-uniform sampler2D textTexture;
+in vec2 tc;
+out vec4 color;
+uniform sampler2D samp;
 uniform float time_f;
-uniform float iSpeed;
-uniform float iAmplitude;
-uniform float iFrequency;
-uniform float iBrightness;
-uniform float iContrast;
-uniform float iSaturation;
-uniform float iHueShift;
-uniform float iZoom;
-uniform float iRotation;
-uniform float iQuality;
-uniform float iDebugMode;
-
-
-vec3 adjustBrightness(vec3 col, float b) {
-    return col * b;
-}
-
-vec3 adjustContrast(vec3 col, float c) {
-    return (col - 0.5) * c + 0.5;
-}
-
-vec3 adjustSaturation(vec3 col, float s) {
-    float gray = dot(col, vec3(0.299, 0.587, 0.114));
-    return mix(vec3(gray), col, s);
-}
-
-vec3 rotateHue(vec3 col, float angle) {
-    float U = cos(angle);
-    float W = sin(angle);
-    mat3 R = mat3(
-        0.299 + 0.701*U + 0.168*W,
-        0.587 - 0.587*U + 0.330*W,
-        0.114 - 0.114*U - 0.497*W,
-        0.299 - 0.299*U - 0.328*W,
-        0.587 + 0.413*U + 0.035*W,
-        0.114 - 0.114*U + 0.292*W,
-        0.299 - 0.300*U + 1.250*W,
-        0.587 - 0.588*U - 1.050*W,
-        0.114 + 0.886*U - 0.203*W
-    );
-    return clamp(R * col, 0.0, 1.0);
-}
-
-vec3 applyColorAdjustments(vec3 col) {
-    col = adjustBrightness(col, iBrightness);
-    col = adjustContrast(col, iContrast);
-    col = adjustSaturation(col, iSaturation);
-    col = rotateHue(col, iHueShift);
-    return clamp(col, 0.0, 1.0);
-}
-
-vec2 applyZoomRotation(vec2 uv, vec2 center) {
-    vec2 p = uv - center;
-    float c = cos(iRotation);
-    float s = sin(iRotation);
-    p = mat2(c, -s, s, c) * p;
-    float z = max(abs(iZoom), 0.001);
-    p /= z;
-    return p + center;
-}
 
 void main(void) {
-    float time = time_f * iSpeed;
-    float amplitude = sin(time * 5.0 * iFrequency) * 2.0;
+    float amplitude = sin(time_f * 5.0) * 2.0;
     vec2 center = vec2(0.5, 0.5);
-    vec2 direction = TexCoord - center;
+    vec2 direction = tc - center;
     float distance = length(direction);
     float angle = atan(direction.y, direction.x);
     float spin = amplitude * distance;
@@ -79,16 +16,14 @@ void main(void) {
     float newAngle1 = angle + spin;
     float newAngle2 = angle - spin;
     
-    vec2 distorted_TexCoord1 = center + vec2(cos(newAngle1), sin(newAngle1)) * distance;
-    vec2 distorted_TexCoord2 = center + vec2(cos(newAngle2), sin(newAngle2)) * distance;
+    vec2 distorted_tc1 = center + vec2(cos(newAngle1), sin(newAngle1)) * distance;
+    vec2 distorted_tc2 = center + vec2(cos(newAngle2), sin(newAngle2)) * distance;
     
-    distorted_TexCoord1 = clamp(distorted_TexCoord1, vec2(0.0), vec2(1.0));
-    distorted_TexCoord2 = clamp(distorted_TexCoord2, vec2(0.0), vec2(1.0));
+    distorted_tc1 = clamp(distorted_tc1, vec2(0.0), vec2(1.0));
+    distorted_tc2 = clamp(distorted_tc2, vec2(0.0), vec2(1.0));
 
-    vec4 FragColor1 = texture(textTexture, distorted_TexCoord1);
-    vec4 FragColor2 = texture(textTexture, distorted_TexCoord2);
+    vec4 color1 = texture(samp, distorted_tc1);
+    vec4 color2 = texture(samp, distorted_tc2);
 
-    vec4 mixResult = mix(FragColor1, FragColor2, 0.5);
-    vec3 col = applyColorAdjustments(mixResult.rgb);
-    FragColor = vec4(col, mixResult.a);
+    color = mix(color1, color2, 0.5);
 }

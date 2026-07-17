@@ -341,15 +341,16 @@
         #camera-modal {
             display: none;
             position: fixed;
-            top: 0;
-            left: 0;
+            inset: 0;
             width: 100%;
-            height: 100%;
+            height: 100dvh;
             background: rgba(0, 0, 0, 0.9);
-            z-index: 1000;
+            z-index: 100000;
             justify-content: center;
             align-items: center;
             flex-direction: column;
+            box-sizing: border-box;
+            padding: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
         }
 
         #camera-modal.visible {
@@ -366,6 +367,26 @@
             gap: 15px;
             max-width: 90vw;
             max-height: 85vh;
+            box-sizing: border-box;
+            overflow-y: auto;
+            overscroll-behavior: contain;
+        }
+
+        #camera-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            width: 100%;
+            margin-bottom: 10px;
+        }
+
+        #camera-settings {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
+            align-items: center;
         }
 
         #camera-video {
@@ -394,6 +415,101 @@
             border-radius: 4px;
             border: none;
             transition: background 0.2s;
+        }
+
+        @media (max-width: 600px) {
+            #camera-modal {
+                justify-content: flex-start;
+                padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+            }
+
+            #camera-container {
+                width: 100%;
+                max-width: none;
+                height: 100%;
+                max-height: none;
+                padding: 10px 12px;
+                gap: 8px;
+                border-radius: 0;
+                align-items: stretch;
+            }
+
+            #camera-header {
+                position: sticky;
+                top: -10px;
+                z-index: 2;
+                flex: 0 0 auto;
+                box-sizing: border-box;
+                margin: -10px -12px 0;
+                padding: 10px 12px 8px;
+                width: calc(100% + 24px);
+                background: #1e1e1e;
+            }
+
+            #camera-header h2 {
+                font-size: 18px;
+            }
+
+            #camera-video {
+                width: 100%;
+                min-height: 180px;
+                max-height: min(42dvh, 360px);
+                object-fit: contain;
+                flex: 1 1 auto;
+            }
+
+            #camera-settings {
+                display: grid;
+                grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+                width: 100%;
+                gap: 8px;
+                margin: 0;
+                flex: 0 0 auto;
+            }
+
+            #camera-settings select,
+            #camera-settings button {
+                width: 100%;
+                min-width: 0;
+                max-width: none;
+                box-sizing: border-box;
+            }
+
+            #camera-settings #switch-camera-btn {
+                grid-column: 1 / -1;
+            }
+
+            #camera-controls {
+                position: sticky;
+                bottom: -10px;
+                z-index: 2;
+                display: grid;
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+                width: calc(100% + 24px);
+                box-sizing: border-box;
+                margin: auto -12px -10px;
+                padding: 8px 12px calc(10px + env(safe-area-inset-bottom));
+                gap: 8px;
+                background: #1e1e1e;
+                flex: 0 0 auto;
+            }
+
+            #camera-controls button {
+                min-width: 0;
+                padding: 12px 6px;
+                font-size: 12px;
+            }
+        }
+
+        @media (max-width: 380px) {
+            #camera-settings {
+                grid-template-columns: 1fr;
+            }
+
+            #camera-video {
+                min-height: 140px;
+                max-height: 34dvh;
+            }
         }
 
         #capture-frame-btn {
@@ -539,6 +655,7 @@
         #shader-editor-body {
             padding: 20px;
             flex: 1;
+            min-height: 0;
             overflow: auto;
             display: flex;
             flex-direction: column;
@@ -551,9 +668,50 @@
             margin-bottom: 5px;
         }
 
+        #cached-shader-picker {
+            display: grid;
+            grid-template-columns: auto minmax(220px, 1fr) auto;
+            align-items: center;
+            gap: 10px;
+        }
+
+        #cached-shader-picker label {
+            color: #ddd;
+            font-size: 13px;
+            white-space: nowrap;
+        }
+
+        #cached-shader-select {
+            width: 100%;
+            min-width: 0;
+            padding: 9px 32px 9px 10px;
+            color: #fff;
+            background: #333;
+            border: 1px solid #555;
+            border-radius: 4px;
+            font-size: 13px;
+        }
+
+        #cached-shader-select:focus {
+            outline: none;
+            border-color: #9C27B0;
+        }
+
+        #cached-shader-status {
+            min-width: 90px;
+            color: #999;
+            font-size: 12px;
+            text-align: right;
+        }
+
+        #cached-shader-status.error {
+            color: #ff6b6b;
+        }
         #shader-code-textarea {
             width: 100%;
             height: 350px;
+            min-height: 260px;
+            flex: 0 0 auto;
             background: #0d0d0d;
             color: #00ff00;
             border: 1px solid #444;
@@ -656,6 +814,22 @@
 
         #shader-templates button:hover {
             background: #777;
+        }
+
+        @media (max-width: 600px) {
+            #cached-shader-picker {
+                grid-template-columns: 1fr;
+                gap: 6px;
+            }
+
+            #cached-shader-picker label {
+                white-space: normal;
+            }
+
+            #cached-shader-status {
+                min-width: 0;
+                text-align: left;
+            }
         }
 
         #shader-editor-modal {
@@ -1580,6 +1754,7 @@ body.mobile-mode #shader-editor-container {
 
 body.mobile-mode #shader-code-textarea {
     height: 200px;
+    min-height: 180px;
     font-size: 12px;
 }
 
@@ -1763,7 +1938,7 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
 </head>
 <body>
     <div id="loading-overlay">
-        <div id="loading-title">ACMX2 Interactive Visualizer v1.9.0 - Initializing...</div>
+        <div id="loading-title">ACMX2 Interactive Visualizer v2.0.0 - Initializing...</div>
         <div id="loading-output"></div>
     </div>
     <div id="canvas-container">
@@ -2000,6 +2175,13 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
                 <button id="close-editor-btn">✕ Close</button>
             </div>
             <div id="shader-editor-body">
+                <div id="cached-shader-picker">
+                    <label for="cached-shader-select">Cached shader:</label>
+                    <select id="cached-shader-select">
+                        <option value="">Loading cached shaders...</option>
+                    </select>
+                    <span id="cached-shader-status" role="status" aria-live="polite"></span>
+                </div>
                 <div>
                     <label id="shader-code-label">Fragment Shader Code (GLSL ES 3.0):</label><br>
                     <div id="shader-templates">
@@ -2016,6 +2198,7 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
             </div>
             <div id="shader-editor-footer">
                 <button id="reset-shader-btn">Reset to Default</button>
+                <button type="button" onclick="window.downloadShaderFailureLog()">Download Startup Failure Log</button>
                 <button id="compile-shader-btn">▶ Compile & Apply</button>
             </div>
         </div>
@@ -2024,14 +2207,14 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
     <!-- Camera Modal -->
     <div id="camera-modal">
         <div id="camera-container">
-            <div id="camera-header" style="display: flex; justify-content: space-between; align-items: center; width: 100%; margin-bottom: 10px;">
+            <div id="camera-header">
                 <h2 style="color: #fff; margin: 0;">📷 Camera Capture</h2>
                 <button id="close-camera-header-btn" style="background: #f44336; color: white; border: none; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center; transition: all 0.2s ease;">✕</button>
             </div>
             <video id="camera-video" autoplay playsinline></video>
             <canvas id="camera-canvas"></canvas>
             <div id="camera-status">Click "Start Streaming" to begin</div>
-            <div id="camera-settings" style="display: flex; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; justify-content: center; align-items: center;">
+            <div id="camera-settings">
                 <select id="camera-device-select" title="Select Camera">
                     <option value="">Loading cameras...</option>
                 </select>
@@ -2346,7 +2529,7 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
             var output = document.getElementById('loading-output');
             if (output) {
                 output.innerHTML = '<span class="info">Initializing WebGL...</span>\n' +
-                                   '<span class="normal">Loading ACMX2 v1.9.0 ...</span>\n';
+                                   '<span class="normal">Loading ACMX2 v2.0.0 ...</span>\n';
             }
         })();
            
@@ -2359,6 +2542,88 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
                 output.appendChild(span);
                 output.appendChild(document.createTextNode('\n'));
                 output.scrollTop = output.scrollHeight;
+            }
+        };
+
+        window.shaderFailureEntries = [];
+        window.shaderCompilerOutput = [];
+        window.currentCompilingShader = null;
+        window.currentCompilerOutputStart = 0;
+
+        window.beginShaderCompilation = function(shaderName) {
+            window.currentCompilingShader = shaderName;
+            window.currentCompilerOutputStart = window.shaderCompilerOutput.length;
+        };
+
+        window.finishShaderCompilation = function(shaderName, convertedSource, compiled3D, compiled2D) {
+            const output = window.shaderCompilerOutput.slice(window.currentCompilerOutputStart);
+            if (!compiled3D || !compiled2D) {
+                window.shaderFailureEntries.push({
+                    name: shaderName,
+                    compiled3D: !!compiled3D,
+                    compiled2D: !!compiled2D,
+                    output: output,
+                    source: convertedSource
+                });
+            }
+            window.currentCompilingShader = null;
+        };
+
+        window.buildShaderFailureLog = function() {
+            if (!window.shaderFailureEntries.length) {
+                return 'All shaders compiled successfully.\n';
+            }
+            const sections = [
+                'MX2 Graphics Demo - Shader Compilation Failures',
+                'Generated: ' + new Date().toISOString(),
+                'Failed shaders: ' + window.shaderFailureEntries.length,
+                ''
+            ];
+            window.shaderFailureEntries.forEach(function(entry, index) {
+                sections.push('='.repeat(80));
+                sections.push('[' + (index + 1) + '] ' + entry.name);
+                sections.push('3D program: ' + (entry.compiled3D ? 'OK' : 'FAILED'));
+                sections.push('2D program: ' + (entry.compiled2D ? 'OK' : 'FAILED'));
+                sections.push('');
+                sections.push('Compiler output:');
+                sections.push(entry.output.length ? entry.output.join('\n') : '(No compiler output was emitted.)');
+                sections.push('');
+                sections.push('Converted GLSL source:');
+                sections.push(entry.source);
+                sections.push('');
+            });
+            return sections.join('\n');
+        };
+
+        window.downloadShaderFailureLog = function() {
+            const blob = new Blob([window.buildShaderFailureLog()], { type: 'text/plain;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const anchor = document.createElement('a');
+            anchor.href = url;
+            anchor.download = 'shader-failures.log';
+            document.body.appendChild(anchor);
+            anchor.click();
+            anchor.remove();
+            setTimeout(function() { URL.revokeObjectURL(url); }, 1000);
+        };
+
+        window.finalizeShaderFailureLog = function() {
+            const log = window.buildShaderFailureLog();
+            window.shaderFailureLog = log;
+            try {
+                if (typeof Module !== 'undefined' && Module.FS) {
+                    Module.FS.writeFile('/shader-failures.log', log);
+                }
+            } catch (error) {
+                console.error('Could not write /shader-failures.log:', error);
+            }
+            if (window.shaderFailureEntries.length) {
+                console.error(log);
+                window.addLoadingMessage(
+                    'Saved details for ' + window.shaderFailureEntries.length +
+                    ' failures. Run downloadShaderFailureLog() in the console to download them.',
+                    'error'
+                );
             }
         };
 
@@ -2528,9 +2793,19 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
             canvas: document.getElementById('canvas'),
             preinitializedWebGLContext: window.preInitializedGL || null,
             arguments: [],
+            print: function(text) {
+                const line = String(text || '').trim();
+                if (line.length > 0 && window.currentCompilingShader) {
+                    window.shaderCompilerOutput.push('[stdout] ' + line);
+                }
+                console.log(text);
+            },
             printErr: function(text) {
                 const line = String(text || '').trim();
                 if (line.length > 0) {
+                    if (window.currentCompilingShader) {
+                        window.shaderCompilerOutput.push('[stderr] ' + line);
+                    }
                     if (!window.shaderCompileErrorLines) {
                         window.shaderCompileErrorLines = [];
                     }
@@ -2699,6 +2974,8 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
         const closeEditorBtn = document.getElementById('close-editor-btn');
         const shaderCodeTextarea = document.getElementById('shader-code-textarea');
         const shaderLogTextarea = document.getElementById('shader-log-textarea');
+        const cachedShaderSelect = document.getElementById('cached-shader-select');
+        const cachedShaderStatus = document.getElementById('cached-shader-status');
         const compileShaderBtn = document.getElementById('compile-shader-btn');
         const resetShaderBtn = document.getElementById('reset-shader-btn');
         const uniformsBtn = document.getElementById('uniforms-btn');
@@ -4023,6 +4300,111 @@ void main(void) {
 
         shaderCodeTextarea.value = basicTemplate;
 
+        const cachedShaderRoot = 'data/shaders/webgl_cache/';
+        let cachedShaderListPromise = null;
+        let cachedShaderLoadSequence = 0;
+
+        async function readCachedShaderText(relativePath) {
+            const virtualPath = '/' + relativePath.replace(/^\/+/, '');
+            if (typeof Module !== 'undefined' && Module.FS) {
+                try {
+                    return Module.FS.readFile(virtualPath, { encoding: 'utf8' });
+                } catch (error) {
+                    console.debug('Cached shader is not available in the virtual filesystem yet:', virtualPath);
+                }
+            }
+
+            const encodedPath = relativePath.split('/').map(encodeURIComponent).join('/');
+            const response = await fetch(encodedPath, { cache: 'force-cache' });
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status} while loading ${relativePath}`);
+            }
+            return response.text();
+        }
+
+        function setCachedShaderStatus(message, isError = false) {
+            cachedShaderStatus.textContent = message;
+            cachedShaderStatus.classList.toggle('error', isError);
+        }
+
+        async function populateCachedShaderSelect() {
+            if (!cachedShaderListPromise) {
+                cachedShaderListPromise = readCachedShaderText(cachedShaderRoot + 'index.txt')
+                    .then((indexText) => indexText.split(/\r?\n/)
+                        .map((line) => line.trim())
+                        .filter((line) => line && !line.startsWith('#')))
+                    .catch((error) => {
+                        cachedShaderListPromise = null;
+                        throw error;
+                    });
+            }
+
+            cachedShaderSelect.disabled = true;
+            setCachedShaderStatus('Loading list...');
+            try {
+                const shaderNames = await cachedShaderListPromise;
+                const selectedValue = cachedShaderSelect.value;
+                cachedShaderSelect.replaceChildren();
+
+                const placeholder = document.createElement('option');
+                placeholder.value = '';
+                placeholder.textContent = 'Choose a cached shader...';
+                cachedShaderSelect.appendChild(placeholder);
+
+                const options = document.createDocumentFragment();
+                shaderNames.forEach((shaderName) => {
+                    const option = document.createElement('option');
+                    option.value = shaderName;
+                    option.textContent = shaderName;
+                    options.appendChild(option);
+                });
+                cachedShaderSelect.appendChild(options);
+                if (shaderNames.includes(selectedValue)) {
+                    cachedShaderSelect.value = selectedValue;
+                }
+                setCachedShaderStatus(`${shaderNames.length} shaders`);
+            } catch (error) {
+                cachedShaderSelect.replaceChildren();
+                const option = document.createElement('option');
+                option.value = '';
+                option.textContent = 'Could not load cached shader list';
+                cachedShaderSelect.appendChild(option);
+                setCachedShaderStatus('Load failed', true);
+                console.error('Could not load cached shader list:', error);
+            } finally {
+                cachedShaderSelect.disabled = false;
+            }
+        }
+
+        async function loadCachedShaderIntoEditor(shaderName) {
+            if (!shaderName) return;
+            const loadSequence = ++cachedShaderLoadSequence;
+            cachedShaderSelect.disabled = true;
+            setCachedShaderStatus('Loading...');
+            try {
+                const shaderSource = await readCachedShaderText(cachedShaderRoot + shaderName);
+                if (loadSequence !== cachedShaderLoadSequence) return;
+                shaderCodeTextarea.value = shaderSource;
+                shaderLogTextarea.value = `Loaded ${shaderName}. Edit the source, then click Compile & Apply.`;
+                shaderLogTextarea.classList.remove('success');
+                setCachedShaderStatus('Ready to edit');
+                shaderCodeTextarea.focus({ preventScroll: true });
+                shaderCodeTextarea.setSelectionRange(0, 0);
+                shaderCodeTextarea.scrollTop = 0;
+                document.getElementById('shader-editor-body').scrollTop = 0;
+            } catch (error) {
+                if (loadSequence !== cachedShaderLoadSequence) return;
+                setCachedShaderStatus('Load failed', true);
+                shaderLogTextarea.value = `Failed to load ${shaderName}: ${error.message || error}`;
+                shaderLogTextarea.classList.remove('success');
+                console.error('Could not load cached shader:', shaderName, error);
+            } finally {
+                if (loadSequence === cachedShaderLoadSequence) {
+                    cachedShaderSelect.disabled = false;
+                }
+            }
+        }
+
        function resizeCanvas() {
             const container = document.getElementById('canvas-container');
             
@@ -4127,6 +4509,18 @@ void main(void) {
                     select.value = 'webm';
                 }
             });
+
+            // Chrome on Android can save MP4 files directly on recent versions,
+            // or through the FFmpeg fallback on older versions. Prefer MP4 there
+            // so mobile recordings are not unexpectedly offered as WebM files.
+            const isAndroidChrome = /Android/i.test(navigator.userAgent) &&
+                /Chrome\//i.test(navigator.userAgent) &&
+                !/EdgA|OPR|SamsungBrowser/i.test(navigator.userAgent);
+            if (isAndroidChrome && !disableMp4) {
+                selectors.forEach((select) => {
+                    select.value = 'mp4';
+                });
+            }
         }
 
         if (!ffmpegSupported) {
@@ -4959,6 +5353,8 @@ void main(void) {
                     const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
                     const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
                     const isAndroid = /Android/i.test(navigator.userAgent);
+                    const isAndroidChrome = isAndroid && /Chrome\//i.test(navigator.userAgent) &&
+                        !/EdgA|OPR|SamsungBrowser/i.test(navigator.userAgent);
                     
                     console.log('Download: isMobile=' + isMobile + ', isIOS=' + isIOS + ', isAndroid=' + isAndroid + ', format=' + extension);
                     console.log('Blob size:', finalBlob.size, 'type:', finalBlob.type);
@@ -4967,40 +5363,80 @@ void main(void) {
                     async function triggerShare() {
                         if (navigator.share && navigator.canShare) {
                             try {
-                                const file = new File([finalBlob], filename, { type: finalBlob.type });
+                                const shareMime = (finalBlob.type || (extension === 'mp4' ? 'video/mp4' : 'video/webm')).split(';')[0];
+                                const file = new File([finalBlob], filename, { type: shareMime });
                                 console.log('Created File for sharing:', file.name, file.size, file.type);
                                 if (navigator.canShare({ files: [file] })) {
                                     await navigator.share({
                                         files: [file],
                                         title: 'MX2 Visualizer Recording'
                                     });
-                                    return true;
+                                    return 'shared';
                                 } else {
                                     console.log('canShare returned false for this file');
                                 }
                             } catch (e) {
-                                if (e.name !== 'AbortError') {
-                                    console.error('Share failed:', e);
+                                if (e.name === 'AbortError') {
+                                    return 'cancelled';
                                 }
-                                return e.name === 'AbortError'; // User cancelled is still "handled"
+                                console.error('Share failed:', e);
+                                return 'failed';
                             }
                         }
-                        return false;
+                        return 'unavailable';
                     }
                     
                     
                     
                     
-                    // Helper to save via Android bridge when available, else fall back to an anchor download
-                    // Helper to save via Android bridge when available, else fall back to an anchor download
+                    // Android Chrome's download service cannot reliably consume a
+                    // renderer-owned blob URL. Prefer the native file share/save
+                    // sheet, then retain an anchor URL long enough for fallback use.
                     async function forceDownload() {
                         try {
-                            if (typeof window.__acmxSaveBlobToAndroid === 'function') {
-                                // FIXED: Strip the codec data before sending to Android MediaStore
-                                let rawMime = finalBlob.type || (extension === 'mp4' ? 'video/mp4' : 'video/webm');
-                                let cleanMime = rawMime.split(';')[0];
-                                
-                                return await window.__acmxSaveBlobToAndroid(finalBlob, filename, cleanMime);
+                            const hasNativeAndroidVideoBridge =
+                                typeof window.AndroidInterface !== 'undefined' &&
+                                typeof window.AndroidInterface.startVideoSave === 'function' &&
+                                typeof window.AndroidInterface.appendVideoChunk === 'function' &&
+                                typeof window.AndroidInterface.finalizeVideoSave === 'function';
+
+                            if (hasNativeAndroidVideoBridge &&
+                                typeof window.__acmxSaveBlobToAndroid === 'function') {
+                                try {
+                                    const rawMime = finalBlob.type || (extension === 'mp4' ? 'video/mp4' : 'video/webm');
+                                    const cleanMime = rawMime.split(';')[0];
+                                    const saved = await window.__acmxSaveBlobToAndroid(finalBlob, filename, cleanMime);
+                                    if (saved) return 'saved';
+                                    console.warn('Android video bridge declined the save; trying browser save methods.');
+                                } catch (bridgeError) {
+                                    console.warn('Android video bridge failed; trying browser save methods:', bridgeError);
+                                }
+                            }
+
+                            if (isAndroidChrome) {
+                                const shareResult = await triggerShare();
+                                if (shareResult === 'shared' || shareResult === 'cancelled') {
+                                    return shareResult;
+                                }
+                            }
+
+                            if (typeof window.showSaveFilePicker === 'function') {
+                                try {
+                                    const handle = await window.showSaveFilePicker({
+                                        suggestedName: filename,
+                                        types: [{
+                                            description: extension.toUpperCase() + ' video',
+                                            accept: { [finalBlob.type.split(';')[0]]: ['.' + extension] }
+                                        }]
+                                    });
+                                    const writable = await handle.createWritable();
+                                    await writable.write(finalBlob);
+                                    await writable.close();
+                                    return 'saved';
+                                } catch (e) {
+                                    if (e.name === 'AbortError') return 'cancelled';
+                                    console.warn('File picker save failed, trying browser download:', e);
+                                }
                             }
 
                             // Create a fresh blob URL
@@ -5009,23 +5445,24 @@ void main(void) {
                             a.style.display = 'none';
                             a.href = downloadUrl;
                             a.download = filename;
-                            a.setAttribute('target', '_blank');
                             document.body.appendChild(a);
                             
                             // Use a slight delay on Android
                             await new Promise(r => setTimeout(r, 100));
                             a.click();
                             
-                            // Clean up after delay
+                            // Android may hand this URL to its download service well
+                            // after the click. Keep it alive instead of revoking it
+                            // after only ten seconds.
                             setTimeout(() => {
-                                document.body.removeChild(a);
+                                if (a.parentNode) a.parentNode.removeChild(a);
                                 URL.revokeObjectURL(downloadUrl);
-                            }, 10000);
-                            
-                            return true;
+                            }, isAndroid ? 10 * 60 * 1000 : 60 * 1000);
+
+                            return 'started';
                         } catch (e) {
                             console.error('Force download failed:', e);
-                            return false;
+                            return 'failed';
                         }
                     }
                     
@@ -5054,7 +5491,9 @@ void main(void) {
                         instructions.style.cssText = 'color:#ccc;font-size:14px;margin:15px 0;text-align:center;line-height:1.5;';
                         
                         if (isAndroid) {
-                            instructions.innerHTML = '<b>Tap "Download" or "Share"</b> to save the video';
+                            instructions.innerHTML = extension === 'mp4'
+                                ? '<b>Tap "Save MP4 to Phone"</b>, then choose Files, Photos, or another destination'
+                                : '<b>Tap "Save Video to Phone"</b>, then choose a destination';
                         } else if (isIOS) {
                             instructions.innerHTML = '<b>To save:</b> Tap <b>"Share"</b> → <b>"Save Video"</b>';
                         } else {
@@ -5064,18 +5503,30 @@ void main(void) {
                         const btnContainer = document.createElement('div');
                         btnContainer.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:12px;margin-top:10px;width:100%;max-width:300px;';
                         
-                        // Download button - primary for Android
+                        // The primary Android action opens the OS file share/save sheet.
                         const downloadBtn = document.createElement('button');
-                        downloadBtn.textContent = '⬇️ Download Video';
+                        const downloadLabel = isAndroid
+                            ? (extension === 'mp4' ? '💾 Save MP4 to Phone' : '💾 Save Video to Phone')
+                            : '⬇️ Download Video';
+                        downloadBtn.textContent = downloadLabel;
                         downloadBtn.style.cssText = 'background:linear-gradient(135deg, #4CAF50, #45a049);color:white;padding:18px 40px;border-radius:12px;border:none;font-size:20px;font-weight:bold;cursor:pointer;box-shadow:0 4px 15px rgba(76,175,80,0.4);width:100%;';
                         downloadBtn.onclick = async () => {
                             downloadBtn.textContent = '⏳ Starting...';
                             downloadBtn.disabled = true;
-                            const success = await forceDownload();
-                            if (success) {
-                                downloadBtn.textContent = '✅ Download Started!';
+                            const result = await forceDownload();
+                            if (result === 'saved' || result === 'shared') {
+                                downloadBtn.textContent = '✅ Save Complete';
                                 setTimeout(() => {
-                                    downloadBtn.textContent = '⬇️ Download Video';
+                                    downloadBtn.textContent = downloadLabel;
+                                    downloadBtn.disabled = false;
+                                }, 2000);
+                            } else if (result === 'cancelled') {
+                                downloadBtn.textContent = downloadLabel;
+                                downloadBtn.disabled = false;
+                            } else if (result === 'started') {
+                                downloadBtn.textContent = '✅ Download Started';
+                                setTimeout(() => {
+                                    downloadBtn.textContent = downloadLabel;
                                     downloadBtn.disabled = false;
                                 }, 2000);
                             } else {
@@ -5090,8 +5541,8 @@ void main(void) {
                         shareBtn.textContent = '📤 Share / Save to...';
                         shareBtn.style.cssText = 'background:#2196F3;color:white;padding:14px 30px;border-radius:10px;border:none;font-size:18px;cursor:pointer;width:100%;';
                         shareBtn.onclick = async () => {
-                            const shared = await triggerShare();
-                            if (!shared) {
+                            const shareResult = await triggerShare();
+                            if (shareResult === 'unavailable' || shareResult === 'failed') {
                                 alert('Share not available. Use Download button or tap and hold the video to save.');
                             }
                         };
@@ -5112,7 +5563,7 @@ void main(void) {
                         closeBtn.onclick = () => {
                             document.body.removeChild(modal);
                             // Don't revoke URL immediately - give time for downloads
-                            setTimeout(() => URL.revokeObjectURL(url), 60000);
+                            setTimeout(() => URL.revokeObjectURL(url), isAndroid ? 10 * 60 * 1000 : 60000);
                         };
                         
                         modal.appendChild(title);
@@ -5346,6 +5797,7 @@ void main(void) {
         
         shaderEditorBtn.addEventListener('click', () => {
             shaderEditorModal.classList.add('visible');
+            populateCachedShaderSelect();
         });
 
         closeEditorBtn.addEventListener('click', () => {
@@ -5354,17 +5806,26 @@ void main(void) {
 
         // Keep shader editor open on backdrop clicks; close via the X button only.
 
-        
+        cachedShaderSelect.addEventListener('change', () => {
+            loadCachedShaderIntoEditor(cachedShaderSelect.value);
+        });
+
         document.getElementById('template-basic').addEventListener('click', () => {
             shaderCodeTextarea.value = basicTemplate;
+            cachedShaderSelect.value = '';
+            setCachedShaderStatus('Basic template');
         });
 
         document.getElementById('template-ripple').addEventListener('click', () => {
             shaderCodeTextarea.value = rippleTemplate;
+            cachedShaderSelect.value = '';
+            setCachedShaderStatus('Ripple template');
         });
 
         document.getElementById('template-color').addEventListener('click', () => {
             shaderCodeTextarea.value = colorShiftTemplate;
+            cachedShaderSelect.value = '';
+            setCachedShaderStatus('Color template');
         });
 
         compileShaderBtn.addEventListener('click', () => {
@@ -6162,6 +6623,7 @@ void main(void) {
 
             document.getElementById('mobile-shader-editor-btn').addEventListener('click', () => {
                 shaderEditorModal.classList.add('visible');
+                populateCachedShaderSelect();
                 setTimeout(() => {
                     shaderCodeTextarea.focus();
                 }, 100);

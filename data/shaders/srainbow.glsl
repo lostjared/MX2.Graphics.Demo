@@ -1,23 +1,10 @@
-#version 300 es
-precision highp float;
+#version 330
 
-
-in vec2 TexCoord;
-out vec4 FragColor;
-uniform sampler2D textTexture;
+in vec2 tc;
+out vec4 color;
+uniform sampler2D samp;
 uniform float time_f;
 uniform vec2 iResolution;
-uniform float iSpeed;
-uniform float iAmplitude;
-uniform float iFrequency;
-uniform float iBrightness;
-uniform float iContrast;
-uniform float iSaturation;
-uniform float iHueShift;
-uniform float iZoom;
-uniform float iRotation;
-uniform float iQuality;
-uniform float iDebugMode;
 
 float pingPong(float x, float length) {
     float modVal = mod(x, length * 2.0);
@@ -32,77 +19,27 @@ vec3 rainbow(float t) {
     return clamp(vec3(r, g, b), 0.0, 1.0);
 }
 
-
-vec3 adjustBrightness(vec3 col, float b) {
-    return col * b;
-}
-
-vec3 adjustContrast(vec3 col, float c) {
-    return (col - 0.5) * c + 0.5;
-}
-
-vec3 adjustSaturation(vec3 col, float s) {
-    float gray = dot(col, vec3(0.299, 0.587, 0.114));
-    return mix(vec3(gray), col, s);
-}
-
-vec3 rotateHue(vec3 col, float angle) {
-    float U = cos(angle);
-    float W = sin(angle);
-    mat3 R = mat3(
-        0.299 + 0.701*U + 0.168*W,
-        0.587 - 0.587*U + 0.330*W,
-        0.114 - 0.114*U - 0.497*W,
-        0.299 - 0.299*U - 0.328*W,
-        0.587 + 0.413*U + 0.035*W,
-        0.114 - 0.114*U + 0.292*W,
-        0.299 - 0.300*U + 1.250*W,
-        0.587 - 0.588*U - 1.050*W,
-        0.114 + 0.886*U - 0.203*W
-    );
-    return clamp(R * col, 0.0, 1.0);
-}
-
-vec3 applyColorAdjustments(vec3 col) {
-    col = adjustBrightness(col, iBrightness);
-    col = adjustContrast(col, iContrast);
-    col = adjustSaturation(col, iSaturation);
-    col = rotateHue(col, iHueShift);
-    return clamp(col, 0.0, 1.0);
-}
-
-vec2 applyZoomRotation(vec2 uv, vec2 center) {
-    vec2 p = uv - center;
-    float c = cos(iRotation);
-    float s = sin(iRotation);
-    p = mat2(c, -s, s, c) * p;
-    float z = max(abs(iZoom), 0.001);
-    p /= z;
-    return p + center;
-}
-
 void main(void) {
-    float time = time_f * iSpeed;
-    vec2 uv = applyZoomRotation(TexCoord, vec2(0.5)) * 2.0 - 1.0;
+    vec2 uv = tc * 2.0 - 1.0;
     uv.y *= iResolution.y / iResolution.x;
     float angle = atan(uv.y, uv.x);
     float radius = length(uv);
     float dispersion = 0.02;
     vec2 dir = normalize(uv);
-    vec2 offset_r = TexCoord + dir * dispersion;
-    vec2 offset_g = TexCoord;
-    vec2 offset_b = TexCoord - dir * dispersion;
-    float r = texture(textTexture, offset_r).r;
-    float g = texture(textTexture, offset_g).g;
-    float b = texture(textTexture, offset_b).b;
-    vec3 prism_FragColor = vec3(r, g, b);
-    float t = fract((angle / (2.0 * 3.14159)) + time * 0.1 * iAmplitude);
-    vec3 rainbow_FragColor = rainbow(t);
+    vec2 offset_r = tc + dir * dispersion;
+    vec2 offset_g = tc;
+    vec2 offset_b = tc - dir * dispersion;
+    float r = texture(samp, offset_r).r;
+    float g = texture(samp, offset_g).g;
+    float b = texture(samp, offset_b).b;
+    vec3 prism_color = vec3(r, g, b);
+    float t = fract((angle / (2.0 * 3.14159)) + time_f * 0.1);
+    vec3 rainbow_color = rainbow(t);
     float rainbow_factor = 0.5;
-    vec3 final_mixResult = mix(prism_FragColor, rainbow_FragColor, rainbow_factor);
-    float time_t = pingPong(time, 4.0) + 2.0;
-    vec3 final_col = sin(final_mixResult * time_t);
-    vec3 col = applyColorAdjustments(final_col);
-    FragColor = vec4(col, 1.0);
+    vec3 final_color = mix(prism_color, rainbow_color, rainbow_factor);
+    
+    float time_t = pingPong(time_f, 4.0) + 2.0;
+    
+    color = vec4(sin(final_color * time_t), 1.0);
 }
 

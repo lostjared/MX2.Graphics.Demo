@@ -1,23 +1,10 @@
-#version 300 es
-precision highp float;
+#version 330
 
-
-in vec2 TexCoord;
-out vec4 FragColor;
-uniform sampler2D textTexture;
+in vec2 tc;
+out vec4 color;
+uniform sampler2D samp;
 uniform float time_f;
 uniform vec2 iResolution;
-uniform float iSpeed;
-uniform float iAmplitude;
-uniform float iFrequency;
-uniform float iBrightness;
-uniform float iContrast;
-uniform float iSaturation;
-uniform float iHueShift;
-uniform float iZoom;
-uniform float iRotation;
-uniform float iQuality;
-uniform float iDebugMode;
 
 float hash(float n) {
     return fract(sin(n) * 43758.5453123);
@@ -46,76 +33,26 @@ vec3 rainbow(float t) {
     return clamp(vec3(r, g, b), 0.0, 1.0);
 }
 
-
-vec3 adjustBrightness(vec3 col, float b) {
-    return col * b;
-}
-
-vec3 adjustContrast(vec3 col, float c) {
-    return (col - 0.5) * c + 0.5;
-}
-
-vec3 adjustSaturation(vec3 col, float s) {
-    float gray = dot(col, vec3(0.299, 0.587, 0.114));
-    return mix(vec3(gray), col, s);
-}
-
-vec3 rotateHue(vec3 col, float angle) {
-    float U = cos(angle);
-    float W = sin(angle);
-    mat3 R = mat3(
-        0.299 + 0.701*U + 0.168*W,
-        0.587 - 0.587*U + 0.330*W,
-        0.114 - 0.114*U - 0.497*W,
-        0.299 - 0.299*U - 0.328*W,
-        0.587 + 0.413*U + 0.035*W,
-        0.114 - 0.114*U + 0.292*W,
-        0.299 - 0.300*U + 1.250*W,
-        0.587 - 0.588*U - 1.050*W,
-        0.114 + 0.886*U - 0.203*W
-    );
-    return clamp(R * col, 0.0, 1.0);
-}
-
-vec3 applyColorAdjustments(vec3 col) {
-    col = adjustBrightness(col, iBrightness);
-    col = adjustContrast(col, iContrast);
-    col = adjustSaturation(col, iSaturation);
-    col = rotateHue(col, iHueShift);
-    return clamp(col, 0.0, 1.0);
-}
-
-vec2 applyZoomRotation(vec2 uv, vec2 center) {
-    vec2 p = uv - center;
-    float c = cos(iRotation);
-    float s = sin(iRotation);
-    p = mat2(c, -s, s, c) * p;
-    float z = max(abs(iZoom), 0.001);
-    p /= z;
-    return p + center;
-}
-
 void main(void) {
-    float time = time_f * iSpeed;
-    vec2 uv = applyZoomRotation(TexCoord, vec2(0.5)) * 2.0 - 1.0;
+    vec2 uv = tc * 2.0 - 1.0;
     uv.y *= iResolution.y / iResolution.x;
-    float wave = sin(uv.x * 10.0 * iFrequency + time * 2.0) * 0.1 * iAmplitude;
-    vec2 random_direction = smoothRandom2(time) * 0.5;
-    float expand = 0.5 + 0.5 * sin(time * 2.0);
+    float wave = sin(uv.x * 10.0 + time_f * 2.0) * 0.1;
+    vec2 random_direction = smoothRandom2(time_f) * 0.5;
+    float expand = 0.5 + 0.5 * sin(time_f * 2.0);
     vec2 spiral_uv = uv * expand + random_direction;
-    float angle = atan(spiral_uv.y + wave, spiral_uv.x) + time * 2.0;
+    float angle = atan(spiral_uv.y + wave, spiral_uv.x) + time_f * 2.0;
     vec3 rainbow_color = rainbow(angle / (2.0 * 3.14159));
-    vec4 texCol = texture(textTexture, TexCoord);
-    vec3 blended = mix(texCol.rgb, rainbow_color, 0.5);
-    float time_t = mod(time, 30.0);
+    vec4 original_color = texture(samp, tc);
+    vec3 blended_color = mix(original_color.rgb, rainbow_color, 0.5);
+    float time_t = mod(time_f, 30.0);
 
     vec2 normPos = (gl_FragCoord.xy / iResolution.xy) * 2.0 - 1.0;
     float dist = length(normPos);
-    float phase = sin(dist * 10.0 - time * 4.0);
-    vec2 TexCoordAdjusted = TexCoord + (normPos * 0.305 * phase);
-    vec4 adjusted_texCol = texture(textTexture, TexCoordAdjusted);
+    float phase = sin(dist * 10.0 - time_f * 4.0);
+    vec2 tcAdjusted = tc + (normPos * 0.305 * phase);
+    vec4 adjusted_color = texture(samp, tcAdjusted);
 
-    vec3 final_color = mix(blended, adjusted_texCol.rgb, 0.5);
-    vec3 finalCol = applyColorAdjustments(sin(final_color * time_t));
-    FragColor = vec4(finalCol, texCol.a);
+    vec3 final_color = mix(blended_color, adjusted_color.rgb, 0.5);
+
+    color = vec4(sin(final_color * time_t), original_color.a);
 }

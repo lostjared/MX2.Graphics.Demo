@@ -1,87 +1,41 @@
-#version 300 es
-precision highp float;
-out vec4 FragColor;
-in vec2 TexCoord;
+#version 330 core
+out vec4 color;
+in vec2 tc;
 
-uniform sampler2D textTexture;
+uniform sampler2D samp;
 uniform float time_f;
 uniform vec2 iResolution;
-uniform float iSpeed;
-uniform float iAmplitude;
-uniform float iFrequency;
-uniform float iBrightness;
-uniform float iContrast;
-uniform float iSaturation;
-uniform float iHueShift;
-uniform float iZoom;
-uniform float iRotation;
-uniform float iQuality;
-uniform float iDebugMode;
-
-
-vec3 adjustBrightness(vec3 col, float b) {
-    return col * b;
-}
-
-vec3 adjustContrast(vec3 col, float c) {
-    return (col - 0.5) * c + 0.5;
-}
-
-vec3 adjustSaturation(vec3 col, float s) {
-    float gray = dot(col, vec3(0.299, 0.587, 0.114));
-    return mix(vec3(gray), col, s);
-}
-
-vec3 rotateHue(vec3 col, float angle) {
-    float U = cos(angle);
-    float W = sin(angle);
-    mat3 R = mat3(
-        0.299 + 0.701*U + 0.168*W,
-        0.587 - 0.587*U + 0.330*W,
-        0.114 - 0.114*U - 0.497*W,
-        0.299 - 0.299*U - 0.328*W,
-        0.587 + 0.413*U + 0.035*W,
-        0.114 - 0.114*U + 0.292*W,
-        0.299 - 0.300*U + 1.250*W,
-        0.587 - 0.588*U - 1.050*W,
-        0.114 + 0.886*U - 0.203*W
-    );
-    return clamp(R * col, 0.0, 1.0);
-}
-
-vec3 applyColorAdjustments(vec3 col) {
-    col = adjustBrightness(col, iBrightness);
-    col = adjustContrast(col, iContrast);
-    col = adjustSaturation(col, iSaturation);
-    col = rotateHue(col, iHueShift);
-    return clamp(col, 0.0, 1.0);
-}
-
-vec2 applyZoomRotation(vec2 uv, vec2 center) {
-    vec2 p = uv - center;
-    float c = cos(iRotation);
-    float s = sin(iRotation);
-    p = mat2(c, -s, s, c) * p;
-    float z = max(abs(iZoom), 0.001);
-    p /= z;
-    return p + center;
-}
+uniform float amp_peak;
+uniform float amp_rms;
+uniform float amp_smooth;
+uniform float amp_low;
+uniform float amp_mid;
+uniform float amp_high;
+uniform float iamp;
 
 void main(void) {
-    float time = time_f * iSpeed;
-    vec2 uv = TexCoord - vec2(0.5);
+    vec2 uv = tc - vec2(0.5);
     float radius = length(uv) * 2.0;
 
     float frequency = 10.0;
     float amplitude = 0.1;
 
-    float pulsate = amplitude * sin(time * frequency);
+    float audioAmp = amplitude + amp_low * 0.3;
+float pulsate = audioAmp * sin(time_f * frequency);
 float adjustedRadius = clamp(radius + pulsate, 0.0, 1.0);
 
     vec3 neonBlue = vec3(0.0, 1.0, 1.0);
     vec3 neonPink = vec3(1.0, 0.0, 0.5);
     vec3 gradientColor = mix(neonBlue, neonPink, adjustedRadius);\
-    vec4 texColor = texture(textTexture, TexCoord);
+    vec4 texColor = texture(samp, tc);
     vec3 finalColor = texColor.rgb * gradientColor;
-    FragColor = vec4(finalColor, texColor.a);
+
+    // --- Audio Reactivity: direct output modulation ---
+    float _ab = clamp(amp_peak, 0.0, 1.0);
+    float _abass = clamp(amp_low, 0.0, 1.0);
+    finalColor *= 1.0 + _ab * 0.6;
+    finalColor = mix(finalColor, finalColor * vec3(1.0 + _abass * 0.3, 1.0 - _abass * 0.15, 1.0 + clamp(amp_high, 0.0, 1.0) * 0.25), _ab);
+    // --- End Audio Reactivity ---
+
+    color = vec4(finalColor, texColor.a);
 }

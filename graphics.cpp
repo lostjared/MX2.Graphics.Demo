@@ -18,9 +18,12 @@ GPL v3
 #include "loadpng.hpp"
 #include <SDL2/SDL_image.h>
 #include <algorithm>
+#include <cctype>
 #include <cstdint>
 #include <fstream>
 #include <iostream>
+#include <regex>
+#include <set>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -42,6 +45,273 @@ struct ShaderInfo {
     std::string name;
     std::string source;
 };
+
+namespace {
+
+    std::string trim(const std::string &value) {
+        const size_t first = value.find_first_not_of(" \t\r\n");
+        if (first == std::string::npos) {
+            return "";
+        }
+        const size_t last = value.find_last_not_of(" \t\r\n");
+        return value.substr(first, last - first + 1);
+    }
+
+    void replaceAll(std::string &source, const std::string &from, const std::string &to) {
+        size_t position = 0;
+        while ((position = source.find(from, position)) != std::string::npos) {
+            source.replace(position, from.size(), to);
+            position += to.size();
+        }
+    }
+
+    void normalizeFloatLiteralOperands(std::string &source) {
+        const auto isIdentifierCharacter = [](char c) {
+            return std::isalnum(static_cast<unsigned char>(c)) || c == '_';
+        };
+        const auto skipSpaces = [&source](size_t &position) {
+            while (position < source.size() && std::isspace(static_cast<unsigned char>(source[position]))) {
+                ++position;
+            }
+        };
+        const auto hasBareIntegerAfter = [&](const std::string &name) {
+            size_t position = 0;
+            while ((position = source.find(name, position)) != std::string::npos) {
+                const size_t nameEnd = position + name.size();
+                if ((position > 0 && isIdentifierCharacter(source[position - 1])) ||
+                    (nameEnd < source.size() && isIdentifierCharacter(source[nameEnd]))) {
+                    position = nameEnd;
+                    continue;
+                }
+                size_t cursor = nameEnd;
+                skipSpaces(cursor);
+                if (cursor < source.size() && source[cursor] == '.') {
+                    ++cursor;
+                    while (cursor < source.size() && isIdentifierCharacter(source[cursor]))
+                        ++cursor;
+                } else if (cursor < source.size() && source[cursor] == '[') {
+                    const size_t close = source.find(']', cursor + 1);
+                    if (close == std::string::npos)
+                        return false;
+                    cursor = close + 1;
+                }
+                skipSpaces(cursor);
+                if (cursor >= source.size() || std::string("+-*/<>=!").find(source[cursor]) == std::string::npos) {
+                    position = nameEnd;
+                    continue;
+                }
+                ++cursor;
+                if (cursor < source.size() && source[cursor] == '=')
+                    ++cursor;
+                skipSpaces(cursor);
+                if (cursor < source.size() && source[cursor] == '-')
+                    ++cursor;
+                const size_t numberStart = cursor;
+                while (cursor < source.size() && std::isdigit(static_cast<unsigned char>(source[cursor])))
+                    ++cursor;
+                if (cursor > numberStart && (cursor >= source.size() || source[cursor] != '.'))
+                    return true;
+                position = nameEnd;
+            }
+            return false;
+        };
+        const auto hasBareIntegerBefore = [&](const std::string &name) {
+            size_t position = 0;
+            while ((position = source.find(name, position)) != std::string::npos) {
+                const size_t nameEnd = position + name.size();
+                if ((position > 0 && isIdentifierCharacter(source[position - 1])) ||
+                    (nameEnd < source.size() && isIdentifierCharacter(source[nameEnd]))) {
+                    position = nameEnd;
+                    continue;
+                }
+                size_t cursor = position;
+                while (cursor > 0 && std::isspace(static_cast<unsigned char>(source[cursor - 1])))
+                    --cursor;
+                if (cursor == 0 || std::string("+-*/<>=!").find(source[cursor - 1]) == std::string::npos) {
+                    position = nameEnd;
+                    continue;
+                }
+                --cursor;
+                if (cursor > 0 && source[cursor - 1] == '=')
+                    --cursor;
+                while (cursor > 0 && std::isspace(static_cast<unsigned char>(source[cursor - 1])))
+                    --cursor;
+                const size_t numberEnd = cursor;
+                while (cursor > 0 && std::isdigit(static_cast<unsigned char>(source[cursor - 1])))
+                    --cursor;
+                if (cursor < numberEnd &&
+                    (cursor == 0 || (source[cursor - 1] != '.' && !isIdentifierCharacter(source[cursor - 1]))))
+                    return true;
+                position = nameEnd;
+            }
+            return false;
+        };
+
+        static const std::regex floatHelperPattern(
+            R"(\b(mod|pingPong)\s*\(([^,\r\n]+),\s*(-?[0-9]+)\s*\))");
+        bool needsConversion = std::regex_search(source, floatHelperPattern);
+        for (const char *name : {"tc", "time_f", "iTime", "iResolution", "iMouse", "color"}) {
+            needsConversion = needsConversion || hasBareIntegerAfter(name) || hasBareIntegerBefore(name);
+        }
+        if (!needsConversion) {
+            return;
+        }
+
+        std::set<std::string> floatNames = {
+            "tc", "TexCoord", "time_f", "iTime", "iResolution", "iMouse", "mxOutputColor"};
+        static const std::regex declarationPattern(
+            R"(\b(?:float|vec[234])\s+([A-Za-z_][A-Za-z0-9_]*)\b(?!\s*\())");
+        for (std::sregex_iterator it(source.begin(), source.end(), declarationPattern), end; it != end; ++it) {
+            floatNames.insert((*it)[1].str());
+        }
+
+        struct LiteralReplacement {
+            size_t position;
+            size_t length;
+            std::string value;
+        };
+        std::vector<LiteralReplacement> replacements;
+        static const std::regex floatOnLeftPattern(
+            R"(\b([A-Za-z_][A-Za-z0-9_]*)(?:\s*(?:\.[A-Za-z]+|\[[^\]\r\n]+\]))?\s*(?:\*=|/=|\+=|-=|[+*/<>]=?|==|!=|-)\s*(-?[0-9]+)(?![.A-Za-z0-9_]))");
+        for (std::sregex_iterator it(source.begin(), source.end(), floatOnLeftPattern), end; it != end; ++it) {
+            if (floatNames.contains((*it)[1].str())) {
+                replacements.push_back({static_cast<size_t>((*it).position(2)),
+                                        static_cast<size_t>((*it).length(2)), (*it)[2].str() + ".0"});
+            }
+        }
+
+        static const std::regex floatOnRightPattern(
+            R"((^|[^A-Za-z0-9_.])(-?[0-9]+)\s*(?:[+*/<>]=?|==|!=|-)\s*([A-Za-z_][A-Za-z0-9_]*)(?:\s*(?:\.[A-Za-z]+|\[[^\]\r\n]+\]))?)");
+        for (std::sregex_iterator it(source.begin(), source.end(), floatOnRightPattern), end; it != end; ++it) {
+            if (floatNames.contains((*it)[3].str())) {
+                replacements.push_back({static_cast<size_t>((*it).position(2)),
+                                        static_cast<size_t>((*it).length(2)), (*it)[2].str() + ".0"});
+            }
+        }
+        std::sort(replacements.begin(), replacements.end(),
+                  [](const LiteralReplacement &left, const LiteralReplacement &right) {
+                      return left.position > right.position;
+                  });
+        size_t lastPosition = std::string::npos;
+        for (const auto &replacement : replacements) {
+            if (replacement.position != lastPosition) {
+                source.replace(replacement.position, replacement.length, replacement.value);
+                lastPosition = replacement.position;
+            }
+        }
+
+        // These helpers take floats, but many desktop shaders pass bare integer literals.
+        source = std::regex_replace(
+            source, floatHelperPattern, "$1($2, $3.0)");
+        static const std::regex constructorArithmeticPattern(
+            R"(((?:float|vec[234])\s*\([^;\r\n]+\))\s*([+*/-])\s*(-?[0-9]+)(?![.A-Za-z0-9_]))");
+        source = std::regex_replace(
+            source, constructorArithmeticPattern,
+            "$1 $2 $3.0");
+    }
+
+    void makeFragmentOutputWebGLSafe(std::string &source) {
+        static const std::regex outputPattern(R"(\bout\s+vec4\s+([A-Za-z_][A-Za-z0-9_]*)\s*;)");
+        std::smatch outputMatch;
+        if (!std::regex_search(source, outputMatch, outputPattern)) {
+            return;
+        }
+
+        const std::string outputName = outputMatch[1].str();
+        bool hasDynamicOutputIndex = false;
+        size_t indexPosition = 0;
+        while ((indexPosition = source.find(outputName, indexPosition)) != std::string::npos) {
+            size_t cursor = indexPosition + outputName.size();
+            while (cursor < source.size() && std::isspace(static_cast<unsigned char>(source[cursor])))
+                ++cursor;
+            if (cursor < source.size() && source[cursor] == '[') {
+                ++cursor;
+                while (cursor < source.size() && std::isspace(static_cast<unsigned char>(source[cursor])))
+                    ++cursor;
+                if (cursor < source.size() && (std::isalpha(static_cast<unsigned char>(source[cursor])) ||
+                                               source[cursor] == '_')) {
+                    hasDynamicOutputIndex = true;
+                    break;
+                }
+            }
+            indexPosition += outputName.size();
+        }
+        if (!hasDynamicOutputIndex) {
+            return;
+        }
+        source.replace(static_cast<size_t>(outputMatch.position()), static_cast<size_t>(outputMatch.length()),
+                       "out vec4 mxWebGLFragColor;\nvec4 mxOutputColor;");
+        source = std::regex_replace(source, std::regex("\\b" + outputName + "\\b"), "mxOutputColor");
+        // The replacement above cannot match outputName inside the generated names
+        // because both adjacent characters are identifier characters.
+        source = std::regex_replace(source,
+                                    std::regex(R"(\bvoid\s+main\s*\(\s*(?:void)?\s*\))"),
+                                    "void mxShaderMain()");
+        source += "\nvoid main() {\n    mxShaderMain();\n    mxWebGLFragColor = mxOutputColor;\n}\n";
+    }
+
+    std::string convertFragmentShaderToWebGL(std::string source) {
+        if (source.size() >= 3 && static_cast<unsigned char>(source[0]) == 0xef &&
+            static_cast<unsigned char>(source[1]) == 0xbb && static_cast<unsigned char>(source[2]) == 0xbf) {
+            source.erase(0, 3);
+        }
+
+        const size_t versionStart = source.find("#version");
+        if (versionStart == std::string::npos) {
+            source.insert(0, "#version 300 es\n");
+        } else {
+            if (versionStart > 0) {
+                source.erase(0, versionStart);
+            }
+            const size_t versionEnd = source.find_first_of("\r\n");
+            source.replace(0,
+                           versionEnd == std::string::npos ? source.size() : versionEnd,
+                           "#version 300 es");
+        }
+
+        const size_t headerEnd = source.find('\n', source.find("#version"));
+        if (source.find("precision ") == std::string::npos) {
+            source.insert(headerEnd == std::string::npos ? source.size() : headerEnd + 1,
+                          "precision highp float;\nprecision highp int;\n");
+        }
+
+        source = std::regex_replace(source, std::regex(R"(\bin\s+vec2\s+tc\s*;)"),
+                                    "in vec2 TexCoord;\n#define tc TexCoord");
+        replaceAll(source, "texture2D(", "texture(");
+        replaceAll(source, "texture1D(", "texture(");
+
+        // Uniform initializers are illegal in GLSL ES. These values were being
+        // used as constants by the desktop shaders and are not app-controlled.
+        source = std::regex_replace(
+            source,
+            std::regex(R"(\buniform\s+(float|vec[234])\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*([^;]+);)"),
+            "const $1 $2 = $3;");
+
+        if (source.find("gl_FragColor") != std::string::npos) {
+            source.insert(source.find('\n', source.find("#version")) + 1, "out vec4 mxFragColor;\n");
+            replaceAll(source, "gl_FragColor", "mxFragColor");
+        }
+        makeFragmentOutputWebGLSafe(source);
+        normalizeFloatLiteralOperands(source);
+        return source;
+    }
+
+    bool usesUnsupportedRuntimeInputs(const std::string &filename, const std::string &source) {
+        if (filename.find("cache") != std::string::npos || filename.find("audio") != std::string::npos ||
+            source.find("sampler1D") != std::string::npos || source.find("spectrum") != std::string::npos ||
+            source.find("audioData") != std::string::npos || source.find("audio_data") != std::string::npos ||
+            source.find("fft") != std::string::npos || source.find("FFT") != std::string::npos) {
+            return true;
+        }
+
+        static const std::regex audioUniformPattern(
+            R"(\buniform\s+float\s+[^;]*\b(?:amp|amp_peak|amp_rms|amp_smooth|amp_low|amp_mid|amp_high|iamp)\b[^;]*;)");
+        static const std::regex cachedTexturePattern(
+            R"(\buniform\s+sampler2D\s+[^;]*(?:\bsamp[1-9][0-9]*\b|\btextures\s*\[)[^;]*;)");
+        return std::regex_search(source, audioUniformPattern) || std::regex_search(source, cachedTexturePattern);
+    }
+
+} // namespace
 
 const char *sz3DVertex = R"(#version 300 es
 layout (location = 0) in vec3 position;
@@ -199,33 +469,36 @@ class ShaderLibrary {
     ShaderLibrary() = default;
     std::vector<std::string> tokenize(const std::string &input) {
         std::vector<std::string> values;
-        size_t index = 0;
-        std::string token;
-        while (index < input.size()) {
-            char c = input.at(index);
-            if (c == '\n') {
-                values.push_back(token);
-                token = "";
-                index++;
-                continue;
-            } else {
-                token += input.at(index);
-                index++;
+        std::istringstream stream(input);
+        std::string line;
+        while (std::getline(stream, line)) {
+            line = trim(line);
+            if (!line.empty() && line.front() != '#') {
+                values.push_back(line);
             }
         }
         return values;
     }
 
     void init(gl::GLWindow *win, const std::string &filename) {
-        std::string value = mx::readFileToString(filename);
-        char c = 0;
-        int index = 0;
-        std::string token;
+        const std::string cacheIndex = win->util.getFilePath("data/shaders/webgl_cache/index.txt");
+        std::string value = mx::readFileToString(cacheIndex);
+        const bool useCache = !value.empty();
+        if (!useCache) {
+            value = mx::readFileToString(filename);
+        }
         std::vector<std::string> values = tokenize(value);
         for (size_t i = 0; i < values.size(); ++i) {
-            auto shader_contents = mx::readFileToString(win->util.getFilePath("data/shaders/" + values[i]));
-            if (!shader_contents.empty())
+            const std::string directory = useCache ? "data/shaders/webgl_cache/" : "data/shaders/";
+            auto shader_contents = mx::readFileToString(win->util.getFilePath(directory + values[i]));
+            if (shader_contents.empty()) {
+                continue;
+            }
+            if (useCache) {
                 shaders.push_back(std::make_pair(values[i], shader_contents));
+            } else if (!usesUnsupportedRuntimeInputs(values[i], shader_contents)) {
+                shaders.push_back(std::make_pair(values[i], convertFragmentShaderToWebGL(shader_contents)));
+            }
         }
     }
     void print() {
@@ -427,10 +700,25 @@ class About : public gl::GLObject {
         shader->setUniform("iDebugMode", iDebugMode);
         shader->setUniform("iQuality", iQuality);
         shader->setUniform("alpha", 1.0f);
-        shader->setUniform("amp", 0.5f);
-        shader->setUniform("uamp", 0.5f);
+        updateCompatibilityUniforms(shader);
         shader->setUniform("mv_matrix", glm::mat4(1.0f));
         shader->setUniform("proj_matrix", glm::mat4(1.0f));
+    }
+
+    void updateCompatibilityUniforms(gl::ShaderProgram *shader) {
+        shader->setUniform("textTexture", 0);
+        shader->setUniform("samp", 0);
+        shader->setUniform("mat_samp", 0);
+
+        shader->setUniform("amp", audioLevel);
+        shader->setUniform("amp_peak", std::max(audioLevel, beatValue));
+        shader->setUniform("amp_rms", audioLevel);
+        shader->setUniform("amp_smooth", audioLevel);
+        shader->setUniform("amp_low", beatValue);
+        shader->setUniform("amp_mid", (audioLevel + beatValue) * 0.5f);
+        shader->setUniform("amp_high", audioLevel * (1.0f - 0.35f * beatValue));
+        shader->setUniform("iamp", audioLevel);
+        shader->setUniform("uamp", audioLevel);
     }
 
     int getShaderIndex() const { return currentShaderIndex; }
@@ -539,6 +827,9 @@ class About : public gl::GLObject {
 
 #ifdef __EMSCRIPTEN__
             EM_ASM({
+                if (typeof window.beginShaderCompilation === 'function') {
+                    window.beginShaderCompilation(UTF8ToString($0));
+                }
                 if (typeof window.addLoadingMessage === 'function') {
                     var name = UTF8ToString($0);
                     var idx = $1;
@@ -562,6 +853,9 @@ class About : public gl::GLObject {
 
 #ifdef __EMSCRIPTEN__
             EM_ASM({
+                if (typeof window.finishShaderCompilation === 'function') {
+                    window.finishShaderCompilation(UTF8ToString($0), UTF8ToString($3), $1 !== 0, $2 !== 0);
+                }
                 if (typeof window.addLoadingMessage === 'function') {
                     var name = UTF8ToString($0);
                     var ok = $1;
@@ -573,7 +867,7 @@ class About : public gl::GLObject {
                     } else {
                         window.addLoadingMessage('     ' + name + ' - FAILED', 'error');
                     }
-                } }, info.name.c_str(), success ? 1 : 0, success2 ? 1 : 0);
+                } }, info.name.c_str(), success ? 1 : 0, success2 ? 1 : 0, info.source.c_str());
 #endif
 
             if (success && success2) {
@@ -619,6 +913,9 @@ class About : public gl::GLObject {
             }
             if (typeof window.onAllShadersCompiled === 'function') {
                 window.onAllShadersCompiled($0);
+            }
+            if (typeof window.finalizeShaderFailureLog === 'function') {
+                window.finalizeShaderFailureLog();
             } }, (int)shaders.size());
 #endif
 
@@ -1168,6 +1465,7 @@ class About : public gl::GLObject {
             shaders2[currentShaderIndex]->setUniform("uamp", 0.5f);
             shaders2[currentShaderIndex]->setUniform("textTexture", 0);
         }
+        updateCompatibilityUniforms(is3d ? shaders[currentShaderIndex].get() : shaders2[currentShaderIndex].get());
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, texture);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
@@ -1410,12 +1708,16 @@ class About : public gl::GLObject {
     }
 
     std::string compileCustomShader(const std::string &fragmentSource, gl::GLWindow *win) {
+        if (usesUnsupportedRuntimeInputs("custom", fragmentSource)) {
+            return "ERROR: Shader uses unsupported audio, FFT, spectrum, or texture-cache inputs.";
+        }
+        const std::string convertedSource = convertFragmentShaderToWebGL(fragmentSource);
         auto customShader1 = std::make_unique<gl::ShaderProgram>();
         auto customShader2 = std::make_unique<gl::ShaderProgram>();
-        if (!customShader1->loadProgramFromText(sz3DVertex, fragmentSource.c_str())) {
+        if (!customShader1->loadProgramFromText(sz3DVertex, convertedSource.c_str())) {
             return "ERROR: Failed to create shader program.";
         }
-        if (!customShader2->loadProgramFromText(gl::vSource, fragmentSource.c_str())) {
+        if (!customShader2->loadProgramFromText(gl::vSource, convertedSource.c_str())) {
             return "ERROR: Failed to create shader program.";
         }
 
