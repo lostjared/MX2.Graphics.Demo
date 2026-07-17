@@ -53,7 +53,7 @@ Write and compile your own GLSL ES 3.0 fragment shaders with:
 ## Installation
 
 ### Web Version (Emscripten)
-build and install MX2 with Emscripten: https://github.com/lostjared/libacmx2/
+build and install MX2 with Emscripten: https://github.com/lostjared/libmx2/
 then
 
 ```bash
