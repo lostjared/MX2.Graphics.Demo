@@ -1069,20 +1069,34 @@
 
         #multipass-footer {
             display: flex;
-            gap: 10px;
+            gap: 0;
             padding: 15px 20px;
             background: #1a1a1a;
             border-top: 1px solid #444;
-            justify-content: space-between;
+            justify-content: center;
+            flex-wrap: nowrap;
         }
 
         #multipass-footer button {
-            padding: 10px 20px;
+            flex: 1 1 0;
+            min-width: 0;
+            padding: 10px 8px;
             border: none;
-            border-radius: 6px;
+            border-right: 1px solid rgba(255, 255, 255, 0.22);
+            border-radius: 0;
             cursor: pointer;
-            font-size: 14px;
+            font-size: 12px;
+            line-height: 1.2;
             transition: all 0.2s;
+        }
+
+        #multipass-footer button:first-child {
+            border-radius: 6px 0 0 6px;
+        }
+
+        #multipass-footer button:last-child {
+            border-right: none;
+            border-radius: 0 6px 6px 0;
         }
 
         #enable-multipass-btn {
@@ -1109,6 +1123,179 @@
 
         #clear-passes-btn:hover {
             background: #e64a19;
+        }
+
+        #copy-chain-btn {
+            background: #2196F3;
+            color: white;
+        }
+
+        #copy-chain-btn:hover {
+            background: #1976D2;
+        }
+
+        #download-chain-btn {
+            background: #00897B;
+            color: white;
+        }
+
+        #download-chain-btn:hover {
+            background: #00695C;
+        }
+
+        #import-chain-btn {
+            background: #9C27B0;
+            color: white;
+        }
+
+        #import-chain-btn:hover {
+            background: #7B1FA2;
+        }
+
+        #chain-import-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 12000;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+            box-sizing: border-box;
+            background: rgba(0, 0, 0, 0.75);
+        }
+
+        #chain-import-overlay.visible {
+            display: flex;
+        }
+
+        #chain-import-modal {
+            width: min(600px, 94vw);
+            max-height: 90dvh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            color: #fff;
+            background: #1e1e24;
+            border: 2px solid #9C27B0;
+            border-radius: 12px;
+            box-shadow: 0 12px 45px rgba(0, 0, 0, 0.75);
+        }
+
+        #chain-import-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 18px;
+            background: linear-gradient(135deg, #9C27B0, #6A1B9A);
+        }
+
+        #chain-import-header h2 {
+            margin: 0;
+            font-size: 18px;
+        }
+
+        #close-chain-import-btn {
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: none;
+            border-radius: 50%;
+            color: #fff;
+            background: #f44336;
+            cursor: pointer;
+        }
+
+        #chain-import-body {
+            padding: 18px;
+            overflow-y: auto;
+        }
+
+        #chain-import-body p {
+            margin: 0 0 12px;
+            color: #bbb;
+            font-size: 13px;
+            line-height: 1.45;
+        }
+
+        #chain-import-file-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+
+        #choose-chain-file-btn {
+            padding: 9px 14px;
+            border: none;
+            border-radius: 6px;
+            color: #fff;
+            background: #00897B;
+            cursor: pointer;
+        }
+
+        #chain-import-file-name {
+            min-width: 0;
+            overflow: hidden;
+            color: #aaa;
+            font-size: 12px;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        #chain-import-code {
+            width: 100%;
+            min-height: 180px;
+            box-sizing: border-box;
+            padding: 12px;
+            resize: vertical;
+            color: #8BC34A;
+            background: #0d0d0d;
+            border: 1px solid #555;
+            border-radius: 6px;
+            font: 13px/1.45 monospace;
+        }
+
+        #chain-import-code:focus {
+            outline: none;
+            border-color: #BA68C8;
+        }
+
+        #chain-import-status {
+            min-height: 18px;
+            margin-top: 10px;
+            color: #aaa;
+            font-size: 12px;
+        }
+
+        #chain-import-status.error {
+            color: #ff6b6b;
+        }
+
+        #chain-import-footer {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            padding: 14px 18px;
+            background: #17171b;
+            border-top: 1px solid #444;
+        }
+
+        #chain-import-footer button {
+            padding: 10px 18px;
+            border: none;
+            border-radius: 6px;
+            color: #fff;
+            cursor: pointer;
+        }
+
+        #cancel-chain-import-btn {
+            background: #555;
+        }
+
+        #load-chain-import-btn {
+            background: #4CAF50;
         }
 
         #multipass-overlay {
@@ -1581,6 +1768,7 @@
 
 
 body.mobile-mode {
+    --mobile-controls-height: 140px;
     touch-action: none;
     -webkit-touch-callout: none;
     -webkit-user-select: none;
@@ -1592,7 +1780,7 @@ body.mobile-mode #canvas-container {
     top: 0;
     left: 0;
     right: 0;
-    bottom: 140px;
+    bottom: var(--mobile-controls-height);
     height: auto;
     width: 100%;
 }
@@ -1712,7 +1900,7 @@ body.mobile-mode #mobile-controls {
     top: 0;
     left: 0;
     right: 0;
-    bottom: 140px;
+    bottom: var(--mobile-controls-height, 140px);
     z-index: 50;
     touch-action: none;
 }
@@ -1802,14 +1990,15 @@ body.mobile-mode #multipass-modal .shader-pass-item {
 }
 
 body.mobile-mode #multipass-modal #multipass-footer {
-    flex-direction: column;
-    gap: 8px;
+    flex-direction: row;
+    gap: 0;
+    padding: 10px;
 }
 
 body.mobile-mode #multipass-modal #multipass-footer button {
-    width: 100%;
-    padding: 14px;
-    font-size: 16px;
+    width: auto;
+    padding: 10px 4px;
+    font-size: 11px;
 }
 
 body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
@@ -1859,16 +2048,10 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
 }
 
 @media (max-height: 500px) and (orientation: landscape) {
-    body.mobile-mode #canvas-container {
-        bottom: 90px;
-    }
-    
     body.mobile-mode #mobile-controls {
         padding: 5px 10px 8px;
-    }
-    
-    body.mobile-mode #touch-overlay {
-        bottom: 90px;
+        max-height: 42dvh;
+        overflow-y: auto;
     }
     
     .mobile-btn {
@@ -1883,6 +2066,36 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
     
     .mobile-row {
         gap: 5px;
+    }
+
+    body.mobile-mode.recording-active #mobile-controls,
+    body.mobile-mode.recording-active #mobile-controls.minimized {
+        max-height: none;
+        overflow: visible;
+        align-items: flex-end;
+        padding: 5px max(10px, env(safe-area-inset-right)) max(5px, env(safe-area-inset-bottom)) 10px;
+        background: linear-gradient(to top, rgba(0,0,0,0.88), rgba(0,0,0,0.45));
+    }
+
+    body.mobile-mode.recording-active #mobile-controls .mobile-row,
+    body.mobile-mode.recording-active #mobile-shader-info {
+        display: none;
+    }
+
+    body.mobile-mode.recording-active #mobile-controls .mobile-row:nth-child(3) {
+        display: flex;
+        width: 100%;
+        justify-content: flex-end;
+    }
+
+    body.mobile-mode.recording-active #mobile-controls .mobile-row:nth-child(3) > * {
+        display: none;
+    }
+
+    body.mobile-mode.recording-active #mobile-controls #mobile-record-btn {
+        display: block;
+        min-width: 110px;
+        padding: 10px 18px;
     }
 }
 
@@ -1931,7 +2144,7 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
 
 @media (orientation: landscape) and (max-height: 500px) {
     body.mobile-mode #landscape-blocker {
-        display: flex;
+        display: none;
     }
 }
     </style>
@@ -1970,7 +2183,6 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
             <option value="24">24fps</option>
             <option value="30">30fps</option>
             <option value="60" selected>60fps</option>
-            <option value="120">120fps</option>
         </select>
         <select id="record-quality" style="padding: 6px 8px; font-size: 12px; background: #333; color: #fff; border: 1px solid #555; border-radius: 4px; cursor: pointer; min-width: 76px;" title="Recording Quality">
             <option value="balanced" selected>Balanced</option>
@@ -2115,7 +2327,6 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
                 <option value="24">24</option>
                 <option value="30">30</option>
                 <option value="60" selected>60</option>
-                <option value="120">120</option>
             </select>
             <select id="mobile-record-quality" class="mobile-btn" style="padding: 10px 8px; min-width: 72px; font-size: 12px;">
                 <option value="balanced" selected>Bal</option>
@@ -2429,8 +2640,34 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
             </div>
         </div>
         <div id="multipass-footer">
-            <button id="clear-passes-btn">🗑️ Clear All</button>
-            <button id="enable-multipass-btn">▶ Enable Multipass</button>
+            <button id="clear-passes-btn">🗑️ Clear</button>
+            <button id="copy-chain-btn">📋 Copy</button>
+            <button id="download-chain-btn">💾 Download</button>
+            <button id="import-chain-btn">📥 Import</button>
+            <button id="enable-multipass-btn">▶ Enable</button>
+        </div>
+    </div>
+
+    <div id="chain-import-overlay">
+        <div id="chain-import-modal" role="dialog" aria-modal="true" aria-labelledby="chain-import-title">
+            <div id="chain-import-header">
+                <h2 id="chain-import-title">📥 Import Multipass Chain</h2>
+                <button id="close-chain-import-btn" type="button" aria-label="Close">✕</button>
+            </div>
+            <div id="chain-import-body">
+                <p>Paste a chain code copied from ACMX2. Loading replaces the current multipass chain.</p>
+                <div id="chain-import-file-row">
+                    <input id="chain-import-file" type="file" accept=".txt,.json,text/plain,application/json" hidden>
+                    <button id="choose-chain-file-btn" type="button">📄 Load Text File</button>
+                    <span id="chain-import-file-name">No file selected</span>
+                </div>
+                <textarea id="chain-import-code" spellcheck="false" autocomplete="off" placeholder='{"v":1,"e":1,"p":[["example.glsl",0]]}'></textarea>
+                <div id="chain-import-status" role="status" aria-live="polite"></div>
+            </div>
+            <div id="chain-import-footer">
+                <button id="cancel-chain-import-btn" type="button">Cancel</button>
+                <button id="load-chain-import-btn" type="button">Load Chain</button>
+            </div>
         </div>
     </div>
 
@@ -3114,11 +3351,32 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
         // Toggle controls minimize/maximize (mobile)
         const mobileToggleBtn = document.getElementById('mobile-toggle-controls');
         const mobileControlsDiv = document.getElementById('mobile-controls');
+        let mobileLayoutFrame = null;
+
+        function updateMobileLayoutInsets() {
+            if (mobileLayoutFrame) cancelAnimationFrame(mobileLayoutFrame);
+            mobileLayoutFrame = requestAnimationFrame(() => {
+                mobileLayoutFrame = null;
+                if (!document.body.classList.contains('mobile-mode') || !mobileControlsDiv) {
+                    document.body.style.removeProperty('--mobile-controls-height');
+                    return;
+                }
+                const controlsHeight = Math.ceil(mobileControlsDiv.getBoundingClientRect().height);
+                document.body.style.setProperty('--mobile-controls-height', `${controlsHeight}px`);
+                resizeCanvas();
+            });
+        }
+
+        if (typeof ResizeObserver !== 'undefined' && mobileControlsDiv) {
+            new ResizeObserver(updateMobileLayoutInsets).observe(mobileControlsDiv);
+        }
+
         if (mobileToggleBtn) {
             mobileToggleBtn.addEventListener('click', () => {
                 mobileControlsDiv.classList.toggle('minimized');
                 mobileToggleBtn.textContent = mobileControlsDiv.classList.contains('minimized') ? '⇄' : '⇅';
                 localStorage.setItem('mobileControlsMinimized', mobileControlsDiv.classList.contains('minimized'));
+                updateMobileLayoutInsets();
             });
             
             // Restore minimized state
@@ -4412,20 +4670,12 @@ void main(void) {
             const containerHeight = container.clientHeight;
             const isMobile = window.innerWidth <= 768;
             
-            // On mobile, use window dimensions for higher quality, not just container
+            // The container already excludes the measured mobile control tray. Use
+            // its real dimensions so the canvas never renders behind the menu.
             let targetWidth = Math.floor(containerWidth);
             let targetHeight = Math.floor(containerHeight);
-            
-            if (isMobile) {
-                // Use full viewport minus controls
-                const vw = window.innerWidth;
-                const vh = window.innerHeight;
-                // Account for mobile controls (roughly 60-100px at bottom depending on orientation)
-                const controlHeight = window.innerWidth > window.innerHeight ? 60 : 100;
-                
-                targetWidth = vw;
-                targetHeight = vh - controlHeight;
-            }
+
+            if (targetWidth < 1 || targetHeight < 1) return;
             
             const resolutionMultiplier = isMobile ? 2.0 : 1.0;
 
@@ -4911,6 +5161,7 @@ void main(void) {
 
         function setRecordingButtonState(recording) {
             const mobileRecordBtn = document.getElementById('mobile-record-btn');
+            document.body.classList.toggle('recording-active', recording);
 
             if (recording) {
                 recordBtn.classList.add('recording');
@@ -4926,6 +5177,9 @@ void main(void) {
                     mobileRecordBtn.textContent = '🔴';
                     mobileRecordBtn.style.background = 'linear-gradient(135deg, #673AB7 0%, #512DA8 100%)';
                 }
+            }
+            if (typeof updateMobileLayoutInsets === 'function') {
+                updateMobileLayoutInsets();
             }
         }
 
@@ -4974,14 +5228,14 @@ void main(void) {
             ];
 
             const webmTypes = hasAudio ? [
-                'video/webm;codecs=vp9,opus',
                 'video/webm;codecs=vp8,opus',
-                'video/webm;codecs=vp9',
+                'video/webm;codecs=vp9,opus',
                 'video/webm;codecs=vp8',
+                'video/webm;codecs=vp9',
                 'video/webm'
             ] : [
-                'video/webm;codecs=vp9',
                 'video/webm;codecs=vp8',
+                'video/webm;codecs=vp9',
                 'video/webm'
             ];
 
@@ -5006,22 +5260,25 @@ void main(void) {
         function getRecordingQualitySettings(qualityProfile) {
             const qualityMap = {
                 balanced: {
-                    videoBitsPerSecond: 12000000,
+                    videoBitsPerSecond: 8000000,
                     audioBitsPerSecond: 160000,
-                    desktopMinDimension: 1440,
-                    mobileScale: 1.0
+                    desktopMinDimension: 1280,
+                    mobileShortEdge: 720,
+                    smoothingQuality: 'medium'
                 },
                 high: {
-                    videoBitsPerSecond: 20000000,
+                    videoBitsPerSecond: 14000000,
                     audioBitsPerSecond: 192000,
-                    desktopMinDimension: 1800,
-                    mobileScale: 1.2
+                    desktopMinDimension: 1920,
+                    mobileShortEdge: 1080,
+                    smoothingQuality: 'high'
                 },
                 ultra: {
-                    videoBitsPerSecond: 30000000,
+                    videoBitsPerSecond: 22000000,
                     audioBitsPerSecond: 256000,
-                    desktopMinDimension: 2160,
-                    mobileScale: 1.34
+                    desktopMinDimension: 2560,
+                    mobileShortEdge: 1440,
+                    smoothingQuality: 'high'
                 }
             };
             return qualityMap[qualityProfile] || qualityMap.balanced;
@@ -5073,11 +5330,15 @@ void main(void) {
                 console.log(`Canvas CSS display: ${cssWidth}x${cssHeight}`);
                 console.log(`Display area: ${displayX},${displayY} ${displayW}x${displayH}`);
                 
-                const canvasScale = canvasW / cssWidth;
-                console.log(`Canvas scale: ${canvasScale}`);
-                
                 // Helper to ensure even dimensions (required for H.264 encoding)
                 const makeEven = (n) => Math.floor(n / 2) * 2;
+                const clampCropToCanvas = (x, y, width, height, limitWidth = canvasW, limitHeight = canvasH) => {
+                    const safeX = Math.max(0, Math.min(limitWidth - 1, Math.floor(Number.isFinite(x) ? x : 0)));
+                    const safeY = Math.max(0, Math.min(limitHeight - 1, Math.floor(Number.isFinite(y) ? y : 0)));
+                    const safeW = Math.max(1, Math.min(limitWidth - safeX, Math.floor(Number.isFinite(width) ? width : limitWidth)));
+                    const safeH = Math.max(1, Math.min(limitHeight - safeY, Math.floor(Number.isFinite(height) ? height : limitHeight)));
+                    return { x: safeX, y: safeY, width: safeW, height: safeH };
+                };
                 
                 let srcX, srcY, srcW, srcH;
                 
@@ -5090,10 +5351,14 @@ void main(void) {
                     console.log(`3D mode: Recording full canvas ${srcW}x${srcH} (no cropping)`);
                 } else {
                     // 2D mode: Crop to the display area (removes letterboxing, matches content)
-                    srcX = Math.floor(displayX * canvasScale);
-                    srcY = Math.floor(displayY * canvasScale);
-                    srcW = Math.floor(displayW * canvasScale);
-                    srcH = Math.floor(displayH * canvasScale);
+                    // The C++ display getters already return internal canvas pixels.
+                    // Applying the CSS-to-canvas scale again made mobile crop bounds
+                    // twice as large and Chrome encoded only a small clipped region.
+                    const initialCrop = clampCropToCanvas(displayX, displayY, displayW, displayH);
+                    srcX = initialCrop.x;
+                    srcY = initialCrop.y;
+                    srcW = initialCrop.width;
+                    srcH = initialCrop.height;
                     console.log(`2D mode: Cropping to display area ${srcX},${srcY} ${srcW}x${srcH}`);
                 }
                 
@@ -5103,10 +5368,11 @@ void main(void) {
                 let recordWidth = srcW;
                 let recordHeight = srcH;
                 
-                // On mobile, force exact 1080x1920 (portrait) or 1920x1080 (landscape) output
+                // On mobile, use a quality-dependent 9:16 or 16:9 output. Balanced
+                // defaults to 720p so rendering and video encoding can sustain 60 FPS.
                 // Based on SOURCE CONTENT aspect ratio (not screen orientation)
                 // Scale to FILL the frame (crop edges if needed) to avoid black bars
-                const isMobile = window.innerWidth <= 768;
+                const isMobile = isMobileDevice || document.body.classList.contains('mobile-mode');
                 
                 // Store scale-to-fill parameters for the recording loop
                 let scaleToFill = false;
@@ -5118,20 +5384,15 @@ void main(void) {
                     // Determine if portrait or landscape based on SOURCE CONTENT (not screen)
                     const srcAspect = srcW / srcH;
                     const isSourcePortrait = srcAspect < 1; // Source is taller than wide
-                    
-                    if (isSourcePortrait) {
-                        // Source is portrait - output 1080x1920 (9:16 aspect ratio)
-                        recordWidth = 1080;
-                        recordHeight = 1920;
-                    } else {
-                        // Source is landscape/widescreen - output 1920x1080 (16:9 aspect ratio)
-                        recordWidth = 1920;
-                        recordHeight = 1080;
-                    }
+                    const mobileShortEdge = qualitySettings.mobileShortEdge;
+                    const mobileLongEdge = Math.round(mobileShortEdge * 16 / 9);
 
-                    if (qualitySettings.mobileScale > 1.0) {
-                        recordWidth = Math.round(recordWidth * qualitySettings.mobileScale);
-                        recordHeight = Math.round(recordHeight * qualitySettings.mobileScale);
+                    if (isSourcePortrait) {
+                        recordWidth = mobileShortEdge;
+                        recordHeight = mobileLongEdge;
+                    } else {
+                        recordWidth = mobileLongEdge;
+                        recordHeight = mobileShortEdge;
                     }
                     
                     // Calculate scale-to-fill cropping (no black bars)
@@ -5186,39 +5447,118 @@ void main(void) {
                 
                 // Store crop parameters and source canvas for the animation loop
                 // Use scale-to-fill params on mobile to avoid black bars
-                const cropParams = scaleToFill 
+                let cropParams = scaleToFill
                     ? { srcX: fillSrcX, srcY: fillSrcY, srcW: fillSrcW, srcH: fillSrcH, sourceCanvas: renderCanvas }
                     : { srcX, srcY, srcW, srcH, sourceCanvas: renderCanvas };
-                
-                // Create recording canvas at the target size
-                croppedCanvas = document.createElement('canvas');
-                croppedCanvas.width = recordWidth;
-                croppedCanvas.height = recordHeight;
-                croppedCtx = croppedCanvas.getContext('2d', { 
-                    alpha: false,
-                    willReadFrequently: false
-                });
-                
-                // Set image smoothing for better quality
-                croppedCtx.imageSmoothingEnabled = true;
-                croppedCtx.imageSmoothingQuality = 'high';
-                
-                // Draw initial frame - crop to display area
-                croppedCtx.drawImage(cropParams.sourceCanvas, cropParams.srcX, cropParams.srcY, cropParams.srcW, cropParams.srcH, 0, 0, recordWidth, recordHeight);
-                
-                console.log(`Recording at resolution: ${croppedCanvas.width}x${croppedCanvas.height} (${(croppedCanvas.width * croppedCanvas.height / 1000000).toFixed(2)} megapixels}`);
+
+                let cropCanvasWidth = canvasW;
+                let cropCanvasHeight = canvasH;
+                function refreshCropAfterResize() {
+                    if (renderCanvas.width === cropCanvasWidth && renderCanvas.height === cropCanvasHeight) {
+                        return cropParams;
+                    }
+
+                    cropCanvasWidth = renderCanvas.width;
+                    cropCanvasHeight = renderCanvas.height;
+                    let nextX = 0;
+                    let nextY = 0;
+                    let nextW = cropCanvasWidth;
+                    let nextH = cropCanvasHeight;
+
+                    if (!is3DMode) {
+                        const resizedCrop = clampCropToCanvas(
+                            Module.getDisplayX(),
+                            Module.getDisplayY(),
+                            Module.getDisplayWidth(),
+                            Module.getDisplayHeight(),
+                            cropCanvasWidth,
+                            cropCanvasHeight
+                        );
+                        nextX = resizedCrop.x;
+                        nextY = resizedCrop.y;
+                        nextW = resizedCrop.width;
+                        nextH = resizedCrop.height;
+                    }
+
+                    if (isMobile) {
+                        const targetAspect = recordWidth / recordHeight;
+                        const sourceAspect = nextW / nextH;
+                        if (sourceAspect > targetAspect) {
+                            const fittedWidth = nextH * targetAspect;
+                            nextX += (nextW - fittedWidth) / 2;
+                            nextW = fittedWidth;
+                        } else if (sourceAspect < targetAspect) {
+                            const fittedHeight = nextW / targetAspect;
+                            nextY += (nextH - fittedHeight) / 2;
+                            nextH = fittedHeight;
+                        }
+                    }
+
+                    cropParams = { srcX: nextX, srcY: nextY, srcW: nextW, srcH: nextH, sourceCanvas: renderCanvas };
+                    console.log(`Recording crop updated after rotation: ${nextW}x${nextH} -> ${recordWidth}x${recordHeight}`);
+                    return cropParams;
+                }
                 
                 // Get selected frame rate from UI
                 const fpsSelect = document.getElementById('record-fps') || document.getElementById('mobile-record-fps');
-                const selectedFps = fpsSelect ? parseInt(fpsSelect.value) : 60;
-                lastRecordingFps = selectedFps; // Save for MP4 conversion
+                const requestedFps = fpsSelect ? parseInt(fpsSelect.value) : 60;
+                const selectedFps = Math.min(60, Math.max(1, requestedFps));
+                lastRecordingFps = selectedFps;
                 console.log(`Recording at ${selectedFps} fps`);
                 const selectedQuality = getSelectedRecordingQuality();
                 const qualitySettings = getRecordingQualitySettings(selectedQuality);
                 console.log(`Recording quality: ${selectedQuality}`);
-                
-                // Use selected fps for capture stream
-                const videoStream = croppedCanvas.captureStream(selectedFps);
+
+                // Avoid a full-size 2D canvas copy when the source already has the
+                // required crop and dimensions. This leaves substantially more GPU
+                // and main-thread time available to MediaRecorder.
+                const canCaptureSourceDirectly = !isMobile && !scaleToFill &&
+                    cropParams.srcX === 0 && cropParams.srcY === 0 &&
+                    cropParams.srcW === canvasW && cropParams.srcH === canvasH &&
+                    recordWidth === canvasW && recordHeight === canvasH;
+                let captureCanvas = renderCanvas;
+
+                if (!canCaptureSourceDirectly) {
+                    croppedCanvas = document.createElement('canvas');
+                    croppedCanvas.width = recordWidth;
+                    croppedCanvas.height = recordHeight;
+                    croppedCtx = croppedCanvas.getContext('2d', {
+                        alpha: false,
+                        desynchronized: true,
+                        willReadFrequently: false
+                    });
+                    if (!croppedCtx) {
+                        throw new Error('Could not create the recording canvas context');
+                    }
+                    croppedCtx.imageSmoothingEnabled = true;
+                    croppedCtx.imageSmoothingQuality = qualitySettings.smoothingQuality;
+                    croppedCtx.drawImage(cropParams.sourceCanvas, cropParams.srcX, cropParams.srcY,
+                        cropParams.srcW, cropParams.srcH, 0, 0, recordWidth, recordHeight);
+                    captureCanvas = croppedCanvas;
+                } else {
+                    croppedCanvas = null;
+                    croppedCtx = null;
+                    console.log('Recording directly from the render canvas (zero-copy path)');
+                }
+
+                console.log(`Recording at resolution: ${recordWidth}x${recordHeight} (${(recordWidth * recordHeight / 1000000).toFixed(2)} megapixels)`);
+
+                // Copied frames are submitted manually so the encoder never samples
+                // the same canvas frame twice. Direct capture can use the browser's
+                // native canvas capture timer without a JavaScript copy loop.
+                let videoStream;
+                let manualCaptureTrack = null;
+                if (croppedCtx) {
+                    videoStream = captureCanvas.captureStream(0);
+                    manualCaptureTrack = videoStream.getVideoTracks()[0] || null;
+                    if (!manualCaptureTrack || typeof manualCaptureTrack.requestFrame !== 'function') {
+                        videoStream.getTracks().forEach(track => track.stop());
+                        videoStream = captureCanvas.captureStream(selectedFps);
+                        manualCaptureTrack = null;
+                    }
+                } else {
+                    videoStream = captureCanvas.captureStream(selectedFps);
+                }
                 
                 // Create combined stream with video and audio
                 let audioAdded = false;
@@ -5300,8 +5640,8 @@ void main(void) {
                     
                     // IMPORTANT: Save dimensions NOW before async operations
                     // because croppedCanvas gets cleaned up in stopRecording()
-                    const videoWidth = croppedCanvas ? croppedCanvas.width : 1280;
-                    const videoHeight = croppedCanvas ? croppedCanvas.height : 720;
+                    const videoWidth = captureCanvas.width;
+                    const videoHeight = captureCanvas.height;
                     console.log(`Saved video dimensions: ${videoWidth}x${videoHeight}`);
                     
                     const mimeType = (mediaRecorder && mediaRecorder.mimeType) || recorderOptions.mimeType || 'video/webm';
@@ -5602,20 +5942,12 @@ void main(void) {
                 };
                 
                 // Start recording
-                mediaRecorder.start();
+                // Let MediaRecorder emit chunks itself. A two-second timeslice is
+                // cheaper than forcing an encoder flush from JavaScript every second.
+                mediaRecorder.start(2000);
                 isRecording = true;
                 recordingStartTime = Date.now();
 
-                recordingFlushInterval = setInterval(() => {
-                    if (mediaRecorder && mediaRecorder.state === 'recording') {
-                        try {
-                            mediaRecorder.requestData();
-                        } catch (e) {
-                            console.warn('requestData failed:', e);
-                        }
-                    }
-                }, 1000);
-                
                 // Variables for frame timing
                 let lastFrameTime = 0;
                 const targetFrameInterval = 1000 / selectedFps; // Target selected fps
@@ -5623,17 +5955,25 @@ void main(void) {
                 // Function to copy cropped region from main canvas (removes letterboxing)
                 function updateCroppedCanvas(currentTime) {
                     if (!isRecording || !croppedCtx) return;
-                    
-                    // Throttle to target fps for consistent recording
-                    if (currentTime - lastFrameTime < targetFrameInterval) {
+
+                    const elapsed = currentTime - lastFrameTime;
+                    // A small tolerance prevents 60 Hz timer jitter from dropping
+                    // alternate frames, while still limiting 90/120 Hz displays to
+                    // the selected recording rate.
+                    if (lastFrameTime && elapsed < targetFrameInterval - 1) {
                         recordingAnimationFrame = requestAnimationFrame(updateCroppedCanvas);
                         return;
                     }
-                    lastFrameTime = currentTime;
+                    lastFrameTime = lastFrameTime && elapsed >= targetFrameInterval
+                        ? currentTime - (elapsed % targetFrameInterval)
+                        : currentTime;
                     
                     try {
                         // Draw cropped region from source canvas
-                        croppedCtx.drawImage(cropParams.sourceCanvas, cropParams.srcX, cropParams.srcY, cropParams.srcW, cropParams.srcH, 0, 0, croppedCanvas.width, croppedCanvas.height);
+                        const frameCrop = refreshCropAfterResize();
+                        croppedCtx.drawImage(frameCrop.sourceCanvas, frameCrop.srcX, frameCrop.srcY,
+                            frameCrop.srcW, frameCrop.srcH, 0, 0, croppedCanvas.width, croppedCanvas.height);
+                        if (manualCaptureTrack) manualCaptureTrack.requestFrame();
                     } catch (e) {
                         console.error('Error updating recording canvas:', e);
                     }
@@ -5643,8 +5983,10 @@ void main(void) {
                     }
                 }
                 
-                // Start the copy loop
-                recordingAnimationFrame = requestAnimationFrame(updateCroppedCanvas);
+                // Start the copy loop only when scaling/cropping is required.
+                if (croppedCtx) {
+                    recordingAnimationFrame = requestAnimationFrame(updateCroppedCanvas);
+                }
                 
                 // Update UI
                 setRecordingButtonState(true);
@@ -6121,12 +6463,230 @@ void main(void) {
         const addShaderPassBtn = document.getElementById('add-shader-pass-btn');
         const shaderPassList = document.getElementById('shader-pass-list');
         const clearPassesBtn = document.getElementById('clear-passes-btn');
+        const copyChainBtn = document.getElementById('copy-chain-btn');
+        const downloadChainBtn = document.getElementById('download-chain-btn');
+        const importChainBtn = document.getElementById('import-chain-btn');
         const enableMultipassBtn = document.getElementById('enable-multipass-btn');
         const multipassStatus = document.getElementById('multipass-status');
         const multipassEmpty = document.getElementById('multipass-empty');
-        
+        const chainImportOverlay = document.getElementById('chain-import-overlay');
+        const chainImportCode = document.getElementById('chain-import-code');
+        const chainImportStatus = document.getElementById('chain-import-status');
+        const chainImportFile = document.getElementById('chain-import-file');
+        const chooseChainFileBtn = document.getElementById('choose-chain-file-btn');
+        const chainImportFileName = document.getElementById('chain-import-file-name');
+        const closeChainImportBtn = document.getElementById('close-chain-import-btn');
+        const cancelChainImportBtn = document.getElementById('cancel-chain-import-btn');
+        const loadChainImportBtn = document.getElementById('load-chain-import-btn');
+
         let shaderPasses = [];
         let multipassEnabled = false;
+
+        function buildCompactChainCode() {
+            return JSON.stringify({
+                v: 1,
+                e: multipassEnabled ? 1 : 0,
+                p: shaderPasses.map((pass) => [pass.name, pass.index])
+            });
+        }
+
+        function fallbackCopyText(text) {
+            const textarea = document.createElement('textarea');
+            textarea.value = text;
+            textarea.setAttribute('readonly', '');
+            textarea.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0;';
+            document.body.appendChild(textarea);
+            textarea.select();
+            textarea.setSelectionRange(0, text.length);
+            const copied = document.execCommand('copy');
+            textarea.remove();
+            if (!copied) throw new Error('Clipboard access was denied');
+        }
+
+        async function copyChainCode() {
+            const code = buildCompactChainCode();
+            try {
+                if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+                    try {
+                        await navigator.clipboard.writeText(code);
+                    } catch (clipboardError) {
+                        fallbackCopyText(code);
+                    }
+                } else {
+                    fallbackCopyText(code);
+                }
+
+                const originalLabel = copyChainBtn.textContent;
+                copyChainBtn.textContent = `✅ Copied ${shaderPasses.length} Pass${shaderPasses.length === 1 ? '' : 'es'}`;
+                setTimeout(() => { copyChainBtn.textContent = originalLabel; }, 1800);
+            } catch (error) {
+                console.error('Could not copy multipass chain:', error);
+                chainImportCode.value = code;
+                openChainImportModal('Clipboard unavailable. The chain code is selected below for manual copying.', true);
+                chainImportCode.select();
+            }
+        }
+
+        function downloadChainCode() {
+            const code = buildCompactChainCode();
+            const blob = new Blob([code + '\n'], { type: 'text/plain;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+            const anchor = document.createElement('a');
+            anchor.href = url;
+            anchor.download = `acmx2-multipass-chain-${timestamp}.txt`;
+            anchor.style.display = 'none';
+            document.body.appendChild(anchor);
+            anchor.click();
+            anchor.remove();
+            setTimeout(() => URL.revokeObjectURL(url), 60000);
+
+            const originalLabel = downloadChainBtn.textContent;
+            downloadChainBtn.textContent = '✅ Saved';
+            setTimeout(() => { downloadChainBtn.textContent = originalLabel; }, 1800);
+        }
+
+        function setChainImportStatus(message, isError = false) {
+            chainImportStatus.textContent = message;
+            chainImportStatus.classList.toggle('error', isError);
+        }
+
+        function openChainImportModal(message = '', isError = false) {
+            chainImportOverlay.classList.add('visible');
+            setChainImportStatus(message, isError);
+            chainImportFileName.textContent = 'No file selected';
+            setTimeout(() => chainImportCode.focus(), 0);
+        }
+
+        function closeChainImportModal() {
+            chainImportOverlay.classList.remove('visible');
+            setChainImportStatus('');
+        }
+
+        function parseChainCode(code) {
+            if (!code || !code.trim()) throw new Error('Paste a chain code first.');
+            if (code.length > 262144) throw new Error('Chain code is too large.');
+
+            let payload;
+            try {
+                payload = JSON.parse(code);
+            } catch (error) {
+                throw new Error('The chain code is not valid JSON.');
+            }
+
+            if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+                throw new Error('The chain code must be a JSON object.');
+            }
+            if (payload.v !== 1) {
+                throw new Error(`Unsupported chain-code version: ${String(payload.v)}`);
+            }
+            if (!Array.isArray(payload.p)) {
+                throw new Error('The chain code does not contain a pass list.');
+            }
+            if (payload.p.length > 256) {
+                throw new Error('A chain may contain at most 256 passes.');
+            }
+            if (payload.e !== 0 && payload.e !== 1 && typeof payload.e !== 'boolean') {
+                throw new Error('The chain enabled state is invalid.');
+            }
+            return payload;
+        }
+
+        function resolveImportedPasses(payload) {
+            if (typeof Module === 'undefined' || typeof Module.getShaderCount !== 'function') {
+                throw new Error('The shader library is still loading. Try again in a moment.');
+            }
+
+            const available = typeof window.getOrderedShaderEntries === 'function'
+                ? window.getOrderedShaderEntries()
+                : [];
+            const byName = new Map();
+            const byLowerName = new Map();
+            available.forEach((entry) => {
+                if (!byName.has(entry.name)) byName.set(entry.name, entry);
+                const lowerName = entry.name.toLocaleLowerCase();
+                if (!byLowerName.has(lowerName)) byLowerName.set(lowerName, entry);
+            });
+
+            const missing = [];
+            const resolved = payload.p.map((encodedPass, position) => {
+                let shaderName = '';
+                let fallbackIndex = NaN;
+                if (Array.isArray(encodedPass)) {
+                    shaderName = typeof encodedPass[0] === 'string' ? encodedPass[0].trim() : '';
+                    fallbackIndex = Number(encodedPass[1]);
+                } else if (typeof encodedPass === 'string') {
+                    shaderName = encodedPass.trim();
+                } else if (Number.isInteger(encodedPass)) {
+                    fallbackIndex = encodedPass;
+                } else {
+                    throw new Error(`Pass ${position + 1} has an invalid format.`);
+                }
+
+                let entry = shaderName ? byName.get(shaderName) : null;
+                if (!entry && shaderName) entry = byLowerName.get(shaderName.toLocaleLowerCase());
+                if (!entry && !shaderName && Number.isInteger(fallbackIndex)) {
+                    entry = available.find((candidate) => candidate.index === fallbackIndex) || null;
+                }
+                if (!entry) {
+                    missing.push(shaderName || `index ${String(fallbackIndex)}`);
+                    return null;
+                }
+                return { index: entry.index, name: entry.name };
+            });
+
+            if (missing.length) {
+                const preview = missing.slice(0, 5).join(', ');
+                const remainder = missing.length > 5 ? ` and ${missing.length - 5} more` : '';
+                throw new Error(`Missing shader${missing.length === 1 ? '' : 's'}: ${preview}${remainder}`);
+            }
+            return resolved;
+        }
+
+        function importChainCode() {
+            try {
+                const payload = parseChainCode(chainImportCode.value);
+                const importedPasses = resolveImportedPasses(payload);
+                shaderPasses = importedPasses;
+                multipassEnabled = payload.e === 1 || payload.e === true;
+                renderShaderPassList();
+                applyShaderPasses();
+                if (typeof Module !== 'undefined' && typeof Module.enableMultipass === 'function') {
+                    Module.enableMultipass(multipassEnabled);
+                }
+                updateMultipassUI();
+                closeChainImportModal();
+                chainImportCode.value = '';
+                console.log(`Imported multipass chain with ${shaderPasses.length} passes`);
+            } catch (error) {
+                setChainImportStatus(error.message || String(error), true);
+            }
+        }
+
+        async function loadChainTextFile(file) {
+            if (!file) return;
+            if (file.size > 262144) {
+                setChainImportStatus('The selected file is larger than 256 KB.', true);
+                chainImportFile.value = '';
+                return;
+            }
+
+            try {
+                const code = await file.text();
+                chainImportCode.value = code.trim();
+                chainImportFileName.textContent = file.name;
+                const payload = parseChainCode(chainImportCode.value);
+                setChainImportStatus(`Loaded ${file.name}: ${payload.p.length} pass${payload.p.length === 1 ? '' : 'es'}. Click Load Chain to apply.`);
+                chainImportCode.focus();
+                chainImportCode.setSelectionRange(0, 0);
+                chainImportCode.scrollTop = 0;
+            } catch (error) {
+                chainImportFileName.textContent = file.name;
+                setChainImportStatus(error.message || String(error), true);
+            } finally {
+                chainImportFile.value = '';
+            }
+        }
 
         // Open multipass modal
         if (multipassBtn) {
@@ -6149,6 +6709,48 @@ void main(void) {
             multipassOverlay.addEventListener('click', () => {
                 multipassModal.classList.remove('visible');
                 multipassOverlay.classList.remove('visible');
+            });
+        }
+
+        if (copyChainBtn) {
+            copyChainBtn.addEventListener('click', copyChainCode);
+        }
+
+        if (downloadChainBtn) {
+            downloadChainBtn.addEventListener('click', downloadChainCode);
+        }
+
+        if (importChainBtn) {
+            importChainBtn.addEventListener('click', () => {
+                chainImportCode.value = '';
+                openChainImportModal();
+            });
+        }
+
+        if (closeChainImportBtn) closeChainImportBtn.addEventListener('click', closeChainImportModal);
+        if (cancelChainImportBtn) cancelChainImportBtn.addEventListener('click', closeChainImportModal);
+        if (loadChainImportBtn) loadChainImportBtn.addEventListener('click', importChainCode);
+        if (chooseChainFileBtn) chooseChainFileBtn.addEventListener('click', () => chainImportFile.click());
+        if (chainImportFile) {
+            chainImportFile.addEventListener('change', () => loadChainTextFile(chainImportFile.files[0]));
+        }
+
+        if (chainImportOverlay) {
+            chainImportOverlay.addEventListener('click', (event) => {
+                if (event.target === chainImportOverlay) closeChainImportModal();
+            });
+        }
+
+        if (chainImportCode) {
+            chainImportCode.addEventListener('keydown', (event) => {
+                event.stopPropagation();
+                if (event.key === 'Escape') {
+                    event.preventDefault();
+                    closeChainImportModal();
+                } else if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+                    event.preventDefault();
+                    importChainCode();
+                }
             });
         }
 
@@ -6307,10 +6909,10 @@ void main(void) {
             
             if (enableMultipassBtn) {
                 if (multipassEnabled) {
-                    enableMultipassBtn.textContent = '⏹ Disable Multipass';
+                    enableMultipassBtn.textContent = '⏹ Disable';
                     enableMultipassBtn.classList.add('active');
                 } else {
-                    enableMultipassBtn.textContent = '▶ Enable Multipass';
+                    enableMultipassBtn.textContent = '▶ Enable';
                     enableMultipassBtn.classList.remove('active');
                 }
             }
@@ -6449,27 +7051,20 @@ void main(void) {
         });
 
         
-        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) 
+        const mobileUserAgent = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        const isMobile = mobileUserAgent
                         || (window.innerWidth <= 768 && 'ontouchstart' in window);
         
         if (isMobile) {
             document.body.classList.add('mobile-mode');
             console.log('Mobile mode activated');
             initMobileControls();
-            
-            // Try to lock screen orientation to portrait
-            if (screen.orientation && screen.orientation.lock) {
-                screen.orientation.lock('portrait').then(() => {
-                    console.log('Screen orientation locked to portrait');
-                }).catch((err) => {
-                    console.log('Could not lock orientation:', err.message);
-                });
-            }
+            updateMobileLayoutInsets();
         }
 
         let wasMobile = isMobile;
         window.addEventListener('resize', () => {
-            const nowMobile = window.innerWidth <= 768 && 'ontouchstart' in window;
+            const nowMobile = mobileUserAgent || (window.innerWidth <= 768 && 'ontouchstart' in window);
             if (nowMobile !== wasMobile) {
                 if (nowMobile) {
                     document.body.classList.add('mobile-mode');
@@ -6479,6 +7074,12 @@ void main(void) {
                 }
                 wasMobile = nowMobile;
             }
+            updateMobileLayoutInsets();
+        });
+
+        window.addEventListener('orientationchange', () => {
+            setTimeout(updateMobileLayoutInsets, 100);
+            setTimeout(updateMobileLayoutInsets, 350);
         });
 
         function initMobileControls() {
