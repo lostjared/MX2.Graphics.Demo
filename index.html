@@ -952,19 +952,42 @@
 
         .multipass-controls {
             display: flex;
+            flex-direction: column;
             gap: 10px;
+            align-items: stretch;
+        }
+
+        .multipass-controls input[type="search"] {
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        .multipass-selector-row {
+            display: flex;
             align-items: center;
-            flex-wrap: wrap;
+            gap: 10px;
+            width: 100%;
         }
 
         .multipass-controls select {
-            flex: 1;
+            flex: 1 1 auto;
+            min-width: 0;
+        }
+
+        .multipass-controls input[type="search"],
+        .multipass-controls select {
             padding: 8px;
             background: #333;
             color: #fff;
             border: 1px solid #555;
             border-radius: 4px;
             font-size: 14px;
+        }
+
+        .multipass-controls input[type="search"]:focus,
+        .multipass-controls select:focus {
+            outline: none;
+            border-color: #FF9800;
         }
 
         .multipass-controls button {
@@ -1969,6 +1992,11 @@ body.mobile-mode #multipass-modal .multipass-controls {
     flex-direction: column;
 }
 
+body.mobile-mode #multipass-modal .multipass-selector-row {
+    flex-direction: row;
+}
+
+body.mobile-mode #multipass-modal .multipass-controls input[type="search"],
 body.mobile-mode #multipass-modal .multipass-controls select {
     width: 100%;
     padding: 12px;
@@ -1979,6 +2007,11 @@ body.mobile-mode #multipass-modal .multipass-controls button {
     width: 100%;
     padding: 12px;
     font-size: 16px;
+}
+
+body.mobile-mode #multipass-modal .multipass-selector-row button {
+    width: auto;
+    flex: 0 0 auto;
 }
 
 body.mobile-mode #multipass-modal #shader-pass-list {
@@ -2623,12 +2656,15 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
         </div>
         <div id="multipass-body">
             <div id="multipass-status">Multipass: Disabled</div>
-            
+
             <div class="multipass-controls">
-                <select id="shader-pass-selector">
-                    <option value="">-- Select Shader to Add --</option>
-                </select>
-                <button id="add-shader-pass-btn">➕ Add</button>
+                <input id="shader-pass-search" type="search" placeholder="Search shaders..." autocomplete="off" spellcheck="false" aria-label="Search shaders">
+                <div class="multipass-selector-row">
+                    <select id="shader-pass-selector">
+                        <option value="">-- Select Shader to Add --</option>
+                    </select>
+                    <button id="add-shader-pass-btn">➕ Add</button>
+                </div>
             </div>
             
             <div id="shader-pass-list">
@@ -6371,9 +6407,12 @@ void main(void) {
         }
     });
 
-    
+
     document.addEventListener('keydown', (e) => {
-        if (e.target === shaderCodeTextarea) return;
+        if (e.target === shaderCodeTextarea ||
+            (e.target instanceof Element && e.target.matches('input, textarea, select, [contenteditable="true"]'))) {
+            return;
+        }
         const now = Date.now();
         if (e.key === 'z' || e.key === 'Z') {
             e.preventDefault();
@@ -6467,6 +6506,7 @@ void main(void) {
         const multipassOverlay = document.getElementById('multipass-overlay');
         const multipassBtn = document.getElementById('multipass-btn');
         const closeMultipassBtn = document.getElementById('close-multipass-btn');
+        const shaderPassSearch = document.getElementById('shader-pass-search');
         const shaderPassSelector = document.getElementById('shader-pass-selector');
         const addShaderPassBtn = document.getElementById('add-shader-pass-btn');
         const shaderPassList = document.getElementById('shader-pass-list');
@@ -6489,6 +6529,7 @@ void main(void) {
 
         let shaderPasses = [];
         let multipassEnabled = false;
+        let availableShaderPassOptions = [];
 
         function buildCompactChainCode() {
             return JSON.stringify({
@@ -6699,9 +6740,11 @@ void main(void) {
         // Open multipass modal
         if (multipassBtn) {
             multipassBtn.addEventListener('click', () => {
+                shaderPassSearch.value = '';
                 populateShaderPassSelector();
                 multipassModal.classList.add('visible');
                 multipassOverlay.classList.add('visible');
+                setTimeout(() => shaderPassSearch.focus(), 0);
             });
         }
 
@@ -6762,28 +6805,79 @@ void main(void) {
             });
         }
 
-        // Populate shader selector dropdown
+        function renderShaderPassSelectorOptions() {
+            if (!shaderPassSelector) return;
+
+            const previousValue = shaderPassSelector.value;
+            const query = (shaderPassSearch?.value || '').trim().toLocaleLowerCase();
+            const filteredOptions = query
+                ? availableShaderPassOptions.filter((entry) => entry.searchName.includes(query))
+                : availableShaderPassOptions;
+
+            shaderPassSelector.replaceChildren();
+            const placeholder = document.createElement('option');
+            placeholder.value = '';
+            placeholder.textContent = filteredOptions.length
+                ? `-- Select Shader to Add (${filteredOptions.length}) --`
+                : '-- No matching shaders --';
+            shaderPassSelector.appendChild(placeholder);
+
+            filteredOptions.forEach((entry) => {
+                const option = document.createElement('option');
+                option.value = String(entry.index);
+                option.textContent = `[${entry.displayIndex}] ${entry.name}`;
+                shaderPassSelector.appendChild(option);
+            });
+
+            if (previousValue && filteredOptions.some((entry) => String(entry.index) === previousValue)) {
+                shaderPassSelector.value = previousValue;
+            }
+        }
+
+        // Populate the complete source list once, then filter it in JavaScript.
         function populateShaderPassSelector() {
             if (!shaderPassSelector) return;
-            
-            shaderPassSelector.innerHTML = '<option value="">-- Select Shader to Add --</option>';
-            
+
+            availableShaderPassOptions = [];
             if (typeof Module !== 'undefined' && Module.getShaderCount && Module.getShaderNameAt) {
                 try {
                     const entries = (typeof window.getOrderedShaderEntries === 'function')
                         ? window.getOrderedShaderEntries()
                         : [];
-                    for (let i = 0; i < entries.length; i++) {
-                        const entry = entries[i];
-                        const option = document.createElement('option');
-                        option.value = entry.index;
-                        option.textContent = `[${i}] ${entry.name}`;
-                        shaderPassSelector.appendChild(option);
-                    }
+                    availableShaderPassOptions = entries.map((entry, displayIndex) => ({
+                        index: entry.index,
+                        name: entry.name,
+                        displayIndex,
+                        searchName: entry.name.toLocaleLowerCase()
+                    }));
                 } catch (e) {
                     console.error('Error populating shader selector:', e);
                 }
             }
+            renderShaderPassSelectorOptions();
+        }
+
+        if (shaderPassSearch) {
+            shaderPassSearch.addEventListener('input', renderShaderPassSelectorOptions);
+            shaderPassSearch.addEventListener('focus', () => {
+                if (typeof Module !== 'undefined' && Module.SDL?.keyboardState) {
+                    Module.SDL.keyboardState = null;
+                }
+                canvas.style.pointerEvents = 'none';
+            });
+            shaderPassSearch.addEventListener('blur', () => {
+                canvas.style.pointerEvents = 'auto';
+            });
+            shaderPassSearch.addEventListener('keydown', (event) => {
+                event.stopPropagation();
+                if (event.key === 'Escape' && shaderPassSearch.value) {
+                    event.preventDefault();
+                    shaderPassSearch.value = '';
+                    renderShaderPassSelectorOptions();
+                }
+            });
+            shaderPassSearch.addEventListener('keyup', (event) => event.stopPropagation());
+            shaderPassSearch.addEventListener('keypress', (event) => event.stopPropagation());
         }
 
         // Add shader pass
@@ -7309,9 +7403,11 @@ void main(void) {
             });
 
             document.getElementById('mobile-multipass-btn').addEventListener('click', () => {
+                shaderPassSearch.value = '';
                 populateShaderPassSelector();
                 multipassModal.classList.add('visible');
                 multipassOverlay.classList.add('visible');
+                setTimeout(() => shaderPassSearch.focus(), 0);
             });
 
             document.getElementById('mobile-help-btn').addEventListener('click', () => {
