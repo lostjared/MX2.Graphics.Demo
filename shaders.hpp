@@ -1,13 +1,23 @@
-/*
-
- LostSideDead Software
- coded by: Jared Bruni
-
-*/
+/**
+ * @file shaders.hpp
+ * @brief Built-in GLSL ES fragment-shader catalog for the graphics demo.
+ *
+ * Each inline string is a complete fragment shader or a reusable GLSL source
+ * fragment. Keeping the catalog inline allows this header to be included by
+ * more than one translation unit without violating the one-definition rule.
+ *
+ * @author Jared Bruni
+ */
 
 #ifndef _SHADERS_HPP
 #define _SHADERS_HPP
 
+/**
+ * @brief GLSL declarations shared by the built-in fragment shaders.
+ *
+ * These uniforms expose animation, color correction, view transforms, quality,
+ * and debug controls supplied by the host application.
+ */
 #define COMMON_UNIFORMS R"(
 uniform float iSpeed;
 uniform float iAmplitude;
@@ -22,7 +32,12 @@ uniform float iQuality;
 uniform float iDebugMode;
 )"
 
-// Helper functions for color adjustments
+/**
+ * @brief GLSL helpers for color correction, UV transforms, and mirrored sampling.
+ *
+ * The macro expands inside raw shader strings so every built-in shader uses the
+ * same host-controlled adjustments and texture-wrap behavior.
+ */
 #define COLOR_HELPERS R"(
 vec3 adjustBrightness(vec3 col, float b) {
     return col * b;
@@ -109,6 +124,7 @@ vec4 mxTexture(sampler2D tex, vec2 tc) {
 
 )"
 
+/** @brief GLSL source for the `srcShader1` built-in fragment shader. */
 inline const char *srcShader1 = R"(#version 300 es
 precision highp float;
 precision highp int;
@@ -135,6 +151,7 @@ void main(void) {
 }
 )";
 
+/** @brief GLSL source for the `srcShader3` built-in fragment shader. */
 inline const char *srcShader3 = R"(#version 300 es
 precision highp float;
 precision highp int;
@@ -321,6 +338,7 @@ void main(void) {
 }
 )";
 
+/** @brief GLSL source for the `srcShaderAbilify` built-in fragment shader. */
 inline const char *srcShaderAbilify = R"(#version 300 es
 precision highp float;
 precision highp int;
@@ -413,6 +431,7 @@ void main(void) {
 }
 )";
 
+/** @brief GLSL source for the `srcShaderPinkClouds` built-in fragment shader. */
 inline const char *srcShaderPinkClouds = R"(#version 300 es
 precision highp float;
 precision highp int;
@@ -514,6 +533,7 @@ void main(void) {
 }
 )";
 
+/** @brief GLSL source for the `srcShaderKaleidoCloud` built-in fragment shader. */
 inline const char *srcShaderKaleidoCloud = R"(#version 300 es
 precision highp float;
 precision highp int;
@@ -635,6 +655,7 @@ void main(void) {
 }
 )";
 
+/** @brief GLSL source for the `srcShaderKaleidoFromTex` built-in fragment shader. */
 inline const char *srcShaderKaleidoFromTex = R"(#version 300 es
 precision highp float;
 precision highp int;
@@ -748,6 +769,7 @@ void main(void) {
 }
 )";
 
+/** @brief GLSL source for the `srcShader4` built-in fragment shader. */
 inline const char *srcShader4 = R"(#version 300 es
 precision highp float;
 precision highp int;
@@ -778,6 +800,7 @@ void main(void) {
     color = texColor;
 })";
 
+/** @brief GLSL source for the `srcShader5` built-in fragment shader. */
 inline const char *srcShader5 = R"(#version 300 es
 precision highp float;
 precision highp int;
@@ -824,6 +847,7 @@ void main(void) {
 }
 )";
 
+/** @brief GLSL source for the `srcShader2` built-in fragment shader. */
 inline const char *srcShader2 = R"(#version 300 es
 precision highp float;
 precision highp int;
@@ -1001,6 +1025,7 @@ void main(void) {
 }
 )";
 
+/** @brief GLSL source for the `szShader` built-in fragment shader. */
 inline const char *szShader = R"(#version 300 es
 precision highp float;
 precision highp int;
@@ -1037,6 +1062,7 @@ void main(void) {
 }
 )";
 
+/** @brief GLSL source for the `szShader2` built-in fragment shader. */
 inline const char *szShader2 = R"(#version 300 es
 precision highp float;
 precision highp int;
@@ -1076,6 +1102,7 @@ void main(void) {
 }
 )";
 
+/** @brief GLSL source for the `szTwist` built-in fragment shader. */
 inline const char *szTwist = R"(#version 300 es
 precision highp float;
 precision highp int;
@@ -1109,6 +1136,7 @@ void main(void) {
 }
 )";
 
+/** @brief GLSL source for the `szTime` built-in fragment shader. */
 inline const char *szTime = R"(#version 300 es
 precision highp float;
 precision highp int;
@@ -1162,6 +1190,7 @@ void main(void){
     color = texColor;
 })";
 
+/** @brief GLSL source for the `szBend` built-in fragment shader. */
 inline const char *szBend = R"(#version 300 es
 precision highp float;
 precision highp int;
@@ -1198,6 +1227,7 @@ void main(void) {
 }
 )";
 
+/** @brief GLSL source for the `szPong` built-in fragment shader. */
 inline const char *szPong = R"(#version 300 es
 precision highp float;
 precision highp int;
@@ -1239,6 +1269,7 @@ void main(void){
 }
 )";
 
+/** @brief GLSL source for the `psychWave` built-in fragment shader. */
 inline const char *psychWave = R"(#version 300 es
 precision highp float;
 precision highp int;
@@ -1263,6 +1294,7 @@ void main(void)
 }
 )";
 
+/** @brief GLSL source for the `crystalBall` built-in fragment shader. */
 inline const char *crystalBall = R"(#version 300 es
 precision highp float;
 precision highp int;
@@ -1347,6 +1379,7 @@ void main(void) {
 }
 )";
 
+/** @brief GLSL source for the `szZoomMouse` built-in fragment shader. */
 inline const char *szZoomMouse = R"(#version 300 es
 precision highp float;
 precision highp int;
@@ -1404,6 +1437,7 @@ void main(void){
 }
 )";
 
+/** @brief GLSL source for the `szDrain` built-in fragment shader. */
 inline const char *szDrain = R"(#version 300 es
 precision highp float;
 precision highp int;
@@ -1434,6 +1468,7 @@ void main(void) {
     color = texColor;
 })";
 
+/** @brief GLSL source for the `szUfo` built-in fragment shader. */
 inline const char *szUfo = R"(#version 300 es
 precision highp float;
 precision highp int;
@@ -1481,6 +1516,7 @@ void main(void) {
     color = texColor;
 })";
 
+/** @brief GLSL source for the `szWave` built-in fragment shader. */
 inline const char *szWave = R"(#version 300 es
 precision highp float;
 precision highp int;
@@ -1507,6 +1543,7 @@ void main(void) {
     color = texColor;
 })";
 
+/** @brief GLSL source for the `szUfoWarp` built-in fragment shader. */
 inline const char *szUfoWarp = R"(#version 300 es
 precision highp float;
 precision highp int;
@@ -1551,6 +1588,7 @@ void main(void) {
     color = texColor;
 })";
 
+/** @brief GLSL source for the `szByMouse` built-in fragment shader. */
 inline const char *szByMouse = R"(#version 300 es
 precision highp float;
 precision highp int;
@@ -1615,6 +1653,7 @@ void main(void) {
     color = texColor;
 })";
 
+/** @brief GLSL source for the `szDeform` built-in fragment shader. */
 inline const char *szDeform = R"(#version 300 es
 precision highp float;
 precision highp int;
@@ -1640,6 +1679,7 @@ void main(void) {
     color = texColor;
 })";
 
+/** @brief GLSL source for the `szGeo` built-in fragment shader. */
 inline const char *szGeo = R"(#version 300 es
 precision highp float;
 precision highp int;
@@ -1675,6 +1715,7 @@ void main(void) {
     color.a = 1.0;
 })";
 
+/** @brief GLSL source for the `szSmooth` built-in fragment shader. */
 inline const char *szSmooth = R"(#version 300 es
 precision highp float;
 precision highp int;
@@ -1739,6 +1780,7 @@ void main(void) {
     color.rgb = pow(color.rgb, vec3(1.2));
 })";
 
+/** @brief GLSL source for the `szHue` built-in fragment shader. */
 inline const char *szHue = R"(#version 300 es
 precision highp float;
 precision highp int;
@@ -1817,6 +1859,7 @@ void main() {
     color = outc;
 })";
 
+/** @brief GLSL source for the `szkMouse` built-in fragment shader. */
 inline const char *szkMouse = R"(#version 300 es
 precision highp float;
 precision highp int;
@@ -1877,6 +1920,7 @@ void main(void){
     color = texColor;
 })";
 
+/** @brief GLSL source for the `szDrum` built-in fragment shader. */
 inline const char *szDrum = R"(#version 300 es
 precision highp float;
 precision highp int;
@@ -1905,6 +1949,7 @@ void main(void) {
     color = texColor;
 })";
 
+/** @brief GLSL source for the `szColorSwirl` built-in fragment shader. */
 inline const char *szColorSwirl = R"(#version 300 es
 precision highp float;
 precision highp int;
@@ -1947,6 +1992,7 @@ void main(void) {
     color = vec4(col, alpha);
 })";
 
+/** @brief GLSL source for the `szMouseZoom` built-in fragment shader. */
 inline const char *szMouseZoom = R"(#version 300 es
 precision highp float;
 precision highp int;
@@ -2005,6 +2051,7 @@ void main(void){
     color = texColor;
 })";
 
+/** @brief GLSL source for the `szRev2` built-in fragment shader. */
 inline const char *szRev2 = R"(#version 300 es
 precision highp float;
 precision highp int;
@@ -2046,6 +2093,7 @@ void main() {
     color = vec4(finalColor, texColor.a);
 })";
 
+/** @brief GLSL source for the `szFish` built-in fragment shader. */
 inline const char *szFish = R"(#version 300 es
 precision highp float;
 precision highp int;
@@ -2091,6 +2139,7 @@ void main(void){
     color = texColor;
 })";
 
+/** @brief GLSL source for the `szRipplePrism` built-in fragment shader. */
 inline const char *szRipplePrism = R"(#version 300 es
 precision highp float;
 precision highp int;
@@ -2140,6 +2189,7 @@ void main(void){
     color=vec4(col,1.0);
 })";
 
+/** @brief GLSL source for the `szMirrorMouse` built-in fragment shader. */
 inline const char *szMirrorMouse = R"(#version 300 es
 precision highp float;
 precision highp int;
@@ -2210,6 +2260,7 @@ void main() {
     color.a = 1.0;
 })";
 
+/** @brief GLSL source for the `szFracMouse` built-in fragment shader. */
 inline const char *szFracMouse = R"(#version 300 es
 precision highp float;
 precision highp int;
@@ -2322,6 +2373,7 @@ void main(){
     color = vec4(outCol, 1.0);
 })";
 
+/** @brief GLSL source for the `szCats` built-in fragment shader. */
 inline const char *szCats = R"(#version 300 es
 precision highp float;
 precision highp int;
@@ -2410,6 +2462,7 @@ void main(void) {
     color.rgb = applyColorAdjustments(color.rgb);
 })";
 
+/** @brief GLSL source for the `szColorMouse` built-in fragment shader. */
 inline const char *szColorMouse = R"(#version 300 es
 precision highp float;
 precision highp int;
@@ -2464,6 +2517,7 @@ void main(void) {
     color = vec4(col, alpha);
 })";
 
+/** @brief GLSL source for the `szTwistFull` built-in fragment shader. */
 inline const char *szTwistFull = R"(#version 300 es
 precision highp float;
 precision highp int;
@@ -2515,6 +2569,7 @@ void main(void) {
     color = vec4(col, 1.0);
 })";
 
+/** @brief GLSL source for the `szBowlByTime` built-in fragment shader. */
 inline const char *szBowlByTime = R"(#version 300 es
 precision highp float;
 precision highp int;
@@ -2568,6 +2623,7 @@ void main(void) {
     color = vec4(col, texColor.a);
 })";
 
+/** @brief GLSL source for the `szPebble` built-in fragment shader. */
 inline const char *szPebble = R"(#version 300 es
 precision highp float;
 precision highp int;
@@ -2627,6 +2683,7 @@ void main(void) {
     color = texColor;
 })";
 
+/** @brief GLSL source for the `szMirrorPutty` built-in fragment shader. */
 inline const char *szMirrorPutty = R"(#version 300 es
 precision highp float;
 precision highp int;
@@ -2697,6 +2754,7 @@ void main(void) {
     color = vec4(col, 1.0);
 })";
 
+/** @brief GLSL source for the `src_frac_shader02_dmdi6i_zoom_xor` built-in fragment shader. */
 inline const char *src_frac_shader02_dmdi6i_zoom_xor = R"SHD(#version 300 es
 precision highp float;
 precision highp int;
@@ -2932,6 +2990,7 @@ void main(void) {
     color = vec4(finalRGB, baseTex.a);
 }
 )SHD";
+/** @brief GLSL source for the `src_frac_shader02_dmdi6i_zoom_xor_amp` built-in fragment shader. */
 inline const char *src_frac_shader02_dmdi6i_zoom_xor_amp = R"SHD(#version 300 es
 precision highp float;
 precision highp int;
@@ -3186,6 +3245,7 @@ void main(void) {
     color = vec4(finalRGB, baseTex.a);
 }
 )SHD";
+/** @brief GLSL source for the `src_frac_shader02_dmdXi` built-in fragment shader. */
 inline const char *src_frac_shader02_dmdXi = R"SHD(#version 300 es
 precision highp float;
 precision highp int;
@@ -3316,6 +3376,7 @@ void main(void){
     color = vec4(combined, 1.0);
 }
 )SHD";
+/** @brief GLSL source for the `src_frac_shader02_dmdXi_amp` built-in fragment shader. */
 inline const char *src_frac_shader02_dmdXi_amp = R"SHD(#version 300 es
 precision highp float;
 precision highp int;
@@ -3511,6 +3572,7 @@ void main(void){
     color = vec4(combined, 1.0);
 }
 )SHD";
+/** @brief GLSL source for the `src_frac_shader02_dmdXi2` built-in fragment shader. */
 inline const char *src_frac_shader02_dmdXi2 = R"SHD(#version 300 es
 precision highp float;
 precision highp int;
@@ -3641,6 +3703,7 @@ void main(void){
     color = vec4(combined, 1.0);
 }
 )SHD";
+/** @brief GLSL source for the `src_frac_shader02_dmdXi3` built-in fragment shader. */
 inline const char *src_frac_shader02_dmdXi3 = R"SHD(#version 300 es
 precision highp float;
 precision highp int;
@@ -3772,6 +3835,7 @@ void main(void){
     color = vec4(combined, 1.0);
 }
 )SHD";
+/** @brief GLSL source for the `src_frac_shader02_dmdXi3_drain` built-in fragment shader. */
 inline const char *src_frac_shader02_dmdXi3_drain = R"SHD(#version 300 es
 precision highp float;
 precision highp int;
@@ -3942,6 +4006,7 @@ void main(void){
     color = vec4(combined, 1.0);
 }
 )SHD";
+/** @brief GLSL source for the `src_frac_shader02_dmdXi3_warp` built-in fragment shader. */
 inline const char *src_frac_shader02_dmdXi3_warp = R"SHD(#version 300 es
 precision highp float;
 precision highp int;
@@ -4105,6 +4170,7 @@ void main(void){
     color = vec4(combined, 1.0);
 }
 )SHD";
+/** @brief GLSL source for the `src_frac_shader02_dmdXi4` built-in fragment shader. */
 inline const char *src_frac_shader02_dmdXi4 = R"SHD(#version 300 es
 precision highp float;
 precision highp int;
@@ -4275,6 +4341,7 @@ void main(void){
     color  = mix(color, texture(textTexture, TexCoord), 0.8);
 }
 )SHD";
+/** @brief GLSL source for the `src_frac_shader02_dmdXi5` built-in fragment shader. */
 inline const char *src_frac_shader02_dmdXi5 = R"SHD(#version 300 es
 precision highp float;
 precision highp int;
@@ -4538,6 +4605,7 @@ void main(void){
     color = vec4(master, 1.0);
 }
 )SHD";
+/** @brief GLSL source for the `src_frac_shader02_prisim` built-in fragment shader. */
 inline const char *src_frac_shader02_prisim = R"SHD(#version 300 es
 precision highp float;
 precision highp int;
@@ -4733,6 +4801,7 @@ void main(void){
     color = vec4(combined, 1.0);
 }
 )SHD";
+/** @brief GLSL source for the `src_frac_shader03_size` built-in fragment shader. */
 inline const char *src_frac_shader03_size = R"SHD(#version 300 es
 precision highp float;
 precision highp int;
@@ -4925,6 +4994,7 @@ void main(){
     color = vec4(outCol, 1.0);
 }
 )SHD";
+/** @brief GLSL source for the `src_frac_shader03_wormhole` built-in fragment shader. */
 inline const char *src_frac_shader03_wormhole = R"SHD(#version 300 es
 precision highp float;
 precision highp int;
@@ -5125,6 +5195,7 @@ void main(void) {
     color = vec4(finalRGB, baseTex.a);
 }
 )SHD";
+/** @brief GLSL source for the `src_frac_shader03_wormhole_amp` built-in fragment shader. */
 inline const char *src_frac_shader03_wormhole_amp = R"SHD(#version 300 es
 precision highp float;
 precision highp int;
@@ -5391,6 +5462,7 @@ void main(void) {
     color = vec4(finalRGB, baseTex.a);
 }
 )SHD";
+/** @brief GLSL source for the `src_frac_shader03_wormhole2` built-in fragment shader. */
 inline const char *src_frac_shader03_wormhole2 = R"SHD(#version 300 es
 precision highp float;
 precision highp int;
@@ -5597,6 +5669,7 @@ void main(void) {
     color = vec4(finalRGB, baseTex.a);
 }
 )SHD";
+/** @brief GLSL source for the `src_frac_shader03_wormhole3` built-in fragment shader. */
 inline const char *src_frac_shader03_wormhole3 = R"SHD(#version 300 es
 precision highp float;
 precision highp int;
@@ -5791,6 +5864,7 @@ void main(void) {
     color = vec4(finalRGB, baseTex.a);
 }
 )SHD";
+/** @brief GLSL source for the `src_frac_shader03_wormhole4` built-in fragment shader. */
 inline const char *src_frac_shader03_wormhole4 = R"SHD(#version 300 es
 precision highp float;
 precision highp int;
@@ -5994,6 +6068,7 @@ void main(void) {
     color = vec4(finalRGB, baseTex.a);
 }
 )SHD";
+/** @brief GLSL source for the `src_frac_shader04_echo` built-in fragment shader. */
 inline const char *src_frac_shader04_echo = R"SHD(#version 300 es
 precision highp float;
 precision highp int;
@@ -6140,6 +6215,7 @@ void main(void){
     color = vec4(combined, 1.0);
 }
 )SHD";
+/** @brief GLSL source for the `src_frac_shader04_echo2` built-in fragment shader. */
 inline const char *src_frac_shader04_echo2 = R"SHD(#version 300 es
 precision highp float;
 precision highp int;
@@ -6290,6 +6366,7 @@ void main(void){
     color = vec4(combined, 1.0);
 }
 )SHD";
+/** @brief GLSL source for the `src_frac_shader04_echo3_spin` built-in fragment shader. */
 inline const char *src_frac_shader04_echo3_spin = R"SHD(#version 300 es
 precision highp float;
 precision highp int;
@@ -6443,6 +6520,7 @@ void main(void){
     color = vec4(combined, 1.0);
 }
 )SHD";
+/** @brief GLSL source for the `src_frac_shader04_grid` built-in fragment shader. */
 inline const char *src_frac_shader04_grid = R"SHD(#version 300 es
 precision highp float;
 precision highp int;
@@ -6587,6 +6665,7 @@ void main(){
     color = vec4(outCol, 1.0);
 }
 )SHD";
+/** @brief GLSL source for the `src_frac_shader04_julia` built-in fragment shader. */
 inline const char *src_frac_shader04_julia = R"SHD(#version 300 es
 precision highp float;
 precision highp int;
@@ -6758,6 +6837,7 @@ void main(){
     color = vec4(outCol, 1.0);
 }
 )SHD";
+/** @brief GLSL source for the `src_frac_shader05` built-in fragment shader. */
 inline const char *src_frac_shader05 = R"SHD(#version 300 es
 precision highp float;
 precision highp int;
@@ -6841,6 +6921,7 @@ void main(){
     color=vec4(col,1.0);
 }
 )SHD";
+/** @brief GLSL source for the `src_frac_star1` built-in fragment shader. */
 inline const char *src_frac_star1 = R"SHD(#version 300 es
 precision highp float;
 precision highp int;
@@ -6977,6 +7058,7 @@ void main(){
     color=vec4(outRGB, texCol.a);
 }
 )SHD";
+/** @brief GLSL source for the `src_frac_zoom1` built-in fragment shader. */
 inline const char *src_frac_zoom1 = R"SHD(#version 300 es
 precision highp float;
 precision highp int;
@@ -7179,6 +7261,7 @@ void main(void) {
     color = vec4(finalRGB, baseTex.a);
 }
 )SHD";
+/** @brief GLSL source for the `src_frac_zoom2` built-in fragment shader. */
 inline const char *src_frac_zoom2 = R"SHD(#version 300 es
 precision highp float;
 precision highp int;
@@ -7395,6 +7478,7 @@ void main(void) {
     color = vec4(finalRGB, baseTex.a);
 }
 )SHD";
+/** @brief GLSL source for the `src_frac_zoom3` built-in fragment shader. */
 inline const char *src_frac_zoom3 = R"SHD(#version 300 es
 precision highp float;
 precision highp int;
@@ -7611,6 +7695,7 @@ void main(void) {
     color = vec4(finalRGB, baseTex.a);
 }
 )SHD";
+/** @brief GLSL source for the `src_frac_zoom4` built-in fragment shader. */
 inline const char *src_frac_zoom4 = R"SHD(#version 300 es
 precision highp float;
 precision highp int;
@@ -7825,6 +7910,7 @@ void main(void) {
     color = vec4(finalRGB, baseTex.a);
 }
 )SHD";
+/** @brief GLSL source for the `src_frac_zoom5` built-in fragment shader. */
 inline const char *src_frac_zoom5 = R"SHD(#version 300 es
 precision highp float;
 precision highp int;
@@ -8029,6 +8115,7 @@ void main(void) {
     color = vec4(finalRGB, baseTex.a);
 }
 )SHD";
+/** @brief GLSL source for the `src_frac_zoom6` built-in fragment shader. */
 inline const char *src_frac_zoom6 = R"SHD(#version 300 es
 precision highp float;
 precision highp int;
@@ -8238,6 +8325,7 @@ void main(void) {
     color = vec4(finalRGB, baseTex.a);
 }
 )SHD";
+/** @brief GLSL source for the `src_frac_zoom7` built-in fragment shader. */
 inline const char *src_frac_zoom7 = R"SHD(#version 300 es
 precision highp float;
 precision highp int;
@@ -8409,6 +8497,7 @@ void main(void) {
     color = vec4(finalRGB, baseTex.a);
 }
 )SHD";
+/** @brief GLSL source for the `src_frac_shader01` built-in fragment shader. */
 inline const char *src_frac_shader01 = R"SHD(#version 300 es
 precision highp float;
 precision highp int;
@@ -8549,6 +8638,7 @@ void main(){
     color = vec4(outCol, 1.0);
 }
 )SHD";
+/** @brief GLSL source for the `src_frac_shader01_dark` built-in fragment shader. */
 inline const char *src_frac_shader01_dark = R"SHD(#version 300 es
 precision highp float;
 precision highp int;
@@ -8768,6 +8858,7 @@ void main(){
     color = vec4(outCol, 1.0);
 }
 )SHD";
+/** @brief GLSL source for the `src_frac_shader01_smooth` built-in fragment shader. */
 inline const char *src_frac_shader01_smooth = R"SHD(#version 300 es
 precision highp float;
 precision highp int;
@@ -8986,6 +9077,7 @@ void main(){
     color = vec4(outCol, 1.0);
 }
 )SHD";
+/** @brief GLSL source for the `src_frac_shader01_smooth_neon` built-in fragment shader. */
 inline const char *src_frac_shader01_smooth_neon = R"SHD(#version 300 es
 precision highp float;
 precision highp int;
@@ -9228,6 +9320,7 @@ void main(){
     color = vec4(mixed, 1.0);
 }
 )SHD";
+/** @brief GLSL source for the `src_frac_shader02_dmd` built-in fragment shader. */
 inline const char *src_frac_shader02_dmd = R"SHD(#version 300 es
 precision highp float;
 precision highp int;
@@ -9393,6 +9486,7 @@ void main(){
 
 }
 )SHD";
+/** @brief GLSL source for the `src_frac_shader02_dmd_mandella` built-in fragment shader. */
 inline const char *src_frac_shader02_dmd_mandella = R"SHD(#version 300 es
 precision highp float;
 precision highp int;
@@ -9755,6 +9849,7 @@ void main(void) {
     color = vec4(finalRGB, baseTex.a);
 }
 )SHD";
+/** @brief GLSL source for the `src_frac_shader02_dmd2` built-in fragment shader. */
 inline const char *src_frac_shader02_dmd2 = R"SHD(#version 300 es
 precision highp float;
 precision highp int;
@@ -9925,6 +10020,7 @@ void main(void) {
     color = vec4(finalRGB, baseTex.a);
 }
 )SHD";
+/** @brief GLSL source for the `src_frac_shader02_dmd2_amp` built-in fragment shader. */
 inline const char *src_frac_shader02_dmd2_amp = R"SHD(#version 300 es
 precision highp float;
 precision highp int;
@@ -10164,6 +10260,7 @@ void main(void) {
     color = vec4(finalRGB, baseTex.a);
 }
 )SHD";
+/** @brief GLSL source for the `src_frac_shader02_dmd3` built-in fragment shader. */
 inline const char *src_frac_shader02_dmd3 = R"SHD(#version 300 es
 precision highp float;
 precision highp int;
@@ -10334,6 +10431,7 @@ void main(void) {
     color = vec4(finalRGB, baseTex.a);
 }
 )SHD";
+/** @brief GLSL source for the `src_frac_shader02_dmd4` built-in fragment shader. */
 inline const char *src_frac_shader02_dmd4 = R"SHD(#version 300 es
 precision highp float;
 precision highp int;
@@ -10505,6 +10603,7 @@ void main(void) {
     color = vec4(finalRGB, baseTex.a);
 }
 )SHD";
+/** @brief GLSL source for the `src_frac_shader02_dmd5` built-in fragment shader. */
 inline const char *src_frac_shader02_dmd5 = R"SHD(#version 300 es
 precision highp float;
 precision highp int;
@@ -10678,6 +10777,7 @@ void main(void) {
     color = vec4(finalRGB, baseTex.a);
 }
 )SHD";
+/** @brief GLSL source for the `src_frac_shader02_dmd6i` built-in fragment shader. */
 inline const char *src_frac_shader02_dmd6i = R"SHD(#version 300 es
 precision highp float;
 precision highp int;
@@ -10850,6 +10950,7 @@ void main(void) {
     color = vec4(finalRGB, baseTex.a);
 }
 )SHD";
+/** @brief GLSL source for the `src_frac_shader02_dmd6i_air` built-in fragment shader. */
 inline const char *src_frac_shader02_dmd6i_air = R"SHD(#version 300 es
 precision highp float;
 precision highp int;
@@ -11136,6 +11237,7 @@ void main(void) {
     color = vec4(finalRGB, baseTex.a);
 }
 )SHD";
+/** @brief GLSL source for the `src_frac_shader02_dmd6i_air_twist` built-in fragment shader. */
 inline const char *src_frac_shader02_dmd6i_air_twist = R"SHD(#version 300 es
 precision highp float;
 precision highp int;
@@ -11444,6 +11546,7 @@ void main(void) {
     color = vec4(finalRGB, baseTex.a);
 }
 )SHD";
+/** @brief GLSL source for the `src_frac_shader02_dmd6i_amp` built-in fragment shader. */
 inline const char *src_frac_shader02_dmd6i_amp = R"SHD(#version 300 es
 precision highp float;
 precision highp int;
@@ -11653,6 +11756,7 @@ void main(void) {
     color = vec4(finalRGB, baseTex.a);
 }
 )SHD";
+/** @brief GLSL source for the `src_frac_shader02_dmd6i_bowl` built-in fragment shader. */
 inline const char *src_frac_shader02_dmd6i_bowl = R"SHD(#version 300 es
 precision highp float;
 precision highp int;
@@ -11932,6 +12036,7 @@ void main(void){
     color = vec4(finalRGB, 1.0);
 }
 )SHD";
+/** @brief GLSL source for the `src_frac_shader02_dmd6i_bubble` built-in fragment shader. */
 inline const char *src_frac_shader02_dmd6i_bubble = R"SHD(#version 300 es
 precision highp float;
 precision highp int;
@@ -12165,6 +12270,7 @@ void main(void) {
     color = vec4(finalRGB, baseTex.a);
 }
 )SHD";
+/** @brief GLSL source for the `src_frac_shader02_dmd6i_neon` built-in fragment shader. */
 inline const char *src_frac_shader02_dmd6i_neon = R"SHD(#version 300 es
 precision highp float;
 precision highp int;
@@ -12374,6 +12480,7 @@ void main(void) {
     color = vec4(mixed, baseTex.a);
 }
 )SHD";
+/** @brief GLSL source for the `src_frac_shader02_dmd6i1` built-in fragment shader. */
 inline const char *src_frac_shader02_dmd6i1 = R"SHD(#version 300 es
 precision highp float;
 precision highp int;
@@ -12546,6 +12653,7 @@ void main(void) {
     color = vec4(finalRGB, baseTex.a);
 }
 )SHD";
+/** @brief GLSL source for the `src_frac_shader02_dmd7i` built-in fragment shader. */
 inline const char *src_frac_shader02_dmd7i = R"SHD(#version 300 es
 precision highp float;
 precision highp int;
@@ -12718,6 +12826,7 @@ void main(void) {
     color = vec4(finalRGB, baseTex.a);
 }
 )SHD";
+/** @brief GLSL source for the `src_frac_shader02_dmd8i` built-in fragment shader. */
 inline const char *src_frac_shader02_dmd8i = R"SHD(#version 300 es
 precision highp float;
 precision highp int;
@@ -12890,6 +12999,7 @@ void main(void) {
     color = vec4(finalRGB, baseTex.a);
 }
 )SHD";
+/** @brief GLSL source for the `src_frac_shader02_dmd9i` built-in fragment shader. */
 inline const char *src_frac_shader02_dmd9i = R"SHD(#version 300 es
 precision highp float;
 precision highp int;
@@ -13062,6 +13172,7 @@ void main(void) {
     color = vec4(finalRGB, baseTex.a);
 }
 )SHD";
+/** @brief GLSL source for the `src_frac_shader02_dmdi_radial` built-in fragment shader. */
 inline const char *src_frac_shader02_dmdi_radial = R"SHD(#version 300 es
 precision highp float;
 precision highp int;
@@ -13269,6 +13380,7 @@ void main(void) {
     color = vec4(finalRGB, baseTex.a);
 }
 )SHD";
+/** @brief GLSL source for the `src_frac_shader02_dmdi6i_zoom` built-in fragment shader. */
 inline const char *src_frac_shader02_dmdi6i_zoom = R"SHD(#version 300 es
 precision highp float;
 precision highp int;
@@ -13469,6 +13581,7 @@ void main(void) {
 }
 )SHD";
 
+/** @brief GLSL source for the `color_shader02` built-in fragment shader. */
 inline const char *color_shader02 = R"(#version 300 es
 precision highp float;
 precision highp int;

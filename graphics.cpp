@@ -1,11 +1,14 @@
-/*
-
-MX2 Graphics Demo
-Coded by Jared Bruni
-https://lostsidedead.biz
-GPL v3
-
-*/
+/**
+ * @file graphics.cpp
+ * @brief Application and WebAssembly entry points for the MX2 graphics demo.
+ *
+ * The demo loads built-in or external fragment shaders, renders them over an
+ * image or 3D model, and exposes its controls to JavaScript when compiled with
+ * Emscripten.
+ *
+ * @author Jared Bruni
+ * @copyright GPL-3.0
+ */
 
 #include "argz.hpp"
 #include "mx.hpp"
@@ -30,6 +33,7 @@ GPL v3
 
 #include "mirror_shaders.hpp"
 #include "model.hpp"
+/** @brief Reports the current OpenGL error together with its source location. */
 #define CHECK_GL_ERROR()                                                    \
     {                                                                       \
         GLenum err = glGetError();                                          \
@@ -38,16 +42,23 @@ GPL v3
     }
 
 #ifndef M_PI
+/** @brief Fallback value of pi for platforms that do not define `M_PI`. */
 #define M_PI 3.14159265358979323846
 #endif
 
+/** @brief Associates a display name with a fragment-shader source string. */
 struct ShaderInfo {
-    std::string name;
-    std::string source;
+    std::string name;   ///< Name shown in the shader selector.
+    std::string source; ///< Complete GLSL fragment-shader source.
 };
 
 namespace {
 
+    /**
+     * @brief Removes leading and trailing ASCII whitespace.
+     * @param value Text to trim.
+     * @return A trimmed copy of @p value.
+     */
     std::string trim(const std::string &value) {
         const size_t first = value.find_first_not_of(" \t\r\n");
         if (first == std::string::npos) {
@@ -57,6 +68,12 @@ namespace {
         return value.substr(first, last - first + 1);
     }
 
+    /**
+     * @brief Replaces every non-overlapping occurrence of a substring.
+     * @param[in,out] source Text to modify.
+     * @param from Substring to find.
+     * @param to Replacement text.
+     */
     void replaceAll(std::string &source, const std::string &from, const std::string &to) {
         size_t position = 0;
         while ((position = source.find(from, position)) != std::string::npos) {
@@ -65,6 +82,10 @@ namespace {
         }
     }
 
+    /**
+     * @brief Adds explicit high-precision qualifiers to numeric GLSL arrays.
+     * @param[in,out] source Fragment-shader source to normalize.
+     */
     void qualifyArrayPrecisionForWebGL(std::string &source) {
         // Some mobile GLSL ES compilers do not apply the default precision to
         // array variables. Give numeric arrays an explicit qualifier while
@@ -89,6 +110,13 @@ namespace {
             source.insert(*it, "highp ");
     }
 
+    /**
+     * @brief Converts integer literals used in floating-point GLSL expressions.
+     * @param[in,out] source Fragment-shader source to normalize.
+     *
+     * WebGL's GLSL ES compiler does not permit several implicit integer-to-float
+     * conversions accepted by desktop drivers.
+     */
     void normalizeFloatLiteralOperands(std::string &source) {
         const auto isIdentifierCharacter = [](char c) {
             return std::isalnum(static_cast<unsigned char>(c)) || c == '_';
@@ -234,6 +262,10 @@ namespace {
             "$1 $2 $3.0");
     }
 
+    /**
+     * @brief Rewrites dynamically indexed fragment outputs for WebGL.
+     * @param[in,out] source Fragment-shader source to inspect and rewrite.
+     */
     void makeFragmentOutputWebGLSafe(std::string &source) {
         static const std::regex outputPattern(R"(\bout\s+vec4\s+([A-Za-z_][A-Za-z0-9_]*)\s*;)");
         std::smatch outputMatch;
@@ -274,6 +306,11 @@ namespace {
         source += "\nvoid main() {\n    mxShaderMain();\n    mxWebGLFragColor = mxOutputColor;\n}\n";
     }
 
+    /**
+     * @brief Converts a desktop fragment shader to GLSL ES 3.00 syntax.
+     * @param source Original shader source.
+     * @return WebGL-compatible shader source.
+     */
     std::string convertFragmentShaderToWebGL(std::string source) {
         if (source.size() >= 3 && static_cast<unsigned char>(source[0]) == 0xef &&
             static_cast<unsigned char>(source[1]) == 0xbb && static_cast<unsigned char>(source[2]) == 0xbf) {
@@ -321,6 +358,12 @@ namespace {
         return source;
     }
 
+    /**
+     * @brief Detects shaders that require unavailable audio or cached inputs.
+     * @param filename Shader filename used for heuristic checks.
+     * @param source Shader source used for uniform inspection.
+     * @return `true` when the browser demo cannot provide the required inputs.
+     */
     bool usesUnsupportedRuntimeInputs(const std::string &filename, const std::string &source) {
         if (filename.find("cache") != std::string::npos || filename.find("audio") != std::string::npos ||
             source.find("sampler1D") != std::string::npos || source.find("spectrum") != std::string::npos ||
@@ -338,6 +381,7 @@ namespace {
 
 } // namespace
 
+/** @brief Vertex shader used by the textured 3D-model render path. */
 const char *sz3DVertex = R"(#version 300 es
 layout (location = 0) in vec3 position;
 layout (location = 1) in vec3 normal;
@@ -355,6 +399,7 @@ void main() {
     TexCoord = texCoord;
 })";
 
+/** @brief Ordered catalog of built-in shaders exposed by the application. */
 static std::vector<ShaderInfo> shaderSources = {
     {"Bubble", srcShader1},
     {"Abilify", srcShaderAbilify},
@@ -489,9 +534,20 @@ static std::vector<ShaderInfo> shaderSources = {
     {"psych_block", szBlock},
     {"psychedelic_energy", psychedelic_energy}};
 
+/**
+ * @brief Loads and stores external fragment shaders listed in an index file.
+ *
+ * Cached WebGL shaders are preferred. Desktop GLSL sources are converted on
+ * demand when no cache is available.
+ */
 class ShaderLibrary {
   public:
     ShaderLibrary() = default;
+    /**
+     * @brief Parses a newline-delimited shader index.
+     * @param input Index contents; blank lines and lines beginning with `#` are ignored.
+     * @return Shader filenames in their original order.
+     */
     std::vector<std::string> tokenize(const std::string &input) {
         std::vector<std::string> values;
         std::istringstream stream(input);
@@ -505,6 +561,11 @@ class ShaderLibrary {
         return values;
     }
 
+    /**
+     * @brief Loads indexed shader sources from the application's data directory.
+     * @param win Window used to resolve packaged resource paths.
+     * @param filename Fallback index path when no WebGL cache exists.
+     */
     void init(gl::GLWindow *win, const std::string &filename) {
         const std::string cacheIndex = win->util.getFilePath("data/shaders/webgl_cache/index.txt");
         std::string value = mx::readFileToString(cacheIndex);
@@ -526,27 +587,39 @@ class ShaderLibrary {
             }
         }
     }
+    /** @brief Writes every loaded shader name and source to standard output. */
     void print() {
 
         for (const auto &i : shaders) {
             std::cout << i.first << ":" << i.second << "\n";
         }
     }
+    /** @return `true` when no external shaders have been loaded. */
     bool empty() const {
         return (shaders.empty());
     }
+    /** @brief Returns the name at @p i. @throws std::out_of_range for an invalid index. */
     std::string getNameAt(int i) const {
         return shaders.at(i).first;
     }
+    /** @brief Returns the source at @p i. @throws std::out_of_range for an invalid index. */
     std::string getShaderAt(int i) const {
         return shaders.at(i).second;
     }
+    /** @return Number of loaded external shaders. */
     size_t getSize() const { return shaders.size(); }
 
   protected:
+    /** @brief Loaded shader names paired with their GLSL source. */
     std::vector<std::pair<std::string, std::string>> shaders;
 };
 
+/**
+ * @brief Owns the demo's render state, shaders, texture, model, and input state.
+ *
+ * The object supports both a 2D sprite path and a textured 3D-model path. It
+ * also manages optional ping-pong framebuffers for multipass effects.
+ */
 class About : public gl::GLObject {
     GLuint texture = 0;
     gl::ShaderProgram shader;
@@ -603,7 +676,9 @@ class About : public gl::GLObject {
     std::vector<int> shaderPassList;
 
   public:
+    /** @brief Constructs an empty render controller. */
     About() = default;
+    /** @brief Releases the image texture and multipass framebuffer resources. */
     virtual ~About() override {
         if (texture != 0) {
             glDeleteTextures(1, &texture);
@@ -618,10 +693,16 @@ class About : public gl::GLObject {
         }
     }
 
+    /** @brief Selects textured-model rendering instead of the 2D sprite path. */
     void set3DMode(bool is3d_m) {
         is3d = is3d_m;
     }
 
+    /**
+     * @brief Creates or resizes the ping-pong framebuffer pair.
+     * @param w Render-target width in pixels.
+     * @param h Render-target height in pixels.
+     */
     void initPassFBOs(int w, int h) {
         if (passFBO[0] != 0 && passFBOWidth == w && passFBOHeight == h) {
             return;
@@ -661,20 +742,24 @@ class About : public gl::GLObject {
         printf("Multipass FBOs initialized: %dx%d\n", w, h);
     }
 
+    /** @brief Enables or disables the configured multipass shader chain. */
     void enableMultipass(bool enable) {
         multipassEnabled = enable;
         printf("Multipass %s\n", enable ? "enabled" : "disabled");
     }
 
+    /** @return Whether multipass rendering is enabled. */
     bool isMultipassEnabled() const {
         return multipassEnabled;
     }
 
+    /** @brief Removes all shaders from the multipass chain. */
     void clearShaderPasses() {
         shaderPassList.clear();
         printf("Shader pass list cleared\n");
     }
 
+    /** @brief Appends a valid 2D shader index to the multipass chain. */
     void addShaderPass(int shaderIndex) {
         if (shaderIndex >= 0 && shaderIndex < static_cast<int>(shaders2.size())) {
             shaderPassList.push_back(shaderIndex);
@@ -683,15 +768,22 @@ class About : public gl::GLObject {
         }
     }
 
+    /** @brief Replaces the multipass chain with @p passes. */
     void setShaderPasses(const std::vector<int> &passes) {
         shaderPassList = passes;
         printf("Set %zu shader passes\n", passes.size());
     }
 
+    /** @return A copy of the configured shader-index chain. */
     std::vector<int> getShaderPasses() const {
         return shaderPassList;
     }
 
+    /**
+     * @brief Uploads the current application state to a shader program.
+     * @param shader Program that receives the common uniforms.
+     * @param deltaTime Seconds elapsed since the previous frame.
+     */
     void updateShaderUniforms(gl::ShaderProgram *shader, float deltaTime) {
         shader->setUniform("time_f", animation);
         shader->setUniform("iTime", animation);
@@ -730,6 +822,10 @@ class About : public gl::GLObject {
         shader->setUniform("proj_matrix", glm::mat4(1.0f));
     }
 
+    /**
+     * @brief Supplies legacy sampler and synthesized audio uniforms.
+     * @param shader Program that receives the compatibility values.
+     */
     void updateCompatibilityUniforms(gl::ShaderProgram *shader) {
         shader->setUniform("textTexture", 0);
         shader->setUniform("samp", 0);
@@ -746,19 +842,30 @@ class About : public gl::GLObject {
         shader->setUniform("uamp", audioLevel);
     }
 
+    /** @return Index of the active shader. */
     int getShaderIndex() const { return currentShaderIndex; }
+    /** @brief Selects @p index when it refers to a compiled shader. */
     void setShaderIndex(int index) {
         if (index >= 0 && index < static_cast<int>(shaders.size())) {
             currentShaderIndex = static_cast<size_t>(index);
         }
     }
+    /** @return Number of successfully compiled shader pairs. */
     int getShaderCount() { return static_cast<int>(shaders.size()); }
+    /** @return Display name for @p index, or an empty string when invalid. */
     std::string getShaderNameAt(int index) {
         if (index >= 0 && index < static_cast<int>(shader_names.size()))
             return shader_names[index];
         return "";
     }
 
+    /**
+     * @brief Uploads an SDL surface as an RGBA OpenGL texture.
+     * @param surface Source pixel surface; must not be null.
+     * @param flip Whether to vertically flip the pixels before upload.
+     * @return Newly allocated OpenGL texture identifier.
+     * @throws mx::Exception if conversion or flipping fails.
+     */
     GLuint createTexture(SDL_Surface *surface, bool flip) {
         if (!surface) {
             throw mx::Exception("Surface is null: Unable to load PNG file.");
@@ -793,6 +900,11 @@ class About : public gl::GLObject {
         return texture;
     }
 
+    /**
+     * @brief Replaces the source image and recomputes its aspect-fit rectangle.
+     * @param surface Image pixels to upload.
+     * @param win Window whose viewport and dimensions are updated.
+     */
     void loadNewTexture(SDL_Surface *surface, gl::GLWindow *win) {
         if (texture != 0) {
             glDeleteTextures(1, &texture);
@@ -837,11 +949,13 @@ class About : public gl::GLObject {
         switchShader(currentShaderIndex, win);
     }
 
+    /** @brief Emscripten-compatible callback that compiles the next shader. */
     void loadShaderAsync(void *arg) {
         About *self = static_cast<About *>(arg);
         self->loadNextShader();
     }
 
+    /** @brief Compiles one built-in shader for both 2D and 3D rendering. */
     void loadNextShader() {
         if (loadingShaderIndex < static_cast<int>(shaderSources.size())) {
             const auto &info = shaderSources[loadingShaderIndex];
@@ -922,6 +1036,7 @@ class About : public gl::GLObject {
         }
     }
 
+    /** @brief Finalizes shader loading and activates the first available shader. */
     void finishLoading() {
         if (shaders.empty()) {
             mx::system_err << "No shaders loaded successfully\n";
@@ -985,6 +1100,10 @@ class About : public gl::GLObject {
 #endif
     }
 
+    /**
+     * @brief Initializes textures, shader loading, and initial viewport state.
+     * @param win Owning OpenGL window.
+     */
     void load(gl::GLWindow *win) override {
         maxWidth = win->w;
         maxHeight = win->h;
@@ -1021,27 +1140,28 @@ class About : public gl::GLObject {
 
 #endif
     }
-    float cameraYaw = 270.0f;
-    float cameraPitch = 0.0f;
-    float cameraRoll = 0.0f;
-    const float cameraRotationSpeed = 5.0f;
-    bool viewRotationActive = false;
-    bool oscillateScale = false;
-    float cameraDistance = 0.0f;
-    float movementSpeed = 0.01f;
-    float modelSize = 1.0f;
-    float modelScale = 1.0f;
-    glm::vec3 modelCenter{0.0f};
-    static constexpr float TARGET_MODEL_SIZE = 1.0f;
-    float cameraOffsetX = 0.0f;
-    float cameraOffsetY = 0.0f;
-    float cameraOffsetZ = 0.0f;
-
+    float cameraYaw = 270.0f;                  ///< Camera yaw in degrees.
+    float cameraPitch = 0.0f;                 ///< Camera pitch in degrees.
+    float cameraRoll = 0.0f;                  ///< Camera roll in degrees.
+    const float cameraRotationSpeed = 5.0f;   ///< Keyboard rotation step in degrees.
+    bool viewRotationActive = false;           ///< Whether automatic view rotation is active.
+    bool oscillateScale = false;               ///< Whether model scale oscillation is active.
+    float cameraDistance = 0.0f;               ///< Distance from the camera to the model center.
+    float movementSpeed = 0.01f;               ///< Per-frame model movement step.
+    float modelSize = 1.0f;                    ///< Largest dimension of the model bounds.
+    float modelScale = 1.0f;                   ///< Scale that normalizes the loaded model.
+    glm::vec3 modelCenter{0.0f};                ///< Center of the loaded model bounds.
+    static constexpr float TARGET_MODEL_SIZE = 1.0f; ///< Desired normalized model size.
+    float cameraOffsetX = 0.0f;                ///< Horizontal camera translation.
+    float cameraOffsetY = 0.0f;                ///< Vertical camera translation.
+    float cameraOffsetZ = 0.0f;                ///< Depth camera translation.
+    /** @brief Rotates the model camera horizontally by @p delta degrees. */
     void adjustCameraYaw(float delta) {
         cameraYaw += delta;
         cameraYaw = fmod(cameraYaw + 360.0f, 360.0f);
     }
 
+    /** @brief Rotates the model camera vertically, clamped away from the poles. */
     void adjustCameraPitch(float delta) {
         cameraPitch += delta;
         if (cameraPitch > 89.0f)
@@ -1050,25 +1170,48 @@ class About : public gl::GLObject {
             cameraPitch = -89.0f;
     }
 
+    /** @brief Changes the model-camera distance by a model-relative amount. */
     void adjustCameraDistance(float delta) {
         cameraDistance += delta * modelSize * 0.1f;
     }
 
+    /** @name Normalized model-camera translation */
+    ///@{
+    /** @brief Sets the horizontal camera offset in model-relative units. */
     void setCameraX(float x) { cameraOffsetX = x * modelSize * 0.5f; }
+    /** @brief Sets the vertical camera offset in model-relative units. */
     void setCameraY(float y) { cameraOffsetY = y * modelSize * 0.5f; }
+    /** @brief Sets the depth camera offset in model-relative units. */
     void setCameraZ(float z) { cameraOffsetZ = z * modelSize * 0.5f; }
+    /** @return Horizontal camera offset in model-relative units. */
     float getCameraX() const { return modelSize > 0.001f ? cameraOffsetX / (modelSize * 0.5f) : 0.0f; }
+    /** @return Vertical camera offset in model-relative units. */
     float getCameraY() const { return modelSize > 0.001f ? cameraOffsetY / (modelSize * 0.5f) : 0.0f; }
+    /** @return Depth camera offset in model-relative units. */
     float getCameraZ() const { return modelSize > 0.001f ? cameraOffsetZ / (modelSize * 0.5f) : 0.0f; }
+    /** @return Largest dimension of the normalized model bounds. */
     float getModelSize() const { return modelSize; }
+    ///@}
 
+    /** @name Normalized model rotation */
+    ///@{
+    /** @brief Sets normalized pitch, where `-1` and `1` approach the poles. */
     void setRotationX(float x) { cameraPitch = x * 89.0f; }
+    /** @brief Sets normalized yaw in the range `[-1, 1]`. */
     void setRotationY(float y) { cameraYaw = (y + 1.0f) * 180.0f; }
+    /** @brief Sets normalized roll in the range `[-1, 1]`. */
     void setRotationZ(float z) { cameraRoll = z * 180.0f; }
+    /** @return Normalized camera pitch. */
     float getRotationX() const { return cameraPitch / 89.0f; }
+    /** @return Normalized camera yaw. */
     float getRotationY() const { return (cameraYaw / 180.0f) - 1.0f; }
+    /** @return Normalized camera roll. */
     float getRotationZ() const { return cameraRoll / 180.0f; }
-
+    ///@}
+    /**
+     * @brief Loads a model and derives camera defaults from its bounding box.
+     * @param m_file_path Resource path of the model file.
+     */
     void loadModelFile(const std::string &m_file_path) {
         if (m_file_path.find("quad") != std::string::npos) {
             is3d = false;
@@ -1135,6 +1278,7 @@ class About : public gl::GLObject {
         }
     }
 
+    /** @brief Draws the current texture through the active 2D shader. */
     void drawModel2D(gl::GLWindow *win) {
         if (currentShaderIndex >= shaders2.size()) {
             printf("Error: shaders2 index %zu out of bounds (size: %zu)\n", currentShaderIndex, shaders2.size());
@@ -1155,6 +1299,11 @@ class About : public gl::GLObject {
         sprite.draw(texture, displayX, displayY, displayW, displayH);
     }
 
+    /**
+     * @brief Draws the loaded 3D model with the active shader.
+     * @param win Window providing the projection dimensions.
+     * @param textureToUse Optional multipass result; zero selects the source texture.
+     */
     void drawModel(gl::GLWindow *win, GLuint textureToUse = 0) {
         GLuint meshTexture = (textureToUse != 0) ? textureToUse : texture;
         glEnable(GL_DEPTH_TEST);
@@ -1285,6 +1434,11 @@ class About : public gl::GLObject {
         glFrontFace(GL_CCW);
     }
 
+    /**
+     * @brief Activates a compiled shader and reconnects it to render objects.
+     * @param index Shader index to activate.
+     * @param win Window whose render state is refreshed.
+     */
     void switchShader(size_t index, gl::GLWindow *win) {
         if (index < shaders.size()) {
             currentShaderIndex = index;
@@ -1371,18 +1525,24 @@ class About : public gl::GLObject {
             }
         }
     }
+    /** @brief Advances to the next shader, wrapping at the end. */
     void nextShader(gl::GLWindow *win) {
         currentShaderIndex = (currentShaderIndex + 1) % shaders.size();
         switchShader(currentShaderIndex, win);
         mx::system_out << "Switched to shader: " << getShaderNameAt(static_cast<int>(currentShaderIndex)) << "\n";
     }
 
+    /** @brief Selects the previous shader, wrapping at the beginning. */
     void prevShader(gl::GLWindow *win) {
         currentShaderIndex = (currentShaderIndex == 0) ? shaders.size() - 1 : currentShaderIndex - 1;
         switchShader(currentShaderIndex, win);
         mx::system_out << "Switched to shader: " << getShaderNameAt(static_cast<int>(currentShaderIndex)) << "\n";
     }
 
+    /**
+     * @brief Updates animation state and renders one frame.
+     * @param win Owning OpenGL window.
+     */
     void draw(gl::GLWindow *win) override {
         if (!loadingComplete) {
             return;
@@ -1570,9 +1730,15 @@ class About : public gl::GLObject {
         }
     }
 
-    bool mouseDown = false;
-    glm::vec4 mouse = glm::vec4(0.0f);
+    bool mouseDown = false;                 ///< Whether the primary pointer is pressed.
+    glm::vec4 mouse = glm::vec4(0.0f);      ///< Shader-style pointer position and click state.
 
+    /**
+     * @brief Updates pointer coordinates and button state used by shader uniforms.
+     * @param x Canvas-space horizontal coordinate.
+     * @param y Canvas-space vertical coordinate.
+     * @param pressed Whether the primary pointer is down.
+     */
     void setPointerState(float x, float y, bool pressed) {
         mouse.x = std::clamp(x, 0.0f, static_cast<float>(canvasWidth));
         mouse.y = std::clamp(y, 0.0f, static_cast<float>(canvasHeight));
@@ -1581,40 +1747,76 @@ class About : public gl::GLObject {
         mouseDown = pressed;
     }
 
+    /** @brief Resets shader animation time to zero. */
     void reset() {
         animation = 0.0f;
     }
 
+    /** @name Shader controls */
+    ///@{
+    /** @brief Sets the animation-speed multiplier. */
     void setSpeed(float value) { iSpeed = value; }
+    /** @brief Sets the effect amplitude. */
     void setAmplitude(float value) { iAmplitude = value; }
+    /** @brief Sets the effect frequency multiplier. */
     void setFrequency(float value) { iFrequency = value; }
+    /** @brief Sets the output brightness multiplier. */
     void setBrightness(float value) { iBrightness = value; }
+    /** @brief Sets the output contrast multiplier. */
     void setContrast(float value) { iContrast = value; }
+    /** @brief Sets the output saturation multiplier. */
     void setSaturation(float value) { iSaturation = value; }
+    /** @brief Sets the hue rotation in radians. */
     void setHueShift(float value) { iHueShift = value; }
+    /** @brief Sets the texture-coordinate zoom factor. */
     void setZoom(float value) { iZoom = value; }
+    /** @brief Sets the texture-coordinate rotation in radians. */
     void setRotation(float value) { iRotation = value; }
+    /** @brief Sets the shader quality hint. */
     void setQuality(float value) { iQuality = value; }
+    /** @brief Enables or disables shader debug visualization. */
     void setDebugMode(bool value) { iDebugMode = value ? 1.0f : 0.0f; }
 
+    /** @return Animation-speed multiplier. */
     float getSpeed() const { return iSpeed; }
+    /** @return Effect amplitude. */
     float getAmplitude() const { return iAmplitude; }
+    /** @return Effect frequency multiplier. */
     float getFrequency() const { return iFrequency; }
+    /** @return Output brightness multiplier. */
     float getBrightness() const { return iBrightness; }
+    /** @return Output contrast multiplier. */
     float getContrast() const { return iContrast; }
+    /** @return Output saturation multiplier. */
     float getSaturation() const { return iSaturation; }
+    /** @return Hue rotation in radians. */
     float getHueShift() const { return iHueShift; }
+    /** @return Texture-coordinate zoom factor. */
     float getZoom() const { return iZoom; }
+    /** @return Texture-coordinate rotation in radians. */
     float getRotation() const { return iRotation; }
+    /** @return Shader quality hint. */
     float getQuality() const { return iQuality; }
+    /** @return Whether shader debug visualization is enabled. */
     bool getDebugMode() const { return iDebugMode > 0.5f; }
-    int getCanvasWidth() const { return canvasWidth; }
-    int getCanvasHeight() const { return canvasHeight; }
-    int getDisplayX() const { return displayX; }
-    int getDisplayY() const { return displayY; }
-    int getDisplayWidth() const { return displayW; }
-    int getDisplayHeight() const { return displayH; }
+    ///@}
 
+    /** @name Render geometry */
+    ///@{
+    /** @return Canvas width in pixels. */
+    int getCanvasWidth() const { return canvasWidth; }
+    /** @return Canvas height in pixels. */
+    int getCanvasHeight() const { return canvasHeight; }
+    /** @return Horizontal origin of the aspect-fit image rectangle. */
+    int getDisplayX() const { return displayX; }
+    /** @return Vertical origin of the aspect-fit image rectangle. */
+    int getDisplayY() const { return displayY; }
+    /** @return Width of the aspect-fit image rectangle. */
+    int getDisplayWidth() const { return displayW; }
+    /** @return Height of the aspect-fit image rectangle. */
+    int getDisplayHeight() const { return displayH; }
+    ///@}
+    /** @brief Rebinds the source texture and reapplies its sampling parameters. */
     void forceTextureRebind() {
 
         if (texture != 0) {
@@ -1628,6 +1830,10 @@ class About : public gl::GLObject {
         }
     }
 
+    /**
+     * @brief Updates viewport dimensions and recomputes the aspect-fit rectangle.
+     * @param win Window containing the new canvas dimensions.
+     */
     void resize(gl::GLWindow *win) {
         maxWidth = win->w;
         maxHeight = win->h;
@@ -1662,6 +1868,7 @@ class About : public gl::GLObject {
         }
     }
 
+    /** @brief Handles pointer, keyboard, and window events for the demo. */
     void event(gl::GLWindow *win, SDL_Event &e) override {
         switch (e.type) {
         case SDL_FINGERDOWN: {
@@ -1730,6 +1937,7 @@ class About : public gl::GLObject {
             break;
         }
     }
+    /** @brief Advances model animation state by @p deltaTime seconds. */
     void update(float deltaTime) {
         if (firstTapRegistered) {
             Uint32 currentTime = SDL_GetTicks();
@@ -1740,6 +1948,12 @@ class About : public gl::GLObject {
         }
     }
 
+    /**
+     * @brief Compiles and activates a user-provided fragment shader.
+     * @param fragmentSource GLSL ES fragment-shader source.
+     * @param win Window whose render objects receive the new program.
+     * @return Empty text on success, otherwise a human-readable error message.
+     */
     std::string compileCustomShader(const std::string &fragmentSource, gl::GLWindow *win) {
         if (usesUnsupportedRuntimeInputs("custom", fragmentSource)) {
             return "ERROR: Shader uses unsupported audio, FFT, spectrum, or texture-cache inputs.";
@@ -1776,6 +1990,7 @@ class About : public gl::GLObject {
         switchShader(currentShaderIndex, win);
         return "SUCCESS: Shader compiled and applied successfully!";
     }
+    /** @brief Restores the first built-in shader. */
     void resetToDefaultShader(gl::GLWindow *win) {
         if (!shaders.empty()) {
             currentShaderIndex = 0;
@@ -1783,11 +1998,13 @@ class About : public gl::GLObject {
         }
     }
 
+    /** @brief Schedules a frame capture at integer output @p scale. */
     void saveImage(int scale) {
         captureNextFrame = true;
         captureScale = scale;
     }
 
+    /** @brief Reads the current framebuffer and emits a PNG capture. */
     void captureFrame() {
         int readW = canvasWidth;
         int readH = canvasHeight;
@@ -1919,20 +2136,25 @@ class About : public gl::GLObject {
     }
 };
 
+/** @brief Top-level OpenGL window that forwards events and drawing to About. */
 class MainWindow : public gl::GLWindow {
   public:
+    /** @brief Creates the window and initializes its render controller. */
     MainWindow(std::string path, int tw, int th) : gl::GLWindow("ACMX2 - Interactive Visualizer", tw, th) {
         setPath(path);
         setObject(new About());
         object->load(this);
     }
 
+    /** @brief Destroys the application window. */
     ~MainWindow() override {}
 
+    /** @brief Forwards an SDL event to the active render object. */
     virtual void event(SDL_Event &e) override {
         object->event(this, e);
     }
 
+    /** @brief Clears, renders, presents, and paces one frame. */
     virtual void draw() override {
         glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -1944,35 +2166,45 @@ class MainWindow : public gl::GLWindow {
     }
 };
 
-MainWindow *main_w = nullptr;
-About *about_ptr = nullptr;
+MainWindow *main_w = nullptr; ///< Active application window used by web callbacks.
+About *about_ptr = nullptr;   ///< Active render controller used by web callbacks.
 
 #ifdef __EMSCRIPTEN__
 
+/** @defgroup web_api JavaScript API
+ *  @brief Functions exported to JavaScript through Emscripten bindings.
+ *  @{
+ */
+
+/** @brief Activates a built-in shader by index. */
 void setShaderIndex(int index) {
     if (about_ptr && main_w && index >= 0) {
         about_ptr->switchShader(static_cast<size_t>(index), main_w);
     }
 }
 
+/** @brief Enables or disables textured 3D-model rendering. */
 void set3D(bool value) {
     if (about_ptr) {
         about_ptr->set3DMode(value);
     }
 }
 
+/** @brief Supplies canvas-space pointer state from JavaScript. */
 void setMouseInput(float x, float y, bool pressed) {
     if (about_ptr) {
         about_ptr->setPointerState(x, y, pressed);
     }
 }
 
+/** @brief Loads a packaged compressed model named by @p info. */
 void loadModel(const std::string &info) {
     if (about_ptr) {
         about_ptr->loadModelFile("data/compressed/" + info);
     }
 }
 
+/** @brief Synchronizes native render dimensions with the HTML canvas. */
 void resizeWeb() {
     if (about_ptr && main_w) {
         int w, h;
@@ -1984,30 +2216,35 @@ void resizeWeb() {
     }
 }
 
+/** @brief Reapplies texture bindings after a browser context-state change. */
 void forceTextureRebindWeb() {
     if (about_ptr) {
         about_ptr->forceTextureRebind();
     }
 }
 
+/** @brief Requests a PNG capture at integer output @p scale. */
 void saveImageWeb(int scale) {
     if (about_ptr) {
         about_ptr->saveImage(scale);
     }
 }
 
+/** @brief Selects the next built-in shader. */
 void nextShaderWeb() {
     if (about_ptr) {
         about_ptr->nextShader(main_w);
     }
 }
 
+/** @brief Selects the previous built-in shader. */
 void prevShaderWeb() {
     if (about_ptr) {
         about_ptr->prevShader(main_w);
     }
 }
 
+/** @brief Decodes PNG bytes and replaces the source texture. */
 void loadImagePNG(const std::vector<uint8_t> &imageData) {
     std::ofstream outFile("image.png", std::ios::binary);
     outFile.write(reinterpret_cast<const char *>(imageData.data()), imageData.size());
@@ -2033,6 +2270,7 @@ void loadImagePNG(const std::vector<uint8_t> &imageData) {
     }
 }
 
+/** @brief Decodes JPEG bytes and replaces the source texture. */
 void loadImageJPG(const std::vector<uint8_t> &imageData) {
     std::ofstream outFile("image.jpg", std::ios::binary);
     outFile.write(reinterpret_cast<const char *>(imageData.data()), imageData.size());
@@ -2057,6 +2295,12 @@ void loadImageJPG(const std::vector<uint8_t> &imageData) {
     }
 }
 
+/**
+ * @brief Replaces the source texture from tightly packed RGBA bytes.
+ * @param rgbaData Pixel buffer containing exactly `width * height * 4` bytes.
+ * @param width Image width in pixels.
+ * @param height Image height in pixels.
+ */
 void loadImageRGBA(const std::vector<uint8_t> &rgbaData, int width, int height) {
     if (rgbaData.size() != static_cast<size_t>(width * height * 4)) {
         mx::system_err << "Invalid RGBA data size. Expected " << (width * height * 4) << " but got " << rgbaData.size() << "\n";
@@ -2096,6 +2340,12 @@ void loadImageRGBA(const std::vector<uint8_t> &rgbaData, int width, int height) 
     }
 }
 
+/**
+ * @brief Replaces the source texture from an RGBA buffer in WebAssembly memory.
+ * @param dataPtr Address of the first pixel byte.
+ * @param width Image width in pixels.
+ * @param height Image height in pixels.
+ */
 void loadImageRGBAPtr(uintptr_t dataPtr, int width, int height) {
     uint8_t *rgbaData = reinterpret_cast<uint8_t *>(dataPtr);
     SDL_Surface *surface = SDL_CreateRGBSurfaceWithFormatFrom(
@@ -2120,6 +2370,7 @@ void loadImageRGBAPtr(uintptr_t dataPtr, int width, int height) {
     SDL_FreeSurface(surface);
 }
 
+/** @return Empty text on successful custom-shader compilation, or an error message. */
 std::string compileCustomShaderWeb(const std::string &fragmentSource) {
     if (about_ptr && main_w) {
         return about_ptr->compileCustomShader(fragmentSource, main_w);
@@ -2127,6 +2378,7 @@ std::string compileCustomShaderWeb(const std::string &fragmentSource) {
     return "ERROR: Application not initialized";
 }
 
+/** @return Display name for shader @p i, or an empty string when unavailable. */
 std::string getShaderNameAt(int i) {
     if (about_ptr) {
         return about_ptr->getShaderNameAt(i);
@@ -2134,6 +2386,7 @@ std::string getShaderNameAt(int i) {
     return "";
 }
 
+/** @return Number of compiled built-in shaders. */
 int getShaderCount() {
     if (about_ptr) {
         return about_ptr->getShaderCount();
@@ -2141,283 +2394,336 @@ int getShaderCount() {
     return 0;
 }
 
+/** @brief Restores the first built-in shader. */
 void resetToDefaultShaderWeb() {
     if (about_ptr && main_w) {
         about_ptr->resetToDefaultShader(main_w);
     }
 }
 
+/** @brief Resets shader animation time. */
 void reset_time() {
     if (about_ptr && main_w) {
         about_ptr->reset();
     }
 }
 
+/** @brief Sets the animation-speed uniform. */
 void setUniformSpeed(float value) {
     if (about_ptr)
         about_ptr->setSpeed(value);
 }
 
+/** @brief Sets the effect-amplitude uniform. */
 void setUniformAmplitude(float value) {
     if (about_ptr)
         about_ptr->setAmplitude(value);
 }
 
+/** @brief Sets the effect-frequency uniform. */
 void setUniformFrequency(float value) {
     if (about_ptr)
         about_ptr->setFrequency(value);
 }
 
+/** @brief Sets the brightness uniform. */
 void setUniformBrightness(float value) {
     if (about_ptr)
         about_ptr->setBrightness(value);
 }
 
+/** @brief Sets the contrast uniform. */
 void setUniformContrast(float value) {
     if (about_ptr)
         about_ptr->setContrast(value);
 }
 
+/** @brief Sets the saturation uniform. */
 void setUniformSaturation(float value) {
     if (about_ptr)
         about_ptr->setSaturation(value);
 }
 
+/** @brief Sets the hue-shift uniform in radians. */
 void setUniformHueShift(float value) {
     if (about_ptr)
         about_ptr->setHueShift(value);
 }
 
+/** @brief Sets the texture-coordinate zoom uniform. */
 void setUniformZoom(float value) {
     if (about_ptr)
         about_ptr->setZoom(value);
 }
 
+/** @brief Sets the texture-coordinate rotation uniform in radians. */
 void setUniformRotation(float value) {
     if (about_ptr)
         about_ptr->setRotation(value);
 }
 
+/** @brief Sets the shader quality hint. */
 void setUniformQuality(float value) {
     if (about_ptr)
         about_ptr->setQuality(value);
 }
 
+/** @brief Enables or disables shader debug visualization. */
 void setUniformDebugMode(bool value) {
     if (about_ptr)
         about_ptr->setDebugMode(value);
 }
 
+/** @return Current animation-speed uniform. */
 float getUniformSpeed() {
     if (about_ptr)
         return about_ptr->getSpeed();
     return 1.0f;
 }
 
+/** @return Current effect-amplitude uniform. */
 float getUniformAmplitude() {
     if (about_ptr)
         return about_ptr->getAmplitude();
     return 1.0f;
 }
 
+/** @return Current effect-frequency uniform. */
 float getUniformFrequency() {
     if (about_ptr)
         return about_ptr->getFrequency();
     return 1.0f;
 }
 
+/** @return Current brightness uniform. */
 float getUniformBrightness() {
     if (about_ptr)
         return about_ptr->getBrightness();
     return 1.0f;
 }
 
+/** @return Current contrast uniform. */
 float getUniformContrast() {
     if (about_ptr)
         return about_ptr->getContrast();
     return 1.0f;
 }
 
+/** @return Current saturation uniform. */
 float getUniformSaturation() {
     if (about_ptr)
         return about_ptr->getSaturation();
     return 1.0f;
 }
 
+/** @return Current hue-shift uniform in radians. */
 float getUniformHueShift() {
     if (about_ptr)
         return about_ptr->getHueShift();
     return 0.0f;
 }
 
+/** @return Current texture-coordinate zoom uniform. */
 float getUniformZoom() {
     if (about_ptr)
         return about_ptr->getZoom();
     return 1.0f;
 }
 
+/** @return Current texture-coordinate rotation uniform in radians. */
 float getUniformRotation() {
     if (about_ptr)
         return about_ptr->getRotation();
     return 0.0f;
 }
 
+/** @return Current shader quality hint. */
 float getUniformQuality() {
     if (about_ptr)
         return about_ptr->getQuality();
     return 1.0f;
 }
 
+/** @return Whether shader debug visualization is enabled. */
 bool getUniformDebugMode() {
     if (about_ptr)
         return about_ptr->getDebugMode();
     return false;
 }
 
+/** @return Canvas width in pixels. */
 int getCanvasWidthWeb() {
     if (about_ptr)
         return about_ptr->getCanvasWidth();
     return 1280;
 }
 
+/** @return Canvas height in pixels. */
 int getCanvasHeightWeb() {
     if (about_ptr)
         return about_ptr->getCanvasHeight();
     return 720;
 }
 
+/** @return Horizontal origin of the aspect-fit display rectangle. */
 int getDisplayXWeb() {
     if (about_ptr)
         return about_ptr->getDisplayX();
     return 0;
 }
 
+/** @return Vertical origin of the aspect-fit display rectangle. */
 int getDisplayYWeb() {
     if (about_ptr)
         return about_ptr->getDisplayY();
     return 0;
 }
 
+/** @return Width of the aspect-fit display rectangle. */
 int getDisplayWidthWeb() {
     if (about_ptr)
         return about_ptr->getDisplayWidth();
     return 1280;
 }
 
+/** @return Height of the aspect-fit display rectangle. */
 int getDisplayHeightWeb() {
     if (about_ptr)
         return about_ptr->getDisplayHeight();
     return 720;
 }
 
+/** @return Index of the active shader. */
 int getIndex() {
     if (about_ptr)
         return about_ptr->getShaderIndex();
     return 0;
 }
 
+/** @brief Applies an incremental model-camera pitch gesture. */
 void touchRotateX(float delta) {
     if (about_ptr)
         about_ptr->adjustCameraPitch(delta);
 }
 
+/** @brief Applies an incremental model-camera yaw gesture. */
 void touchRotateY(float delta) {
     if (about_ptr)
         about_ptr->adjustCameraYaw(delta);
 }
 
+/** @brief Applies an incremental model-camera zoom gesture. */
 void touchZoom(float delta) {
     if (about_ptr)
         about_ptr->adjustCameraDistance(delta);
 }
 
+/** @brief Sets normalized horizontal model-camera translation. */
 void setCameraXWeb(float x) {
     if (about_ptr)
         about_ptr->setCameraX(x);
 }
+/** @brief Sets normalized vertical model-camera translation. */
 void setCameraYWeb(float y) {
     if (about_ptr)
         about_ptr->setCameraY(y);
 }
+/** @brief Sets normalized depth model-camera translation. */
 void setCameraZWeb(float z) {
     if (about_ptr)
         about_ptr->setCameraZ(z);
 }
+/** @return Normalized horizontal model-camera translation. */
 float getCameraXWeb() {
     if (about_ptr)
         return about_ptr->getCameraX();
     return 0.0f;
 }
+/** @return Normalized vertical model-camera translation. */
 float getCameraYWeb() {
     if (about_ptr)
         return about_ptr->getCameraY();
     return 0.0f;
 }
+/** @return Normalized depth model-camera translation. */
 float getCameraZWeb() {
     if (about_ptr)
         return about_ptr->getCameraZ();
     return 0.0f;
 }
+/** @return Largest dimension of the loaded model. */
 float getModelSizeWeb() {
     if (about_ptr)
         return about_ptr->getModelSize();
     return 1.0f;
 }
 
+/** @brief Sets normalized model pitch. */
 void setRotationXWeb(float x) {
     if (about_ptr)
         about_ptr->setRotationX(x);
 }
+/** @brief Sets normalized model yaw. */
 void setRotationYWeb(float y) {
     if (about_ptr)
         about_ptr->setRotationY(y);
 }
+/** @brief Sets normalized model roll. */
 void setRotationZWeb(float z) {
     if (about_ptr)
         about_ptr->setRotationZ(z);
 }
+/** @return Normalized model pitch. */
 float getRotationXWeb() {
     if (about_ptr)
         return about_ptr->getRotationX();
     return 0.0f;
 }
+/** @return Normalized model yaw. */
 float getRotationYWeb() {
     if (about_ptr)
         return about_ptr->getRotationY();
     return 0.0f;
 }
+/** @return Normalized model roll. */
 float getRotationZWeb() {
     if (about_ptr)
         return about_ptr->getRotationZ();
     return 0.0f;
 }
 
+/** @brief Enables or disables multipass rendering. */
 void enableMultipassWeb(bool enable) {
     if (about_ptr)
         about_ptr->enableMultipass(enable);
 }
 
+/** @return Whether multipass rendering is enabled. */
 bool isMultipassEnabledWeb() {
     if (about_ptr)
         return about_ptr->isMultipassEnabled();
     return false;
 }
 
+/** @brief Clears the multipass shader chain. */
 void clearShaderPassesWeb() {
     if (about_ptr)
         about_ptr->clearShaderPasses();
 }
 
+/** @brief Appends @p shaderIndex to the multipass chain when valid. */
 void addShaderPassWeb(int shaderIndex) {
     if (about_ptr)
         about_ptr->addShaderPass(shaderIndex);
 }
 
+/** @brief Replaces the multipass chain with @p passes. */
 void setShaderPassesWeb(std::vector<int> passes) {
     if (about_ptr)
         about_ptr->setShaderPasses(passes);
 }
 
+/** @return A copy of the multipass shader-index chain. */
 std::vector<int> getShaderPassesWeb() {
     if (about_ptr)
         return about_ptr->getShaderPasses();
@@ -2498,12 +2804,19 @@ EMSCRIPTEN_BINDINGS(image_loader) {
     emscripten::register_vector<int>("VectorInt");
 };
 
+/** @} */
+
 #endif
 
+/** @brief Runs one iteration of the Emscripten application loop. */
 void eventProc() {
     main_w->proc();
 }
 
+/**
+ * @brief Application entry point.
+ * @return `EXIT_FAILURE` when initialization throws; otherwise zero.
+ */
 int main(int argc, char **argv) {
 #ifdef __EMSCRIPTEN__
     try {

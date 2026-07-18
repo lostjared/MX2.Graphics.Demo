@@ -1,8 +1,17 @@
+/**
+ * @file mirror_shaders.hpp
+ * @brief Mirrored and wrapped GLSL ES fragment shaders used by the demo.
+ *
+ * The inline source strings depend on the shared GLSL fragments declared in
+ * shaders.hpp and are registered in the host-side shader catalog.
+ */
+
 #ifndef __SHADERS_HPP_
 #define __SHADERS_HPP_
 
 #include "shaders.hpp"
 
+/** @brief GLSL source for the `mirror_ufo_wrap` built-in fragment shader. */
 inline const char *mirror_ufo_wrap = R"SHD1(#version 300 es
 precision highp float;
 precision highp int;
@@ -53,6 +62,7 @@ void main(void) {
 }
 )SHD1";
 
+/** @brief GLSL source for the `mirror_wrap_dmd6i` built-in fragment shader. */
 inline const char *mirror_wrap_dmd6i = R"SHD1(#version 300 es
 precision highp float;
 precision highp int;
@@ -235,6 +245,7 @@ void main(void) {
 }
 )SHD1";
 
+/** @brief GLSL source for the `mirror_zoom` built-in fragment shader. */
 inline const char *mirror_zoom = R"SHD1(#version 300 es
 precision highp float;
 precision highp int;
@@ -307,6 +318,7 @@ void main(void){
 }
 )SHD1";
 
+/** @brief GLSL source for the `mirror_bubble` built-in fragment shader. */
 inline const char *mirror_bubble = R"SHD1(#version 300 es
 precision highp float;
 precision highp int;
@@ -343,6 +355,7 @@ void main(void) {
 }
 )SHD1";
 
+/** @brief GLSL source for the `mirror_geometric` built-in fragment shader. */
 inline const char *mirror_geometric = R"SHD1(#version 300 es
 precision highp float;
 precision highp int;
@@ -394,6 +407,7 @@ void main(void){
 }
 )SHD1";
 
+/** @brief GLSL source for the `mirror_prism` built-in fragment shader. */
 inline const char *mirror_prism = R"SHD1(#version 300 es
 precision highp float;
 precision highp int;
@@ -450,6 +464,7 @@ void main(void) {
 }
 )SHD1";
 
+/** @brief GLSL source for the `mirror_airshader1` built-in fragment shader. */
 inline const char *mirror_airshader1 = R"SHD1(#version 300 es
 precision highp float;
 precision highp int;
@@ -538,6 +553,7 @@ void main(void){
 }
 )SHD1";
 
+/** @brief GLSL source for the `mirror_pebble` built-in fragment shader. */
 inline const char *mirror_pebble = R"SHD1(#version 300 es
 precision highp float;
 precision highp int;
@@ -574,6 +590,7 @@ void main(void) {
 }
 )SHD1";
 
+/** @brief GLSL source for the `mirror_putty` built-in fragment shader. */
 inline const char *mirror_putty = R"SHD1(#version 300 es
 precision highp float;
 precision highp int;
@@ -616,6 +633,7 @@ void main(void) {
 }
 )SHD1";
 
+/** @brief GLSL source for the `mirror_bowl_by_time` built-in fragment shader. */
 inline const char *mirror_bowl_by_time = R"SHD1(#version 300 es
 precision highp float;
 precision highp int;
@@ -667,6 +685,7 @@ void main(void){
 }
 )SHD1";
 
+/** @brief GLSL source for the `mirror_comb_mouse` built-in fragment shader. */
 inline const char *mirror_comb_mouse = R"SHD1(#version 300 es
 precision highp float;
 precision highp int;
@@ -741,6 +760,7 @@ void main() {
 }
 )SHD1";
 
+/** @brief GLSL source for the `mirror_grad` built-in fragment shader. */
 inline const char *mirror_grad = R"SHD1(#version 300 es
 precision highp float;
 precision highp int;
@@ -796,6 +816,7 @@ void main(void) {
 }
 )SHD1";
 
+/** @brief GLSL source for the `mirror_mandella` built-in fragment shader. */
 inline const char *mirror_mandella = R"SHD1(#version 300 es
 precision highp float;
 precision highp int;
@@ -879,6 +900,7 @@ void main(void) {
 }
 )SHD1";
 
+/** @brief GLSL source for the `mirror_air_bowl` built-in fragment shader. */
 inline const char *mirror_air_bowl = R"SHD1(#version 300 es
 precision highp float;
 precision highp int;
@@ -993,6 +1015,7 @@ void main(void){
 }
 )SHD1";
 
+/** @brief GLSL source for the `mirror_sin_osc` built-in fragment shader. */
 inline const char *mirror_sin_osc = R"SHD1(#version 300 es
 precision highp float;
 precision highp int;
@@ -1039,6 +1062,7 @@ void main() {
 }
 )SHD1";
 
+/** @brief GLSL source for the `mirror_bubble_zoom_mouse` built-in fragment shader. */
 inline const char *mirror_bubble_zoom_mouse = R"SHD1(#version 300 es
 precision highp float;
 precision highp int;
@@ -1103,6 +1127,7 @@ void main(void){
 }
 )SHD1";
 
+/** @brief GLSL source for the `mirror_goofy` built-in fragment shader. */
 inline const char *mirror_goofy = R"SHD1(#version 300 es
 precision highp float;
 precision highp int;
@@ -1159,6 +1184,7 @@ void main(void) {
 }
 )SHD1";
 
+/** @brief GLSL source for the `mirror_twist_gpt` built-in fragment shader. */
 inline const char *mirror_twist_gpt = R"SHD1(#version 300 es
 precision highp float;
 precision highp int;
@@ -1219,6 +1245,7 @@ void main(void){
 }
 )SHD1";
 
+/** @brief GLSL source for the `mirror_psyce_wave_all` built-in fragment shader. */
 inline const char *mirror_psyce_wave_all = R"SHD1(#version 300 es
 precision highp float;
 precision highp int;
@@ -1252,6 +1279,7 @@ void main(void)
 }
 )SHD1";
 
+/** @brief GLSL source for the `mirror_color_swirl` built-in fragment shader. */
 inline const char *mirror_color_swirl = R"SHD1(#version 300 es
 precision highp float;
 precision highp int;
@@ -1297,6 +1325,7 @@ void main(void) {
 }
 )SHD1";
 
+/** @brief GLSL source for the `mirror_color_o1` built-in fragment shader. */
 inline const char *mirror_color_o1 = R"SHD1(#version 300 es
 precision highp float;
 precision highp int;
@@ -1341,6 +1370,7 @@ void main(void) {
 }
 )SHD1";
 
+/** @brief GLSL source for the `color_o1` built-in fragment shader. */
 inline const char *color_o1 = R"SHD1(#version 300 es
 precision highp float;
 precision highp int;
@@ -1355,6 +1385,7 @@ uniform float uamp;
 
 )SHD1";
 
+/** @brief GLSL source for the `mirror_color_mouse` built-in fragment shader. */
 inline const char *mirror_color_mouse = R"SHD1(#version 300 es
 precision highp float;
 precision highp int;
@@ -1431,6 +1462,7 @@ void main(void) {
 }
 )SHD1";
 
+/** @brief GLSL source for the `mirror_swirly` built-in fragment shader. */
 inline const char *mirror_swirly = R"SHD1(#version 300 es
 precision highp float;
 precision highp int;
@@ -1466,6 +1498,7 @@ void main(void) {
 }
 )SHD1";
 
+/** @brief GLSL source for the `mirror_pong2` built-in fragment shader. */
 inline const char *mirror_pong2 = R"SHD1(#version 300 es
 precision highp float;
 precision highp int;
@@ -1523,6 +1556,7 @@ void main(void) {
 }
 )SHD1";
 
+/** @brief GLSL source for the `mirror_pong` built-in fragment shader. */
 inline const char *mirror_pong = R"SHD1(#version 300 es
 precision highp float;
 precision highp int;
@@ -1570,6 +1604,7 @@ void main(void) {
 }
 )SHD1";
 
+/** @brief GLSL source for the `mirror_spiral_aura` built-in fragment shader. */
 inline const char *mirror_spiral_aura = R"SHD1(#version 300 es
 precision highp float;
 precision highp int;
@@ -1606,6 +1641,7 @@ void main() {
 }
 )SHD1";
 
+/** @brief GLSL source for the `spiral_aura` built-in fragment shader. */
 inline const char *spiral_aura = R"SHD1(#version 300 es
 precision highp float;
 precision highp int;
@@ -1642,6 +1678,7 @@ void main() {
 }
 )SHD1";
 
+/** @brief GLSL source for the `mirror_center` built-in fragment shader. */
 inline const char *mirror_center = R"SHD1(#version 300 es
 precision highp float;
 precision highp int;
@@ -1679,6 +1716,7 @@ void main(void) {
 }
 )SHD1";
 
+/** @brief GLSL source for the `mirror_twisted` built-in fragment shader. */
 inline const char *mirror_twisted = R"SHD1(#version 300 es
 precision highp float;
 precision highp int;
@@ -1719,6 +1757,7 @@ void main(void) {
 }
 )SHD1";
 
+/** @brief GLSL source for the `mirror_gpt` built-in fragment shader. */
 inline const char *mirror_gpt = R"SHD1(#version 300 es
 precision highp float;
 precision highp int;
@@ -1791,6 +1830,7 @@ void main(void) {
 }
 )SHD1";
 
+/** @brief GLSL source for the `mirror_bowl` built-in fragment shader. */
 inline const char *mirror_bowl = R"SHD1(#version 300 es
 precision highp float;
 precision highp int;
@@ -1850,6 +1890,7 @@ void main(void){
 }
 )SHD1";
 
+/** @brief GLSL source for the `gpt_halluc` built-in fragment shader. */
 inline const char *gpt_halluc = R"SHD1(#version 300 es
 precision highp float;
 precision highp int;
@@ -1983,6 +2024,7 @@ void main(void) {
 }
 )SHD1";
 
+/** @brief GLSL source for the `mirror_atan` built-in fragment shader. */
 inline const char *mirror_atan = R"SHD1(#version 300 es
 precision highp float;
 precision highp int;
@@ -2028,6 +2070,7 @@ void main(void) {
 }
 )SHD1";
 
+/** @brief GLSL source for the `szBlock` built-in fragment shader. */
 inline static const char *szBlock = R"SHD1(#version 300 es
 precision highp float;
 precision highp int;
@@ -2139,6 +2182,7 @@ void main(void) {
 }
 )SHD1";
 
+/** @brief GLSL source for the `psychedelic_energy` built-in fragment shader. */
 inline const char *psychedelic_energy = R"SHD1(#version 300 es
 precision highp float;
 precision highp int;
