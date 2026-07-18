@@ -1,6 +1,54 @@
 #version 300 es
 precision highp float;
 precision highp int;
+uniform float iSpeed;
+uniform float iQuality;
+uniform float iDebugMode;
+
+vec2 mxCacheApplyCoordinateAdjustments(vec2 uv, float frequency, float zoom,
+                                       float rotation, float quality, vec2 resolution) {
+    vec2 p = uv - vec2(0.5);
+    float c = cos(rotation);
+    float s = sin(rotation);
+    p = mat2(c, -s, s, c) * p;
+    p *= max(frequency, 0.0);
+    p /= max(abs(zoom), 0.001);
+    uv = p + vec2(0.5);
+    if (quality < 1.0) {
+        vec2 grid = max(resolution * max(quality, 0.05), vec2(1.0));
+        uv = (floor(uv * grid) + vec2(0.5)) / grid;
+    }
+    return uv;
+}
+
+vec3 mxCacheRotateHue(vec3 col, float angle) {
+    float U = cos(angle);
+    float W = sin(angle);
+    mat3 R = mat3(
+        0.299 + 0.701*U + 0.168*W,
+        0.587 - 0.587*U + 0.330*W,
+        0.114 - 0.114*U - 0.497*W,
+        0.299 - 0.299*U - 0.328*W,
+        0.587 + 0.413*U + 0.035*W,
+        0.114 - 0.114*U + 0.292*W,
+        0.299 - 0.300*U + 1.250*W,
+        0.587 - 0.588*U - 1.050*W,
+        0.114 + 0.886*U - 0.203*W
+    );
+    return clamp(R * col, 0.0, 1.0);
+}
+
+vec3 mxCacheApplyColorAdjustments(vec3 col, float brightness, float contrast,
+                                  float saturation, float hueShift) {
+    col *= brightness;
+    col = (col - 0.5) * contrast + 0.5;
+    float gray = dot(col, vec3(0.299, 0.587, 0.114));
+    col = mix(vec3(gray), col, saturation);
+    return mxCacheRotateHue(col, hueShift);
+}
+
+vec2 mxCacheTexCoord;
+
 
 uniform sampler2D samp;
 uniform float time_f;
@@ -9,17 +57,17 @@ uniform vec4 iMouse;
 
 out vec4 color;
 in vec2 TexCoord;
-#define tc TexCoord
+#define tc mxCacheTexCoord
 
 // Controls
-const float iAmplitude  = 1.0;
-const float iFrequency  = 1.0;
-const float iBrightness = 1.0;
-const float iContrast   = 1.0;
-const float iSaturation = 1.0;
-const float iHueShift   = 0.0;
-const float iZoom       = 1.0;
-const float iRotation   = 0.0;
+uniform float iAmplitude;
+uniform float iFrequency;
+uniform float iBrightness;
+uniform float iContrast;
+uniform float iSaturation;
+uniform float iHueShift;
+uniform float iZoom;
+uniform float iRotation;
 
 // --- Color Helpers ---
 
@@ -119,66 +167,66 @@ vec2 kaleido(vec2 p, float slices) {
 
 // Hybird: Liquid movement + Geometric Folding
 vec3 sampleLiquidFractal(vec2 uv, float t, float strength, vec2 center, vec2 res) {
-    float aspect = res.x / res.y; 
-    
+    float aspect = res.x / res.y;
+
     float ampControl  = clamp(iAmplitude,  0.0, 2.0);
     float freqControl = clamp(iFrequency, 0.0, 2.0);
 
     vec2 p = (uv - center) * vec2(aspect, 1.0);
-    
+
     // --- LIQUID INJECTION ---
     // We calculate a flow field based on noise
     // We disturb 'p' BEFORE it enters the kaleidoscope/fractal loop
     float n1 = fbm(p * 3.0 + t * 0.4);
     float n2 = fbm(p * 2.0 - t * 0.3);
-    
+
     vec2 flow = vec2(cos(n1 * 6.0), sin(n2 * 6.0));
-    
+
     // Add liquid wobble to the coordinates
     // strength * 0.1 ensures it doesn't destroy the shape, just ripples it
-    p += flow * (0.05 + 0.1 * strength); 
+    p += flow * (0.05 + 0.1 * strength);
 
     // --- GEOMETRIC FRACTAL ---
-    
+
     // 1. Kaleidoscope
     float slices = 6.0 + floor(ampControl * 4.0);
     p = kaleido(p, slices);
-    
+
     // 2. Iterative Folding
-    int iterations = 4 + int(ampControl * 2.0); 
+    int iterations = 4 + int(ampControl * 2.0);
     float scale = 1.2 + (freqControl * 0.5);
     float shift = 0.1 * strength;
     float angle = t * 0.1;
-    
+
     for(int i = 0; i < iterations; i++) {
         p = abs(p);
         p -= shift;
         p *= scale;
         p = rotate2D(p, angle + float(i)*0.5 + n1*0.2); // Add noise to rotation too
     }
-    
+
     // 3. Map back to Texture
     // We add the flow again at the end for "surface water" feel
     vec2 finalUV = p * 0.5 + center + (flow * 0.02);
-    
+
     // Chromatic aberration based on flow intensity
     float chroma = 0.005 * strength * (1.0 + n1);
-    
+
     float r = mxTexture(samp, finalUV + vec2(chroma, 0.0)).r;
     float g = mxTexture(samp, finalUV).g;
     float b = mxTexture(samp, finalUV - vec2(chroma, 0.0)).b;
-    
+
     return vec3(r, g, b);
 }
 
-void main() {
+void mxCacheShaderMain() {
     vec2 uv = tc;
     uv = wrapUV(uv);
     uv = applyZoomRotation(uv, vec2(0.5));
 
     float ampControl  = clamp(iAmplitude,  0.0, 2.0);
-    
-    float tSpeed   = 0.3; 
+
+    float tSpeed   = 0.3;
     float t        = time_f * tSpeed;
     float strength = 0.5 + (ampControl * 0.5);
 
@@ -191,4 +239,17 @@ void main() {
 
     color.rgb = applyColorAdjustments(col);
     color.a = 1.0;
+}
+void main() {
+    mxCacheTexCoord = mxCacheApplyCoordinateAdjustments(
+        TexCoord, 1.0, 1.0, 0.0, iQuality, vec2(textureSize(samp, 0)));
+    vec4 mxCacheInputColor = texture(samp, mxCacheTexCoord);
+    mxCacheShaderMain();
+    vec4 mxCacheEffectColor = color;
+    mxCacheEffectColor.rgb = mxCacheApplyColorAdjustments(
+        mxCacheEffectColor.rgb, 1.0, 1.0, 1.0, 0.0);
+    if (iDebugMode > 0.5 && TexCoord.x < 0.5) {
+        mxCacheEffectColor = mxCacheInputColor;
+    }
+    color = mxCacheEffectColor;
 }

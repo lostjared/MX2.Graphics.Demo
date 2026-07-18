@@ -1,9 +1,65 @@
 #version 300 es
 precision highp float;
 precision highp int;
+uniform float iSpeed;
+uniform float iAmplitude;
+uniform float iFrequency;
+uniform float iBrightness;
+uniform float iContrast;
+uniform float iSaturation;
+uniform float iHueShift;
+uniform float iZoom;
+uniform float iRotation;
+uniform float iQuality;
+uniform float iDebugMode;
+
+vec2 mxCacheApplyCoordinateAdjustments(vec2 uv, float frequency, float zoom,
+                                       float rotation, float quality, vec2 resolution) {
+    vec2 p = uv - vec2(0.5);
+    float c = cos(rotation);
+    float s = sin(rotation);
+    p = mat2(c, -s, s, c) * p;
+    p *= max(frequency, 0.0);
+    p /= max(abs(zoom), 0.001);
+    uv = p + vec2(0.5);
+    if (quality < 1.0) {
+        vec2 grid = max(resolution * max(quality, 0.05), vec2(1.0));
+        uv = (floor(uv * grid) + vec2(0.5)) / grid;
+    }
+    return uv;
+}
+
+vec3 mxCacheRotateHue(vec3 col, float angle) {
+    float U = cos(angle);
+    float W = sin(angle);
+    mat3 R = mat3(
+        0.299 + 0.701*U + 0.168*W,
+        0.587 - 0.587*U + 0.330*W,
+        0.114 - 0.114*U - 0.497*W,
+        0.299 - 0.299*U - 0.328*W,
+        0.587 + 0.413*U + 0.035*W,
+        0.114 - 0.114*U + 0.292*W,
+        0.299 - 0.300*U + 1.250*W,
+        0.587 - 0.588*U - 1.050*W,
+        0.114 + 0.886*U - 0.203*W
+    );
+    return clamp(R * col, 0.0, 1.0);
+}
+
+vec3 mxCacheApplyColorAdjustments(vec3 col, float brightness, float contrast,
+                                  float saturation, float hueShift) {
+    col *= brightness;
+    col = (col - 0.5) * contrast + 0.5;
+    float gray = dot(col, vec3(0.299, 0.587, 0.114));
+    col = mix(vec3(gray), col, saturation);
+    return mxCacheRotateHue(col, hueShift);
+}
+
+vec2 mxCacheTexCoord;
+
 
 in vec2 TexCoord;
-#define tc TexCoord
+#define tc mxCacheTexCoord
 out vec4 color;
 
 uniform sampler2D samp;
@@ -20,7 +76,7 @@ float pingPong(float x, float length) {
 vec4 blur(sampler2D image, vec2 uv, vec2 resolution) {
     vec2 texelSize = 1.0 / resolution;
     vec4 result = vec4(0.0);
-    
+
     // 7x7 Gaussian Kernel
     highp float kernel[49];
     kernel[0] = 0.5; kernel[1] = 1.0; kernel[2] = 2.0; kernel[3] = 2.5; kernel[4] = 2.0; kernel[5] = 1.0; kernel[6] = 0.5;
@@ -49,12 +105,12 @@ vec4 blur(sampler2D image, vec2 uv, vec2 resolution) {
 vec3 applyContrast(vec3 col) {
     float boost = 1.8;
     float midpoint = 0.5; // 128 in 8-bit is 0.5 in float
-    
+
     vec3 result;
     result.r = midpoint + (col.r - midpoint) * boost;
     result.g = midpoint + (col.g - midpoint) * boost;
     result.b = midpoint + (col.b - midpoint) * boost;
-    
+
     return clamp(result, 0.0, 1.0);
 }
 
@@ -62,37 +118,51 @@ vec3 applyContrast(vec3 col) {
 // We treat the 'blurred' pixel as the 'sum/average' source
 vec3 cudaXorLogic(vec3 current, vec3 averaged, float sum_simulator) {
     ivec3 iCur = ivec3(current * 255.0);
-    
+
     // Simulate "Sum" growing over frames by multiplying the average by time
     // In the CUDA code: (unsigned char)(1 + sumB) wraps around 255.
-    ivec3 iSum = ivec3(averaged * 255.0 * sum_simulator); 
-    
+    ivec3 iSum = ivec3(averaged * 255.0 * sum_simulator);
+
     ivec3 iXor;
     // The bitwise XOR
     iXor.r = iCur.r ^ int((1 + iSum.r) % 255);
     iXor.g = iCur.g ^ int((1 + iSum.g) % 255);
     iXor.b = iCur.b ^ int((1 + iSum.b) % 255);
-    
+
     // Ensure we stay in byte range before converting back to float
     return vec3(iXor % 255) / 255.0;
 }
 
-void main(void) {
+void mxCacheShaderMain() {
     // 1. Get the Sharp Image (represents 'currentFrame')
     vec4 sharpColor = texture(samp, tc);
-    
+
     // 2. Get the Blurred Image (represents 'average' of frames)
     vec4 blurredColor = blur(samp, tc, iResolution);
-    
+
     // 3. Setup Time variable to simulate the "Sum" accumulation
     float time_t = pingPong(time_f, 10.0) + 2.0;
-    
+
     // 4. Perform the XOR Logic
     vec3 xorResult = cudaXorLogic(sharpColor.rgb, blurredColor.rgb, time_t);
-    
+
     // 5. Blend: (XOR * 0.5) + (Avg * 0.5)
     vec3 blendResult = (xorResult * 0.5) + (blurredColor.rgb * 0.5);
-    
+
     // 6. Apply Contrast Boost and output
     color = vec4(applyContrast(blendResult), 1.0);
+}
+void main() {
+    mxCacheTexCoord = mxCacheApplyCoordinateAdjustments(
+        TexCoord, iFrequency, iZoom, iRotation, iQuality, vec2(textureSize(samp, 0)));
+    vec4 mxCacheInputColor = texture(samp, mxCacheTexCoord);
+    mxCacheShaderMain();
+    vec4 mxCacheEffectColor = color;
+    mxCacheEffectColor = mix(mxCacheInputColor, mxCacheEffectColor, iAmplitude);
+    mxCacheEffectColor.rgb = mxCacheApplyColorAdjustments(
+        mxCacheEffectColor.rgb, iBrightness, iContrast, iSaturation, iHueShift);
+    if (iDebugMode > 0.5 && TexCoord.x < 0.5) {
+        mxCacheEffectColor = mxCacheInputColor;
+    }
+    color = mxCacheEffectColor;
 }

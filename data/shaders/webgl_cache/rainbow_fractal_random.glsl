@@ -1,9 +1,65 @@
 #version 300 es
 precision highp float;
 precision highp int;
+uniform float iSpeed;
+uniform float iAmplitude;
+uniform float iFrequency;
+uniform float iBrightness;
+uniform float iContrast;
+uniform float iSaturation;
+uniform float iHueShift;
+uniform float iZoom;
+uniform float iRotation;
+uniform float iQuality;
+uniform float iDebugMode;
+
+vec2 mxCacheApplyCoordinateAdjustments(vec2 uv, float frequency, float zoom,
+                                       float rotation, float quality, vec2 resolution) {
+    vec2 p = uv - vec2(0.5);
+    float c = cos(rotation);
+    float s = sin(rotation);
+    p = mat2(c, -s, s, c) * p;
+    p *= max(frequency, 0.0);
+    p /= max(abs(zoom), 0.001);
+    uv = p + vec2(0.5);
+    if (quality < 1.0) {
+        vec2 grid = max(resolution * max(quality, 0.05), vec2(1.0));
+        uv = (floor(uv * grid) + vec2(0.5)) / grid;
+    }
+    return uv;
+}
+
+vec3 mxCacheRotateHue(vec3 col, float angle) {
+    float U = cos(angle);
+    float W = sin(angle);
+    mat3 R = mat3(
+        0.299 + 0.701*U + 0.168*W,
+        0.587 - 0.587*U + 0.330*W,
+        0.114 - 0.114*U - 0.497*W,
+        0.299 - 0.299*U - 0.328*W,
+        0.587 + 0.413*U + 0.035*W,
+        0.114 - 0.114*U + 0.292*W,
+        0.299 - 0.300*U + 1.250*W,
+        0.587 - 0.588*U - 1.050*W,
+        0.114 + 0.886*U - 0.203*W
+    );
+    return clamp(R * col, 0.0, 1.0);
+}
+
+vec3 mxCacheApplyColorAdjustments(vec3 col, float brightness, float contrast,
+                                  float saturation, float hueShift) {
+    col *= brightness;
+    col = (col - 0.5) * contrast + 0.5;
+    float gray = dot(col, vec3(0.299, 0.587, 0.114));
+    col = mix(vec3(gray), col, saturation);
+    return mxCacheRotateHue(col, hueShift);
+}
+
+vec2 mxCacheTexCoord;
+
 
 in vec2 TexCoord;
-#define tc TexCoord
+#define tc mxCacheTexCoord
 out vec4 color;
 uniform sampler2D samp;
 uniform float time_f;      // global time
@@ -86,13 +142,13 @@ vec4 blur(sampler2D image, vec2 uv, vec2 resolution) {
 //--------------------------------------
 // Fractal function – now with infinite zoom logic
 //--------------------------------------
-float fractal(vec2 uv, vec2 c) 
+float fractal(vec2 uv, vec2 c)
 {
     // We'll do a simple Julia-like iteration
     vec2 z = uv;
     const float maxIterations = 50.0;
     float iteration = 0.0;
-    
+
     for (float i = 0.0; i < maxIterations; i++)
     {
         // z = z^2 + c
@@ -127,7 +183,7 @@ vec2 getFractalUV(vec2 uv, float t)
     //   random2( cycleIndex ) returns something in [-1,1]
     vec2 randOffset = random2(vec2(cycleIndex * 37.1234));
     // Scale it down so it doesn’t jump too far from origin
-    randOffset *= 0.5;  
+    randOffset *= 0.5;
 
     // Move uv so that we zoom around randOffset
     // Step 1: shift uv relative to center
@@ -140,7 +196,7 @@ vec2 getFractalUV(vec2 uv, float t)
     return uv;
 }
 
-void main(void) 
+void mxCacheShaderMain()
 {
     //--------------------------------------
     // Normalize uv to [-1,1], correct aspect
@@ -176,7 +232,7 @@ void main(void)
     //--------------------------------------
     // Blend fractal color with blurred texture
     //--------------------------------------
-    float blendFactor = 0.5;   
+    float blendFactor = 0.5;
     vec3 blended_color = mix(blurred_color.rgb, fractalColor, blendFactor);
 
     //--------------------------------------
@@ -184,4 +240,19 @@ void main(void)
     //--------------------------------------
     float time_t = pingPong(time_f, 15.0) + 1.0;
     color = vec4(sin(blended_color * time_t), blurred_color.a);
+}
+
+void main() {
+    mxCacheTexCoord = mxCacheApplyCoordinateAdjustments(
+        TexCoord, iFrequency, iZoom, iRotation, iQuality, vec2(textureSize(samp, 0)));
+    vec4 mxCacheInputColor = texture(samp, mxCacheTexCoord);
+    mxCacheShaderMain();
+    vec4 mxCacheEffectColor = color;
+    mxCacheEffectColor = mix(mxCacheInputColor, mxCacheEffectColor, iAmplitude);
+    mxCacheEffectColor.rgb = mxCacheApplyColorAdjustments(
+        mxCacheEffectColor.rgb, iBrightness, iContrast, iSaturation, iHueShift);
+    if (iDebugMode > 0.5 && TexCoord.x < 0.5) {
+        mxCacheEffectColor = mxCacheInputColor;
+    }
+    color = mxCacheEffectColor;
 }

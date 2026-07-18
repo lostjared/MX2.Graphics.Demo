@@ -1,9 +1,65 @@
 #version 300 es
 precision highp float;
 precision highp int;
+uniform float iSpeed;
+uniform float iAmplitude;
+uniform float iFrequency;
+uniform float iBrightness;
+uniform float iContrast;
+uniform float iSaturation;
+uniform float iHueShift;
+uniform float iZoom;
+uniform float iRotation;
+uniform float iQuality;
+uniform float iDebugMode;
+
+vec2 mxCacheApplyCoordinateAdjustments(vec2 uv, float frequency, float zoom,
+                                       float rotation, float quality, vec2 resolution) {
+    vec2 p = uv - vec2(0.5);
+    float c = cos(rotation);
+    float s = sin(rotation);
+    p = mat2(c, -s, s, c) * p;
+    p *= max(frequency, 0.0);
+    p /= max(abs(zoom), 0.001);
+    uv = p + vec2(0.5);
+    if (quality < 1.0) {
+        vec2 grid = max(resolution * max(quality, 0.05), vec2(1.0));
+        uv = (floor(uv * grid) + vec2(0.5)) / grid;
+    }
+    return uv;
+}
+
+vec3 mxCacheRotateHue(vec3 col, float angle) {
+    float U = cos(angle);
+    float W = sin(angle);
+    mat3 R = mat3(
+        0.299 + 0.701*U + 0.168*W,
+        0.587 - 0.587*U + 0.330*W,
+        0.114 - 0.114*U - 0.497*W,
+        0.299 - 0.299*U - 0.328*W,
+        0.587 + 0.413*U + 0.035*W,
+        0.114 - 0.114*U + 0.292*W,
+        0.299 - 0.300*U + 1.250*W,
+        0.587 - 0.588*U - 1.050*W,
+        0.114 + 0.886*U - 0.203*W
+    );
+    return clamp(R * col, 0.0, 1.0);
+}
+
+vec3 mxCacheApplyColorAdjustments(vec3 col, float brightness, float contrast,
+                                  float saturation, float hueShift) {
+    col *= brightness;
+    col = (col - 0.5) * contrast + 0.5;
+    float gray = dot(col, vec3(0.299, 0.587, 0.114));
+    col = mix(vec3(gray), col, saturation);
+    return mxCacheRotateHue(col, hueShift);
+}
+
+vec2 mxCacheTexCoord;
+
 out vec4 color;
 in vec2 TexCoord;
-#define tc TexCoord
+#define tc mxCacheTexCoord
 
 uniform sampler2D samp;
 uniform vec2 iResolution;
@@ -83,28 +139,28 @@ vec2 diamondFold(vec2 uv, vec2 c, float aspect){
     return p + c;
 }
 
-void main(void){
+void mxCacheShaderMain(){
     float aspect = iResolution.x / iResolution.y;
     vec2 m = (iMouse.z > 0.5) ? (iMouse.xy / iResolution) : vec2(0.5);
-    
+
     // 1. Create Spherical / Fisheye coordinates
     vec2 p_centered = (tc - 0.5) * 2.0;
     p_centered.x *= aspect;
     float d = length(p_centered);
-    
+
     // Spherical bulging effect
-    float sphereRadius = 1.0; 
+    float sphereRadius = 1.0;
     float z = sqrt(max(0.0, sphereRadius * sphereRadius - d * d));
-    float fisheye = atan(d, z) / (PI * 0.5); 
-    
+    float fisheye = atan(d, z) / (PI * 0.5);
+
     // Create the "Sphere UVs"
     vec2 sphereUV = (d > 0.0) ? (p_centered / d) * fisheye : vec2(0.0);
-    sphereUV.x /= aspect; 
+    sphereUV.x /= aspect;
     sphereUV = sphereUV * 0.5 + 0.5; // Back to 0-1 range
 
     // 2. Base Texture and Alpha
     vec4 baseTex = texture(samp, tc);
-    
+
     // 3. Aura Masking (The boundary of the sphere)
     float mask = smoothstep(1.0, 0.95, d); // Harder edge for the sphere
     float outerGlow = smoothstep(1.3, 0.0, d) * 0.4; // Soft light around the ball
@@ -113,31 +169,45 @@ void main(void){
     float seg = 6.0 + 2.0 * sin(time_f * 0.5);
     vec2 kUV = reflectUV(sphereUV, seg, m, aspect);
     kUV = diamondFold(kUV, m, aspect);
-    
+
     float foldZoom = 1.2 + 0.3 * sin(time_f * 0.4);
     kUV = fractalFold(kUV, foldZoom, time_f, m, aspect);
-    
+
     // 5. Texture mapping within the sphere
     vec2 p = (kUV - m) * vec2(aspect, 1.0);
     float rD = diamondRadius(p) + 1e-6;
     float ang = atan(p.y, p.x) + time_f * 0.3;
     float k = fract(log(rD) - time_f * 0.5);
     vec2 pwrap = vec2(cos(ang), sin(ang)) * exp(k);
-    
+
     vec2 u0 = fract(pwrap + m);
     vec3 kaleidoRGB = preBlendColor(u0);
 
     // 6. Lighting / Shading the sphere
     float shading = dot(normalize(vec3(p_centered, z)), normalize(vec3(1.0, 1.0, 1.0)));
     shading = smoothstep(-0.2, 1.0, shading);
-    
+
     // 7. Final Mix
     vec3 sphereCol = kaleidoRGB * shading * 1.5;
     sphereCol += pow(shading, 10.0) * 0.5; // Specular highlight
-    
+
     // Combine Kaleidoscope with Base Background
     vec3 finalRGB = mix(baseTex.rgb * 0.5, sphereCol, mask);
     finalRGB += neonPalette(time_f * 0.5) * outerGlow * (0.5 + 0.5 * sin(time_f * 5.0)); // Strobing Aura
 
     color = vec4(finalRGB, 1.0);
+}
+void main() {
+    mxCacheTexCoord = mxCacheApplyCoordinateAdjustments(
+        TexCoord, iFrequency, iZoom, iRotation, iQuality, vec2(textureSize(samp, 0)));
+    vec4 mxCacheInputColor = texture(samp, mxCacheTexCoord);
+    mxCacheShaderMain();
+    vec4 mxCacheEffectColor = color;
+    mxCacheEffectColor = mix(mxCacheInputColor, mxCacheEffectColor, iAmplitude);
+    mxCacheEffectColor.rgb = mxCacheApplyColorAdjustments(
+        mxCacheEffectColor.rgb, iBrightness, iContrast, iSaturation, iHueShift);
+    if (iDebugMode > 0.5 && TexCoord.x < 0.5) {
+        mxCacheEffectColor = mxCacheInputColor;
+    }
+    color = mxCacheEffectColor;
 }

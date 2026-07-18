@@ -1,6 +1,54 @@
 #version 300 es
 precision highp float;
 precision highp int;
+uniform float iSpeed;
+uniform float iQuality;
+uniform float iDebugMode;
+
+vec2 mxCacheApplyCoordinateAdjustments(vec2 uv, float frequency, float zoom,
+                                       float rotation, float quality, vec2 resolution) {
+    vec2 p = uv - vec2(0.5);
+    float c = cos(rotation);
+    float s = sin(rotation);
+    p = mat2(c, -s, s, c) * p;
+    p *= max(frequency, 0.0);
+    p /= max(abs(zoom), 0.001);
+    uv = p + vec2(0.5);
+    if (quality < 1.0) {
+        vec2 grid = max(resolution * max(quality, 0.05), vec2(1.0));
+        uv = (floor(uv * grid) + vec2(0.5)) / grid;
+    }
+    return uv;
+}
+
+vec3 mxCacheRotateHue(vec3 col, float angle) {
+    float U = cos(angle);
+    float W = sin(angle);
+    mat3 R = mat3(
+        0.299 + 0.701*U + 0.168*W,
+        0.587 - 0.587*U + 0.330*W,
+        0.114 - 0.114*U - 0.497*W,
+        0.299 - 0.299*U - 0.328*W,
+        0.587 + 0.413*U + 0.035*W,
+        0.114 - 0.114*U + 0.292*W,
+        0.299 - 0.300*U + 1.250*W,
+        0.587 - 0.588*U - 1.050*W,
+        0.114 + 0.886*U - 0.203*W
+    );
+    return clamp(R * col, 0.0, 1.0);
+}
+
+vec3 mxCacheApplyColorAdjustments(vec3 col, float brightness, float contrast,
+                                  float saturation, float hueShift) {
+    col *= brightness;
+    col = (col - 0.5) * contrast + 0.5;
+    float gray = dot(col, vec3(0.299, 0.587, 0.114));
+    col = mix(vec3(gray), col, saturation);
+    return mxCacheRotateHue(col, hueShift);
+}
+
+vec2 mxCacheTexCoord;
+
 
 uniform sampler2D samp;
 uniform float time_f;
@@ -9,17 +57,17 @@ uniform vec4 iMouse;
 
 out vec4 color;
 in vec2 TexCoord;
-#define tc TexCoord
+#define tc mxCacheTexCoord
 
 // Controls
-const float iAmplitude  = 1.0; // Controls Liquid Intensity
-const float iFrequency  = 1.0; // Controls Fractal/Kaleidoscope Complexity
-const float iBrightness = 1.0;
-const float iContrast   = 1.1;
-const float iSaturation = 1.3;
-const float iHueShift   = 0.0;
-const float iZoom       = 1.0;
-const float iRotation   = 0.0;
+uniform float iAmplitude; // Controls Liquid Intensity
+uniform float iFrequency; // Controls Fractal/Kaleidoscope Complexity
+uniform float iBrightness;
+uniform float iContrast;
+uniform float iSaturation;
+uniform float iHueShift;
+uniform float iZoom;
+uniform float iRotation;
 
 // --- UTILITY FUNCTIONS ---
 
@@ -50,7 +98,7 @@ vec3 getNeonPalette(float t) {
     vec3 colBlue   = vec3(0.05, 0.2, 1.0);
     vec3 colPurple = vec3(0.7, 0.0, 1.0);
     vec3 colPink   = vec3(1.0, 0.05, 0.5);
-    
+
     if (x < 0.33) return mix(colBlue, colPurple, x * 3.0);
     else if (x < 0.66) return mix(colPurple, colPink, (x - 0.33) * 3.0);
     else return mix(colPink, colBlue, (x - 0.66) * 3.0);
@@ -110,7 +158,7 @@ float fbm(vec2 p) {
     float v = 0.0;
     float a = 0.5;
     mat2 rot = mat2(cos(0.5), sin(0.5), -sin(0.5), cos(0.5));
-    for (int i = 0; i < 4; i++) { 
+    for (int i = 0; i < 4; i++) {
         v += a * noise(p);
         p = rot * p * 2.0 + vec2(100.0);
         a *= 0.5;
@@ -123,12 +171,12 @@ float fbm(vec2 p) {
 vec3 sampleSuperShader(vec2 uv, float t, vec2 center, vec2 res) {
     float aspect = res.x / res.y;
     vec2 p = (uv - center) * vec2(aspect, 1.0);
-    
+
     // 1. Zoom & Rotation
     p = rotate2D(p, iRotation);
     float zoom = max(iZoom, 0.01);
     p /= zoom;
-    
+
     // 2. The PingPong Wave (From Shader 3)
     // We apply this early so the fractal/liquid logic acts ON the wave
     float time_t = pingPong(time_f, 10.0) + 1.0;
@@ -136,7 +184,7 @@ vec3 sampleSuperShader(vec2 uv, float t, vec2 center, vec2 res) {
     float waveFreq = 2.0 + iFrequency * 2.0;
     float waveAmp  = 0.1 * sin(0.2 * time_t) * iAmplitude;
     float waveSpd  = sin(0.3 * time_s);
-    
+
     p.y += sin(p.x * waveFreq + time_f * waveSpd) * waveAmp;
 
     // 3. Fractal Geometry (From Shader 2)
@@ -144,7 +192,7 @@ vec3 sampleSuperShader(vec2 uv, float t, vec2 center, vec2 res) {
     if (iFrequency > 0.2) {
         float slices = 4.0 + floor(iFrequency * 6.0);
         p = kaleido(p, slices);
-        
+
         int iterations = 2 + int(iFrequency * 2.0);
         float scale = 1.1;
         float shift = 0.1;
@@ -163,33 +211,33 @@ vec3 sampleSuperShader(vec2 uv, float t, vec2 center, vec2 res) {
     q.y = fbm(p + vec2(5.2, 1.3) + 0.05*t);
 
     vec2 r = vec2(0.0);
-    r.x = fbm(p + 4.0*q + vec2(t * 0.1)); 
+    r.x = fbm(p + 4.0*q + vec2(t * 0.1));
     r.y = fbm(p + 4.0*q + vec2(t * 0.05, 2.8));
 
     // Calculate final distortion
     // Strength depends on amplitude
     float liquidStrength = 0.2 + (iAmplitude * 0.5);
     vec2 distortion = r * liquidStrength;
-    
+
     // 5. Texture Sampling
     // Use the warped coordinates to sample
     vec2 finalUV = uv + distortion;
-    
+
     // Apply the wave again to the lookup for consistency
     finalUV.y += sin(finalUV.x * waveFreq + time_f * waveSpd) * waveAmp;
-    
+
     vec3 texCol = mxTexture(samp, finalUV).rgb;
-    
+
     // 6. Color Blending (Texture Mapped Neon)
-    
+
     // Generate Neon Palette based on warp intensity
     float pattern = length(q) + length(r) + t * 0.1;
     vec3 neon = getNeonPalette(pattern);
-    
+
     // Blend: Multiply Texture * Neon * Brightness Boost
     // This tints the texture while keeping the "light" look
     vec3 col = texCol * neon * 2.0;
-    
+
     // Restore some original texture color in the "calm" areas
     float turbulence = length(r);
     col = mix(col, texCol, max(0.0, 1.0 - turbulence * 2.0));
@@ -197,12 +245,12 @@ vec3 sampleSuperShader(vec2 uv, float t, vec2 center, vec2 res) {
     return col;
 }
 
-void main() {
+void mxCacheShaderMain() {
     vec2 uv = tc;
     uv = wrapUV(uv);
-    
+
     float t = time_f * 0.2;
-    
+
     vec2 center = vec2(0.5);
     if (iMouse.z > 0.0) {
         center = iMouse.xy / iResolution;
@@ -211,7 +259,7 @@ void main() {
     // Chromatic Aberration
     // We offset the lookup for each channel slightly
     float caStrength = 0.003 * (1.0 + iAmplitude);
-    
+
     vec3 col;
     col.r = sampleSuperShader(uv + vec2(caStrength, 0.0), t, center, iResolution).r;
     col.g = sampleSuperShader(uv,                         t, center, iResolution).g;
@@ -222,12 +270,25 @@ void main() {
     col = adjustContrast(col, iContrast);
     col = adjustSaturation(col, iSaturation);
     col = rotateHue(col, iHueShift);
-    
+
     // Vignette
-    vec2 vUV = uv * (1.0 - uv.yx); 
-    float vig = vUV.x * vUV.y * 15.0; 
-    vig = pow(vig, 0.2); 
+    vec2 vUV = uv * (1.0 - uv.yx);
+    float vig = vUV.x * vUV.y * 15.0;
+    vig = pow(vig, 0.2);
     col *= vig;
 
     color = vec4(col, 1.0);
+}
+void main() {
+    mxCacheTexCoord = mxCacheApplyCoordinateAdjustments(
+        TexCoord, 1.0, 1.0, 0.0, iQuality, vec2(textureSize(samp, 0)));
+    vec4 mxCacheInputColor = texture(samp, mxCacheTexCoord);
+    mxCacheShaderMain();
+    vec4 mxCacheEffectColor = color;
+    mxCacheEffectColor.rgb = mxCacheApplyColorAdjustments(
+        mxCacheEffectColor.rgb, 1.0, 1.0, 1.0, 0.0);
+    if (iDebugMode > 0.5 && TexCoord.x < 0.5) {
+        mxCacheEffectColor = mxCacheInputColor;
+    }
+    color = mxCacheEffectColor;
 }

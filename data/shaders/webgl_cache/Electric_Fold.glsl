@@ -1,6 +1,54 @@
 #version 300 es
 precision highp float;
 precision highp int;
+uniform float iSpeed;
+uniform float iQuality;
+uniform float iDebugMode;
+
+vec2 mxCacheApplyCoordinateAdjustments(vec2 uv, float frequency, float zoom,
+                                       float rotation, float quality, vec2 resolution) {
+    vec2 p = uv - vec2(0.5);
+    float c = cos(rotation);
+    float s = sin(rotation);
+    p = mat2(c, -s, s, c) * p;
+    p *= max(frequency, 0.0);
+    p /= max(abs(zoom), 0.001);
+    uv = p + vec2(0.5);
+    if (quality < 1.0) {
+        vec2 grid = max(resolution * max(quality, 0.05), vec2(1.0));
+        uv = (floor(uv * grid) + vec2(0.5)) / grid;
+    }
+    return uv;
+}
+
+vec3 mxCacheRotateHue(vec3 col, float angle) {
+    float U = cos(angle);
+    float W = sin(angle);
+    mat3 R = mat3(
+        0.299 + 0.701*U + 0.168*W,
+        0.587 - 0.587*U + 0.330*W,
+        0.114 - 0.114*U - 0.497*W,
+        0.299 - 0.299*U - 0.328*W,
+        0.587 + 0.413*U + 0.035*W,
+        0.114 - 0.114*U + 0.292*W,
+        0.299 - 0.300*U + 1.250*W,
+        0.587 - 0.588*U - 1.050*W,
+        0.114 + 0.886*U - 0.203*W
+    );
+    return clamp(R * col, 0.0, 1.0);
+}
+
+vec3 mxCacheApplyColorAdjustments(vec3 col, float brightness, float contrast,
+                                  float saturation, float hueShift) {
+    col *= brightness;
+    col = (col - 0.5) * contrast + 0.5;
+    float gray = dot(col, vec3(0.299, 0.587, 0.114));
+    col = mix(vec3(gray), col, saturation);
+    return mxCacheRotateHue(col, hueShift);
+}
+
+vec2 mxCacheTexCoord;
+
 
 uniform sampler2D samp;
 uniform float time_f;
@@ -9,17 +57,17 @@ uniform vec4 iMouse;
 
 out vec4 color;
 in vec2 TexCoord;
-#define tc TexCoord
+#define tc mxCacheTexCoord
 
 // Controls
-const float iAmplitude  = 1.0;
-const float iFrequency  = 1.0;
-const float iBrightness = 1.0;
-const float iContrast   = 1.0;
-const float iSaturation = 1.0;
-const float iHueShift   = 0.0;
-const float iZoom       = 1.0;
-const float iRotation   = 0.0;
+uniform float iAmplitude;
+uniform float iFrequency;
+uniform float iBrightness;
+uniform float iContrast;
+uniform float iSaturation;
+uniform float iHueShift;
+uniform float iZoom;
+uniform float iRotation;
 
 // --- COLOR HELPERS ---
 
@@ -51,7 +99,7 @@ vec3 palette(float t) {
     vec3 a = vec3(0.5, 0.5, 0.5);
     vec3 b = vec3(0.5, 0.5, 0.5);
     vec3 c = vec3(1.0, 1.0, 1.0);
-    vec3 d = vec3(0.263, 0.416, 0.557); 
+    vec3 d = vec3(0.263, 0.416, 0.557);
     return a + b * cos(6.28318 * (c * t + d + iHueShift));
 }
 
@@ -121,7 +169,7 @@ vec2 kaleido(vec2 p, float slices) {
 vec3 sampleMerged(vec2 uv, float t, float strength, vec2 center, vec2 res) {
     float aspect = res.x / res.y;
     vec2 p = (uv - center) * vec2(aspect, 1.0);
-    
+
     // Initial Rotation from controls
     p = rotate2D(p, iRotation);
     float zoom = max(iZoom, 0.001);
@@ -131,7 +179,7 @@ vec3 sampleMerged(vec2 uv, float t, float strength, vec2 center, vec2 res) {
     // We distort 'p' using a rotational noise field
     float f1 = fbm(p * 2.0 + t * 0.2, false);
     float f2 = fbm(p * 2.5 - t * 0.3, false);
-    
+
     // Convert to polar, twist angle based on noise, convert back
     float rLen = length(p);
     float ang = atan(p.y, p.x);
@@ -146,24 +194,24 @@ vec3 sampleMerged(vec2 uv, float t, float strength, vec2 center, vec2 res) {
 
     vec2 r = vec2(0.0);
     // Use 'ridges=true' here for the sharp electric look
-    r.x = fbm(p + 4.0 * q + vec2(t * 0.2, 9.2), true); 
+    r.x = fbm(p + 4.0 * q + vec2(t * 0.2, 9.2), true);
     r.y = fbm(p + 4.0 * q + vec2(8.3, 2.8), false);
 
     // Apply the warp
     p += r * (0.15 * strength);
 
     // --- STAGE 3: FRACTAL FOLDING (Geometric Loop) ---
-    
+
     // Kaleidoscope
     float slices = 8.0 + 4.0 * sin(t * 0.2);
     p = kaleido(p, slices);
-    
+
     // Box Folding Loop
     int iterations = 4 + int(iAmplitude * 1.5);
     float scale = 1.2 + (iFrequency * 0.2);
     float shift = 0.1 * strength;
     float rotAng = t * 0.2 + (f1 * 0.5); // Use the fluid noise 'f1' to modulate rotation
-    
+
     for(int i = 0; i < iterations; i++) {
         p = abs(p);
         p -= shift;
@@ -175,10 +223,10 @@ vec3 sampleMerged(vec2 uv, float t, float strength, vec2 center, vec2 res) {
 
     // Map back to texture space
     vec2 finalUV = p * 0.5 + center;
-    
+
     // Add chromatic aberration based on the swirl noise
     vec2 chroma = vec2(0.005 * strength * f2, 0.0);
-    
+
     float red = mxTexture(samp, finalUV + chroma).r;
     float grn = mxTexture(samp, finalUV).g;
     float blu = mxTexture(samp, finalUV - chroma).b;
@@ -188,9 +236,9 @@ vec3 sampleMerged(vec2 uv, float t, float strength, vec2 center, vec2 res) {
     // Combine the "Swirl" intensity (f1) with the "Electric" intensity (r)
     float energy = (length(r) * 0.5 + f1 * 0.5);
     float glow = pow(energy, 3.0) * iContrast;
-    
+
     vec3 pal = palette(length(p) + t * 0.5);
-    
+
     // Mix Texture + Palette + Glow
     vec3 finalCol = mix(texCol, pal, 0.3 * iSaturation);
     finalCol += pal * glow * strength;
@@ -198,7 +246,7 @@ vec3 sampleMerged(vec2 uv, float t, float strength, vec2 center, vec2 res) {
     return finalCol;
 }
 
-void main() {
+void mxCacheShaderMain() {
     vec2 uv = tc;
     uv = wrapUV(uv);
 
@@ -215,11 +263,24 @@ void main() {
 
     // We blend two passes slightly offset in time for extra motion blur/smoothness
     vec3 colA = sampleMerged(uv, t, strength, center, iResolution);
-    
+
     // Optional: Second pass for complexity (can remove for speed)
     // vec3 colB = sampleMerged(uv + vec2(0.005), t + 0.5, strength, center, iResolution);
     // colA = mix(colA, colB, 0.5);
 
     color.rgb = applyColorAdjustments(colA);
     color.a = 1.0;
+}
+void main() {
+    mxCacheTexCoord = mxCacheApplyCoordinateAdjustments(
+        TexCoord, 1.0, 1.0, 0.0, iQuality, vec2(textureSize(samp, 0)));
+    vec4 mxCacheInputColor = texture(samp, mxCacheTexCoord);
+    mxCacheShaderMain();
+    vec4 mxCacheEffectColor = color;
+    mxCacheEffectColor.rgb = mxCacheApplyColorAdjustments(
+        mxCacheEffectColor.rgb, 1.0, 1.0, 1.0, 0.0);
+    if (iDebugMode > 0.5 && TexCoord.x < 0.5) {
+        mxCacheEffectColor = mxCacheInputColor;
+    }
+    color = mxCacheEffectColor;
 }

@@ -301,6 +301,9 @@ change. The conversion pass can:
 - Remove illegal uniform initializers by converting constant values.
 - Normalize desktop-only integer/float expressions rejected by GLSL ES.
 - Add explicit precision to numeric arrays for mobile GLSL compilers.
+- Inject the common settings-panel controls into external shaders. Generated
+  wrappers apply amplitude, frequency, color, zoom, rotation, quality, and
+  debug adjustments while preserving shaders that already implement them.
 
 The source files are not modified by the cache pass. Converted files are written
 to `data/shaders/webgl_cache/`, allowing normal startup to avoid repeating the

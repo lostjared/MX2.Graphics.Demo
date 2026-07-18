@@ -1,9 +1,65 @@
 #version 300 es
 precision highp float;
 precision highp int;
+uniform float iSpeed;
+uniform float iAmplitude;
+uniform float iFrequency;
+uniform float iBrightness;
+uniform float iContrast;
+uniform float iSaturation;
+uniform float iHueShift;
+uniform float iZoom;
+uniform float iRotation;
+uniform float iQuality;
+uniform float iDebugMode;
+
+vec2 mxCacheApplyCoordinateAdjustments(vec2 uv, float frequency, float zoom,
+                                       float rotation, float quality, vec2 resolution) {
+    vec2 p = uv - vec2(0.5);
+    float c = cos(rotation);
+    float s = sin(rotation);
+    p = mat2(c, -s, s, c) * p;
+    p *= max(frequency, 0.0);
+    p /= max(abs(zoom), 0.001);
+    uv = p + vec2(0.5);
+    if (quality < 1.0) {
+        vec2 grid = max(resolution * max(quality, 0.05), vec2(1.0));
+        uv = (floor(uv * grid) + vec2(0.5)) / grid;
+    }
+    return uv;
+}
+
+vec3 mxCacheRotateHue(vec3 col, float angle) {
+    float U = cos(angle);
+    float W = sin(angle);
+    mat3 R = mat3(
+        0.299 + 0.701*U + 0.168*W,
+        0.587 - 0.587*U + 0.330*W,
+        0.114 - 0.114*U - 0.497*W,
+        0.299 - 0.299*U - 0.328*W,
+        0.587 + 0.413*U + 0.035*W,
+        0.114 - 0.114*U + 0.292*W,
+        0.299 - 0.300*U + 1.250*W,
+        0.587 - 0.588*U - 1.050*W,
+        0.114 + 0.886*U - 0.203*W
+    );
+    return clamp(R * col, 0.0, 1.0);
+}
+
+vec3 mxCacheApplyColorAdjustments(vec3 col, float brightness, float contrast,
+                                  float saturation, float hueShift) {
+    col *= brightness;
+    col = (col - 0.5) * contrast + 0.5;
+    float gray = dot(col, vec3(0.299, 0.587, 0.114));
+    col = mix(vec3(gray), col, saturation);
+    return mxCacheRotateHue(col, hueShift);
+}
+
+vec2 mxCacheTexCoord;
+
 out vec4 color;
 in vec2 TexCoord;
-#define tc TexCoord
+#define tc mxCacheTexCoord
 
 uniform sampler2D samp;
 uniform vec2 iResolution;
@@ -54,11 +110,11 @@ vec3 neonPalette(float t) {
     float a = step(ph, 0.33);
     float b = step(0.33, ph) * step(ph, 0.66);
     float c = step(0.66, ph);
-    return normalize(a * k1 + b * k2 + c * k3) * 1.2; 
+    return normalize(a * k1 + b * k2 + c * k3) * 1.2;
 }
 
 // --- MAIN LOGIC ---
-void main(void) {
+void mxCacheShaderMain() {
     float aspect = iResolution.x / iResolution.y;
     vec2 ar = vec2(aspect, 1.0);
     vec2 m = (iMouse.z > 0.5) ? (iMouse.xy / iResolution) : vec2(0.5);
@@ -66,7 +122,7 @@ void main(void) {
     // 1. 3D PROJECTION AND ROTATION AROUND Y-AXIS
     // We start by creating a 3D coordinate system that tumbles with rotation around the Y-axis
     vec2 p2 = (tc - m) * ar;
-    
+
     // Rotation speeds derived from Shader 1, including rotation around the Y-axis
     float ax = 0.25 * sin(time_f * 0.5);
     float ay = 0.25 * cos(time_f * 0.4) + time_f * 0.1; // Add rotation around Y-axis and offset slightly for movement
@@ -84,13 +140,13 @@ void main(void) {
     // 2. ELECTRIC NOISE & RIPPLE (Combining Shader 2 & 3)
     // Calculate noise based on the projected 3D coordinates + time
     float elect = fbm(projectedUV * 4.0 - time_f * 1.5);
-    
+
     // Create the Ripple effect (Shader 3) but modulate it with the Noise (Shader 2)
     float dist = length(projectedUV);
     float ripple = sin(dist * 20.0 - time_f * 3.0);
-    
+
     // Scale the projection based on the ripple
-    float scale = 1.0 + 0.15 * ripple * elect; 
+    float scale = 1.0 + 0.15 * ripple * elect;
     projectedUV *= scale;
 
     // 3. MIRROR TILING (From Shader 4)
@@ -114,19 +170,34 @@ void main(void) {
     float rChannel = texture(samp, clamp(uvR, 0.0, 1.0)).r;
     float gChannel = texture(samp, clamp(uvG, 0.0, 1.0)).g;
     float bChannel = texture(samp, clamp(uvB, 0.0, 1.0)).b;
-    
+
     vec3 texColor = vec3(rChannel, gChannel, bChannel);
 
     // Add the Neon Palette Glow (From Shader 2)
     // We use the 'elect' value to mask where the neon appears (in the "cracks" of the noise)
     vec3 neon = neonPalette(time_f + dist);
     float glowMask = smoothstep(0.4, 0.9, elect);
-    
+
     // Additive blend: Texture + (Neon * GlowIntensity)
     vec3 finalColor = texColor + (neon * glowMask * 0.8);
-    
+
     // Soft tone mapping to prevent total blowout
     finalColor = finalColor / (1.0 + finalColor * 0.3);
 
     color = vec4(finalColor, 1.0);
+}
+
+void main() {
+    mxCacheTexCoord = mxCacheApplyCoordinateAdjustments(
+        TexCoord, iFrequency, iZoom, iRotation, iQuality, vec2(textureSize(samp, 0)));
+    vec4 mxCacheInputColor = texture(samp, mxCacheTexCoord);
+    mxCacheShaderMain();
+    vec4 mxCacheEffectColor = color;
+    mxCacheEffectColor = mix(mxCacheInputColor, mxCacheEffectColor, iAmplitude);
+    mxCacheEffectColor.rgb = mxCacheApplyColorAdjustments(
+        mxCacheEffectColor.rgb, iBrightness, iContrast, iSaturation, iHueShift);
+    if (iDebugMode > 0.5 && TexCoord.x < 0.5) {
+        mxCacheEffectColor = mxCacheInputColor;
+    }
+    color = mxCacheEffectColor;
 }
