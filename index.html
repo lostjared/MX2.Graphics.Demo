@@ -5081,6 +5081,8 @@ void main(void) {
                         '-b:a', chosenMp4Quality.audioBitrate,
                         '-ac', '2',             // Stereo
                         '-ar', '44100',         // Sample rate
+                        ...(lastRecordingDuration > 0 ? ['-t', lastRecordingDuration.toFixed(3)] : []),
+                        '-shortest',
                         '-movflags', '+faststart+use_metadata_tags',
                         '-y',
                         'output.mp4'
@@ -5132,9 +5134,321 @@ void main(void) {
             }
         }
 
-        async function remuxWebMWithFreshTimestamps(webmBlob) {
-            if (!ffmpegSupported) {
+        function readEbmlVint(bytes, offset, preserveMarker = false) {
+            if (offset >= bytes.length || bytes[offset] === 0) return null;
+
+            let length = 1;
+            let marker = 0x80;
+            while (length <= 8 && (bytes[offset] & marker) === 0) {
+                marker >>= 1;
+                length++;
+            }
+            if (length > 8 || offset + length > bytes.length) return null;
+
+            let value = preserveMarker ? bytes[offset] : (bytes[offset] & (marker - 1));
+            let unknown = !preserveMarker && (bytes[offset] & (marker - 1)) === marker - 1;
+            for (let i = 1; i < length; i++) {
+                value = value * 256 + bytes[offset + i];
+                if (!preserveMarker && bytes[offset + i] !== 0xff) unknown = false;
+            }
+
+            return { length, value, unknown };
+        }
+
+        function encodeEbmlSize(value, preferredLength = 1) {
+            if (!Number.isSafeInteger(value) || value < 0) return null;
+
+            let length = Math.max(1, preferredLength);
+            while (length <= 8 && value > Math.pow(2, 7 * length) - 2) length++;
+            if (length > 8) return null;
+
+            let remaining = BigInt(value);
+            const encoded = new Uint8Array(length);
+            for (let i = length - 1; i >= 0; i--) {
+                encoded[i] = Number(remaining & 0xffn);
+                remaining >>= 8n;
+            }
+            encoded[0] |= 1 << (8 - length);
+            return encoded;
+        }
+
+        function readEbmlUnsignedInteger(bytes, offset, length) {
+            if (length < 1 || length > 6 || offset + length > bytes.length) return null;
+            let value = 0;
+            for (let i = 0; i < length; i++) value = value * 256 + bytes[offset + i];
+            return value;
+        }
+
+        function writeEbmlFloat(bytes, offset, length, value) {
+            if (length !== 4 && length !== 8) return false;
+            const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+            if (length === 4) view.setFloat32(offset, value, false);
+            else view.setFloat64(offset, value, false);
+            return true;
+        }
+
+        function readIsoBox(bytes, offset, limit) {
+            if (offset + 8 > limit) return null;
+            const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+            let size = view.getUint32(offset, false);
+            let headerSize = 8;
+            if (size === 1) {
+                if (offset + 16 > limit) return null;
+                const extendedSize = view.getBigUint64(offset + 8, false);
+                if (extendedSize > BigInt(Number.MAX_SAFE_INTEGER)) return null;
+                size = Number(extendedSize);
+                headerSize = 16;
+            } else if (size === 0) {
+                size = limit - offset;
+            }
+            if (size < headerSize || offset + size > limit) return null;
+            const type = String.fromCharCode(
+                bytes[offset + 4], bytes[offset + 5], bytes[offset + 6], bytes[offset + 7]
+            );
+            return { offset, size, headerSize, type, dataStart: offset + headerSize, end: offset + size };
+        }
+
+        function findIsoBoxes(bytes, start, end, wantedType) {
+            const matches = [];
+            let cursor = start;
+            while (cursor < end) {
+                const box = readIsoBox(bytes, cursor, end);
+                if (!box) break;
+                if (box.type === wantedType) matches.push(box);
+                cursor = box.end;
+            }
+            return matches;
+        }
+
+        function growIsoBoxSize(bytes, box, addedBytes) {
+            const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+            if (box.headerSize === 16) {
+                view.setBigUint64(box.offset + 8, BigInt(box.size + addedBytes), false);
+            } else {
+                view.setUint32(box.offset, box.size + addedBytes, false);
+            }
+        }
+
+        function writeIsoDuration(bytes, box, durationSeconds, movieTimescale = 0) {
+            const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+            const version = bytes[box.dataStart];
+            let timescale = movieTimescale;
+            let durationOffset;
+            if (box.type === 'mvhd' || box.type === 'mdhd') {
+                const timescaleOffset = box.dataStart + (version === 1 ? 20 : 12);
+                durationOffset = box.dataStart + (version === 1 ? 24 : 16);
+                if (timescaleOffset + 4 > box.end) return 0;
+                timescale = view.getUint32(timescaleOffset, false);
+            } else if (box.type === 'tkhd') {
+                durationOffset = box.dataStart + (version === 1 ? 28 : 20);
+            } else if (box.type === 'mehd') {
+                durationOffset = box.dataStart + 4;
+            } else {
+                return 0;
+            }
+            if (!timescale) return 0;
+
+            const duration = Math.max(1, Math.round(durationSeconds * timescale));
+            if (version === 1) {
+                if (durationOffset + 8 > box.end) return 0;
+                view.setBigUint64(durationOffset, BigInt(duration), false);
+            } else {
+                if (durationOffset + 4 > box.end) return 0;
+                view.setUint32(durationOffset, Math.min(duration, 0xffffffff), false);
+            }
+            return timescale;
+        }
+
+        // Native Chrome MP4 recordings are fragmented and can leave mvhd at a
+        // zero/indefinite duration. Patch all movie/track clocks as a no-WASM
+        // fallback; the FFmpeg path below additionally rebuilds the sample index.
+        async function addMP4DurationMetadata(mp4Blob, durationSeconds) {
+            if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) return mp4Blob;
+
+            try {
+                let patched = new Uint8Array(await mp4Blob.arrayBuffer());
+                const moov = findIsoBoxes(patched, 0, patched.length, 'moov')[0];
+                if (!moov) throw new Error('MP4 moov box was not found');
+
+                const mvhd = findIsoBoxes(patched, moov.dataStart, moov.end, 'mvhd')[0];
+                if (!mvhd) throw new Error('MP4 mvhd box was not found');
+                const movieTimescale = writeIsoDuration(patched, mvhd, durationSeconds);
+                if (!movieTimescale) throw new Error('MP4 movie timescale was invalid');
+
+                for (const trak of findIsoBoxes(patched, moov.dataStart, moov.end, 'trak')) {
+                    const tkhd = findIsoBoxes(patched, trak.dataStart, trak.end, 'tkhd')[0];
+                    if (tkhd) writeIsoDuration(patched, tkhd, durationSeconds, movieTimescale);
+                    const mdia = findIsoBoxes(patched, trak.dataStart, trak.end, 'mdia')[0];
+                    if (mdia) {
+                        const mdhd = findIsoBoxes(patched, mdia.dataStart, mdia.end, 'mdhd')[0];
+                        if (mdhd) writeIsoDuration(patched, mdhd, durationSeconds);
+                    }
+                }
+
+                const mvex = findIsoBoxes(patched, moov.dataStart, moov.end, 'mvex')[0];
+                const mehd = mvex && findIsoBoxes(patched, mvex.dataStart, mvex.end, 'mehd')[0];
+                if (mehd) {
+                    writeIsoDuration(patched, mehd, durationSeconds, movieTimescale);
+                } else if (mvex) {
+                    // In fragmented MP4, mehd is the authoritative overall movie
+                    // duration. Chrome commonly omits it from MediaRecorder output.
+                    const duration = Math.max(1, Math.round(durationSeconds * movieTimescale));
+                    const use64BitDuration = duration > 0xffffffff;
+                    const mehdBytes = new Uint8Array(use64BitDuration ? 20 : 16);
+                    const mehdView = new DataView(mehdBytes.buffer);
+                    mehdView.setUint32(0, mehdBytes.length, false);
+                    mehdBytes.set([0x6d, 0x65, 0x68, 0x64], 4); // "mehd"
+                    mehdBytes[8] = use64BitDuration ? 1 : 0;
+                    if (use64BitDuration) mehdView.setBigUint64(12, BigInt(duration), false);
+                    else mehdView.setUint32(12, duration, false);
+
+                    const expanded = new Uint8Array(patched.length + mehdBytes.length);
+                    expanded.set(patched.subarray(0, mvex.end), 0);
+                    expanded.set(mehdBytes, mvex.end);
+                    expanded.set(patched.subarray(mvex.end), mvex.end + mehdBytes.length);
+                    growIsoBoxSize(expanded, mvex, mehdBytes.length);
+                    growIsoBoxSize(expanded, moov, mehdBytes.length);
+                    patched = expanded;
+                }
+
+                return new Blob([patched], { type: 'video/mp4' });
+            } catch (error) {
+                console.warn('Could not add MP4 duration metadata:', error);
+                return mp4Blob;
+            }
+        }
+
+        // MediaRecorder WebMs commonly use an unknown-sized Segment and omit the
+        // Duration element. Adding Duration to Info gives players a finite end time
+        // even on pages where FFmpeg.wasm cannot run (for example, without COOP/COEP).
+        async function addWebMDurationMetadata(webmBlob, durationSeconds) {
+            if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) return webmBlob;
+
+            try {
+                const original = new Uint8Array(await webmBlob.arrayBuffer());
+                const SEGMENT_ID = 0x18538067;
+                const INFO_ID = 0x1549a966;
+                const CLUSTER_ID = 0x1f43b675;
+                const TIMECODE_SCALE_ID = 0x2ad7b1;
+                const DURATION_ID = 0x4489;
+
+                let cursor = 0;
+                let segment = null;
+                while (cursor < original.length) {
+                    const id = readEbmlVint(original, cursor, true);
+                    if (!id) break;
+                    const size = readEbmlVint(original, cursor + id.length);
+                    if (!size) break;
+                    const dataStart = cursor + id.length + size.length;
+                    if (id.value === SEGMENT_ID) {
+                        segment = { start: cursor, id, size, dataStart };
+                        break;
+                    }
+                    if (size.unknown || dataStart + size.value > original.length) break;
+                    cursor = dataStart + size.value;
+                }
+                if (!segment) throw new Error('WebM Segment element was not found');
+
+                cursor = segment.dataStart;
+                const segmentEnd = segment.size.unknown
+                    ? original.length
+                    : Math.min(original.length, segment.dataStart + segment.size.value);
+                let info = null;
+                while (cursor < segmentEnd) {
+                    const id = readEbmlVint(original, cursor, true);
+                    if (!id) break;
+                    const size = readEbmlVint(original, cursor + id.length);
+                    if (!size) break;
+                    const dataStart = cursor + id.length + size.length;
+                    if (id.value === INFO_ID) {
+                        info = { start: cursor, id, size, dataStart, end: dataStart + size.value };
+                        break;
+                    }
+                    // Info always precedes media Clusters in MediaRecorder output.
+                    if (id.value === CLUSTER_ID || size.unknown) break;
+                    cursor = dataStart + size.value;
+                }
+                if (!info || info.size.unknown || info.end > original.length) {
+                    throw new Error('WebM Info element was not found');
+                }
+
+                let timecodeScale = 1000000;
+                let existingDuration = null;
+                cursor = info.dataStart;
+                while (cursor < info.end) {
+                    const id = readEbmlVint(original, cursor, true);
+                    if (!id) break;
+                    const size = readEbmlVint(original, cursor + id.length);
+                    if (!size || size.unknown) break;
+                    const dataStart = cursor + id.length + size.length;
+                    const end = dataStart + size.value;
+                    if (end > info.end) break;
+                    if (id.value === TIMECODE_SCALE_ID) {
+                        timecodeScale = readEbmlUnsignedInteger(original, dataStart, size.value) || timecodeScale;
+                    } else if (id.value === DURATION_ID) {
+                        existingDuration = { dataStart, size: size.value };
+                    }
+                    cursor = end;
+                }
+
+                const durationTicks = durationSeconds * 1000000000 / timecodeScale;
+                if (existingDuration && (existingDuration.size === 4 || existingDuration.size === 8)) {
+                    const patched = original.slice();
+                    writeEbmlFloat(patched, existingDuration.dataStart, existingDuration.size, durationTicks);
+                    return new Blob([patched], { type: 'video/webm' });
+                }
+
+                const durationElement = new Uint8Array(11);
+                durationElement.set([0x44, 0x89, 0x88], 0);
+                writeEbmlFloat(durationElement, 3, 8, durationTicks);
+
+                const newInfoPayloadSize = info.size.value + durationElement.length;
+                const newInfoSize = encodeEbmlSize(newInfoPayloadSize, info.size.length);
+                if (!newInfoSize) throw new Error('WebM Info size could not be encoded');
+
+                const oldInfoHeaderSize = info.id.length + info.size.length;
+                const newInfoHeaderSize = info.id.length + newInfoSize.length;
+                const infoLengthDelta = durationElement.length + newInfoHeaderSize - oldInfoHeaderSize;
+
+                let newSegmentSize = null;
+                if (!segment.size.unknown) {
+                    newSegmentSize = encodeEbmlSize(segment.size.value + infoLengthDelta, segment.size.length);
+                    if (!newSegmentSize) throw new Error('WebM Segment size could not be encoded');
+                }
+
+                const segmentSizeStart = segment.start + segment.id.length;
+                const beforeInfo = original.subarray(segment.dataStart, info.start);
+                const infoId = original.subarray(info.start, info.start + info.id.length);
+                const infoPayload = original.subarray(info.dataStart, info.end);
+                const afterInfo = original.subarray(info.end);
+                const segmentSizeBytes = newSegmentSize || original.subarray(
+                    segmentSizeStart,
+                    segmentSizeStart + segment.size.length
+                );
+
+                return new Blob([
+                    original.subarray(0, segmentSizeStart),
+                    segmentSizeBytes,
+                    beforeInfo,
+                    infoId,
+                    newInfoSize,
+                    infoPayload,
+                    durationElement,
+                    afterInfo
+                ], { type: 'video/webm' });
+            } catch (error) {
+                console.warn('Could not add WebM duration metadata:', error);
                 return webmBlob;
+            }
+        }
+
+        async function remuxWebMWithFreshTimestamps(webmBlob) {
+            const measuredDuration = Number.isFinite(lastRecordingDuration) && lastRecordingDuration > 0
+                ? lastRecordingDuration
+                : 0;
+
+            if (!ffmpegSupported) {
+                return addWebMDurationMetadata(webmBlob, measuredDuration);
             }
 
             showConversionOverlay();
@@ -5160,6 +5474,8 @@ void main(void) {
                     '-map', '0:v:0',
                     '-map', '0:a:0?',
                     '-c', 'copy',
+                    ...(measuredDuration > 0 ? ['-t', measuredDuration.toFixed(3)] : []),
+                    '-shortest',
                     '-y',
                     'output.webm'
                 );
@@ -5175,8 +5491,8 @@ void main(void) {
                 updateConversionProgress(100);
                 return new Blob([outputData], { type: 'video/webm' });
             } catch (error) {
-                console.warn('WebM remux failed, keeping original recording:', error);
-                return webmBlob;
+                console.warn('WebM remux failed, adding duration metadata without FFmpeg:', error);
+                return addWebMDurationMetadata(webmBlob, measuredDuration);
             } finally {
                 try {
                     ffmpeg.FS('unlink', 'input.webm');
@@ -5224,6 +5540,64 @@ void main(void) {
             }
             if (typeof updateMobileLayoutInsets === 'function') {
                 updateMobileLayoutInsets();
+            }
+        }
+
+        async function remuxMP4WithFreshTimestamps(mp4Blob) {
+            const measuredDuration = Number.isFinite(lastRecordingDuration) && lastRecordingDuration > 0
+                ? lastRecordingDuration
+                : 0;
+
+            if (!ffmpegSupported) {
+                return addMP4DurationMetadata(mp4Blob, measuredDuration);
+            }
+
+            showConversionOverlay();
+            updateConversionProgress(5);
+            updateConversionStatus('Finalizing MP4 metadata...');
+
+            try {
+                const loaded = await loadFFmpeg();
+                if (!loaded) throw new Error('Failed to load FFmpeg');
+
+                updateConversionProgress(30);
+                updateConversionStatus('Rebuilding MP4 timeline index...');
+                const fetchFile = window.ffmpegFetchFile;
+                ffmpeg.FS('writeFile', 'input-native.mp4', await fetchFile(mp4Blob));
+
+                await ffmpeg.run(
+                    '-fflags', '+genpts',
+                    '-i', 'input-native.mp4',
+                    '-avoid_negative_ts', 'make_zero',
+                    '-map', '0:v:0',
+                    '-map', '0:a:0?',
+                    '-c', 'copy',
+                    ...(measuredDuration > 0 ? ['-t', measuredDuration.toFixed(3)] : []),
+                    '-shortest',
+                    '-movflags', '+faststart+use_metadata_tags',
+                    '-y',
+                    'output-native.mp4'
+                );
+
+                updateConversionProgress(90);
+                updateConversionStatus('Saving MP4...');
+                const outputData = ffmpeg.FS('readFile', 'output-native.mp4');
+                if (!outputData || outputData.length === 0) {
+                    throw new Error('FFmpeg produced empty MP4 output');
+                }
+                updateConversionProgress(100);
+                return new Blob([outputData], { type: 'video/mp4' });
+            } catch (error) {
+                console.warn('MP4 remux failed, adding duration metadata without FFmpeg:', error);
+                return addMP4DurationMetadata(mp4Blob, measuredDuration);
+            } finally {
+                try {
+                    ffmpeg.FS('unlink', 'input-native.mp4');
+                } catch (e) {}
+                try {
+                    ffmpeg.FS('unlink', 'output-native.mp4');
+                } catch (e) {}
+                hideConversionOverlay();
             }
         }
 
@@ -5703,10 +6077,10 @@ void main(void) {
                     
                     let finalBlob;
                     let extension;
-                    
+
                     if (selectedFormat === 'mp4' && mimeType.indexOf('mp4') !== -1) {
-                        console.log('Using native MP4 recording output');
-                        finalBlob = recordedBlob;
+                        console.log('Finalizing native MP4 timeline metadata...');
+                        finalBlob = await remuxMP4WithFreshTimestamps(recordedBlob);
                         extension = 'mp4';
                     } else if (selectedFormat === 'mp4') {
                         // Convert WebM to MP4 using FFmpeg when native MP4 recording is unavailable
