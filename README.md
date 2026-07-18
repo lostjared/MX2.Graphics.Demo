@@ -141,17 +141,37 @@ JSON support, so `json.hpp` is not required for this feature.
 ## Building the Web Version
 
 Install and activate the Emscripten SDK, then build libmx2 for Emscripten as
-described in the [libmx2 repository](https://github.com/lostjared/libmx2).
+described in the [libmx2 repository](https://github.com/lostjared/libmx2). For
+example, after cloning the SDK to a directory of your choice:
 
 ```bash
-source ~/emsdk/emsdk_env.sh
+cd /path/to/emsdk
+./emsdk install latest
+./emsdk activate latest
+
+# Configure Emscripten in the current shell.
+source ./emsdk_env.sh
+em++ --version
+
+cd /path/to/MX2.Graphics.Demo
 make -f Makefile.em
 ```
 
-If `em++` is not in the current shell's `PATH`, pass its location explicitly:
+The `emsdk_env.sh` script configures `PATH` and the other Emscripten environment
+variables for the current shell. To use it from any directory, store the SDK
+location in an environment variable:
 
 ```bash
-make -f Makefile.em CXX=/home/jared/emsdk/upstream/emscripten/em++
+export EMSDK_ROOT=/path/to/emsdk
+source "$EMSDK_ROOT/emsdk_env.sh"
+make -f Makefile.em
+```
+
+Alternatively, if an existing Emscripten installation is not activated in the
+current shell, pass the path to its C++ compiler directly:
+
+```bash
+make -f Makefile.em CXX=/path/to/emscripten/em++
 ```
 
 The build generates:
@@ -361,13 +381,15 @@ If every shader compiles, the report contains `All shaders compiled successfully
 Activate the Emscripten environment or pass the compiler explicitly:
 
 ```bash
-source ~/emsdk/emsdk_env.sh
+export EMSDK_ROOT=/path/to/emsdk
+source "$EMSDK_ROOT/emsdk_env.sh"
+em++ --version
 ```
 
 or:
 
 ```bash
-make -f Makefile.em CXX=/home/jared/emsdk/upstream/emscripten/em++
+make -f Makefile.em CXX=/path/to/emscripten/em++
 ```
 
 ### A custom shader does not compile
