@@ -151,10 +151,22 @@ known.
 ## Requirements
 
 - A modern browser with WebGL 2 support.
+- A Chromium-based browser is recommended for the best experience, including
+  Google Chrome, Chromium, Brave, Microsoft Edge, and other Chromium-based
+  browsers.
 - Emscripten and its SDL2 ports for building.
 - An Emscripten build of libmx2.
 - Python 3 for the included development server.
 - Perl for regenerating the WebGL shader cache.
+
+Chrome and other Chromium-based browsers generally provide the most consistent
+WebGL 2, `MediaRecorder`, camera, microphone, and WebAssembly support for the
+visualizer. Other modern browsers may work, but recording formats and media
+features can vary by browser and operating system.
+
+Firefox is not currently recommended for this application. Video recordings
+may appear heavily pixelated, and camera input does not appear to work reliably.
+For recording and live-camera use, choose a Chromium-based browser instead.
 
 ## Building the Web Version
 
