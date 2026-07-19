@@ -17,6 +17,8 @@ experimental sources.
 
 - More shaders, loaded from alphabetized shader indexes.
 - Cached WebGL 2 shader conversion for faster startup.
+- Two-stage startup screen with byte-level WASM/data download progress followed
+  by live shader-compilation output.
 - GLSL 3.30-to-GLSL ES 3.00 compatibility conversion.
 - Detailed startup shader failure logs.
 - Cached shader browser in the custom shader editor.
@@ -130,6 +132,22 @@ Shader names are stored for stable sharing between builds, with indexes retained
 as a fallback where appropriate. Chain serialization uses the browser's native
 JSON support, so `json.hpp` is not required for this feature.
 
+### Startup and Loading
+
+Startup is split into two visible phases:
+
+1. `index.html` downloads `MX_app.wasm` and `MX_app.data` in parallel. The
+   loading screen displays the combined byte count, total size, and percentage.
+2. After both files are available, the screen switches to the shader-compilation
+   console and reports shader progress, successes, and failures.
+
+The downloaded buffers are passed directly to Emscripten, avoiding a second
+WASM or data-file request. If streaming prefetch is unavailable or fails, the
+page falls back to Emscripten's standard loader. Servers that provide
+`Content-Length` and support `HEAD` requests allow the progress bar to show an
+exact total immediately; otherwise it remains indeterminate until the size is
+known.
+
 ## Requirements
 
 - A modern browser with WebGL 2 support.
@@ -181,8 +199,9 @@ The build generates:
 - `MX_app.wasm`
 - `MX_app.data`
 
-The application UI is served from `index.html`, which loads the generated
-Emscripten files with a shared cache-busting token.
+The application UI is served from `index.html`, which preloads the generated
+WASM and data files with a shared cache-busting token, displays download
+progress, and then starts the generated JavaScript runtime.
 
 ## Running Locally
 
@@ -433,6 +452,8 @@ make -f Makefile.em CXX=/path/to/emscripten/em++
 - Rendering uses WebGL 2 hardware acceleration.
 - The app targets smooth 60 FPS interaction on modern devices.
 - External shader conversion is cached before startup.
+- WASM and packaged application data download concurrently and are reused by
+  Emscripten without duplicate network transfers.
 - Shader program compilation remains the main startup cost.
 - Recording performance depends on shader complexity, output size, browser
   encoder support, and device hardware.
