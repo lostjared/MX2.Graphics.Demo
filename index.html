@@ -1537,6 +1537,75 @@
             overflow: hidden;
         }
 
+        #download-panel {
+            display: flex;
+            width: min(460px, 86vw);
+            margin: auto;
+            flex-direction: column;
+            align-items: center;
+            color: #ebebeb;
+            font-family: Arial, sans-serif;
+            text-align: center;
+        }
+
+        #download-panel h1 {
+            margin: 0 0 24px;
+            color: #bdd72e;
+            font-size: clamp(24px, 5vw, 32px);
+            letter-spacing: 2px;
+        }
+
+        #download-spinner {
+            width: 50px;
+            height: 50px;
+            margin-bottom: 20px;
+            border: 6px solid #2a2a2a;
+            border-top-color: #bdd72e;
+            border-radius: 50%;
+            box-sizing: border-box;
+            animation: download-rotation 0.8s linear infinite;
+        }
+
+        @keyframes download-rotation {
+            to { transform: rotate(360deg); }
+        }
+
+        #download-status {
+            min-height: 20px;
+            margin-bottom: 12px;
+            color: #bdd72e;
+            font-size: 15px;
+            font-weight: 700;
+        }
+
+        #download-progress {
+            width: 100%;
+            height: 18px;
+            accent-color: #bdd72e;
+        }
+
+        #download-detail {
+            min-height: 34px;
+            margin-top: 10px;
+            color: #999;
+            font: 12px/1.45 'Courier New', monospace;
+            white-space: pre-line;
+        }
+
+        #loading-title,
+        #loading-output {
+            display: none;
+        }
+
+        #loading-overlay.compilation-phase #download-panel {
+            display: none;
+        }
+
+        #loading-overlay.compilation-phase #loading-title,
+        #loading-overlay.compilation-phase #loading-output {
+            display: block;
+        }
+
         #loading-overlay.hidden {
             display: none;
         }
@@ -2184,7 +2253,14 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
 </head>
 <body>
     <div id="loading-overlay">
-        <div id="loading-title">ACMX2 Interactive Visualizer v2.0.0 - Initializing...</div>
+        <div id="download-panel" role="status" aria-live="polite">
+            <h1>ACMX2</h1>
+            <div id="download-spinner" aria-hidden="true"></div>
+            <div id="download-status">Downloading application files...</div>
+            <progress id="download-progress" max="100" value="0"></progress>
+            <div id="download-detail">Connecting...</div>
+        </div>
+        <div id="loading-title">ACMX2 Interactive Visualizer v2.0.0 - Compiling Shaders...</div>
         <div id="loading-output"></div>
     </div>
     <div id="canvas-container">
@@ -3097,6 +3173,11 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
                 }
                 console.error(text);
             },
+            setStatus: function(text) {
+                if (window.updateDownloadStatus) {
+                    window.updateDownloadStatus(text);
+                }
+            },
             onRuntimeInitialized: function() {
                 console.log('Module ready, calling resize and texture rebind');
                 if (typeof Module.forceTextureRebind === 'function') {
@@ -3115,9 +3196,152 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
     </script>
     <script>
     (function() {
-        const script = document.createElement('script');
-        script.src = 'MX_app.js?v=' + acmxBuildToken;
-        document.head.appendChild(script);
+        var overlay = document.getElementById('loading-overlay');
+        var status = document.getElementById('download-status');
+        var progress = document.getElementById('download-progress');
+        var detail = document.getElementById('download-detail');
+        var assets = [
+            { name: 'WebAssembly', file: 'MX_app.wasm', loaded: 0, total: 0 },
+            { name: 'Application data', file: 'MX_app.data', loaded: 0, total: 0 }
+        ];
+        var compilationStarted = false;
+
+        function formatBytes(bytes) {
+            if (bytes >= 1048576) return (bytes / 1048576).toFixed(1) + ' MB';
+            if (bytes >= 1024) return (bytes / 1024).toFixed(0) + ' KB';
+            return bytes + ' B';
+        }
+
+        function renderProgress() {
+            var loaded = assets.reduce(function(sum, asset) { return sum + asset.loaded; }, 0);
+            var total = assets.reduce(function(sum, asset) { return sum + asset.total; }, 0);
+            var totalsKnown = assets.every(function(asset) { return asset.total > 0; });
+
+            status.textContent = 'Downloading WebAssembly and data...';
+            if (totalsKnown) {
+                progress.max = total;
+                progress.value = loaded;
+                detail.textContent = formatBytes(loaded) + ' / ' + formatBytes(total) +
+                    '  (' + Math.min(100, Math.floor(loaded * 100 / total)) + '%)';
+            } else {
+                progress.removeAttribute('value');
+                detail.textContent = assets.map(function(asset) {
+                    return asset.name + ': ' + formatBytes(asset.loaded) +
+                        (asset.total ? ' / ' + formatBytes(asset.total) : '');
+                }).join('\n');
+            }
+        }
+
+        function beginCompilationPhase() {
+            if (compilationStarted) return;
+            compilationStarted = true;
+            overlay.classList.add('compilation-phase');
+            window.addLoadingMessage('Application files downloaded.', 'success');
+            window.addLoadingMessage('Starting shader compilation...', 'info');
+        }
+
+        window.updateDownloadStatus = function(text) {
+            var match = String(text || '').match(/\((\d+)\/(\d+)\)/);
+            if (!compilationStarted && match) {
+                status.textContent = String(text).replace(/\s*\(.*/, '');
+                progress.max = Number(match[2]);
+                progress.value = Number(match[1]);
+                detail.textContent = formatBytes(Number(match[1])) + ' / ' + formatBytes(Number(match[2]));
+            }
+        };
+
+        function fetchAsset(asset) {
+            var url = asset.file + '?v=' + acmxBuildToken;
+            return fetch(url).then(function(response) {
+                if (!response.ok) throw new Error(response.status + ' ' + response.statusText);
+                asset.total = Number(response.headers.get('Content-Length') || 0) || asset.total;
+                if (!response.body || !response.body.getReader) {
+                    return response.arrayBuffer().then(function(buffer) {
+                        asset.loaded = buffer.byteLength;
+                        asset.total = asset.total || buffer.byteLength;
+                        renderProgress();
+                        return buffer;
+                    });
+                }
+
+                var reader = response.body.getReader();
+                var chunks = [];
+                function readNext() {
+                    return reader.read().then(function(result) {
+                        if (result.done) {
+                            var buffer = new Uint8Array(asset.loaded);
+                            var offset = 0;
+                            chunks.forEach(function(chunk) {
+                                buffer.set(chunk, offset);
+                                offset += chunk.length;
+                            });
+                            asset.total = asset.total || asset.loaded;
+                            renderProgress();
+                            return buffer.buffer;
+                        }
+                        chunks.push(result.value);
+                        asset.loaded += result.value.length;
+                        renderProgress();
+                        return readNext();
+                    });
+                }
+                renderProgress();
+                return readNext();
+            });
+        }
+
+        function discoverAssetSize(asset) {
+            return fetch(asset.file + '?v=' + acmxBuildToken, { method: 'HEAD' }).then(function(response) {
+                if (response.ok) {
+                    asset.total = Number(response.headers.get('Content-Length') || 0);
+                }
+            }).catch(function() {
+                // Streaming still works when a server does not support HEAD.
+            });
+        }
+
+        function loadApplicationScript() {
+            var script = document.createElement('script');
+            script.src = 'MX_app.js?v=' + acmxBuildToken;
+            script.onerror = function() {
+                status.textContent = 'Unable to load the application.';
+                detail.textContent = 'Check your connection and reload the page.';
+                document.getElementById('download-spinner').style.display = 'none';
+            };
+            document.head.appendChild(script);
+        }
+
+        if (!window.fetch || !window.Promise) {
+            status.textContent = 'Loading application...';
+            Module.monitorRunDependencies = function(left) {
+                if (left === 0) beginCompilationPhase();
+            };
+            loadApplicationScript();
+            return;
+        }
+
+        Promise.all(assets.map(discoverAssetSize)).then(function() {
+            renderProgress();
+            return Promise.all(assets.map(fetchAsset));
+        }).then(function(buffers) {
+            Module.wasmBinary = buffers[0];
+            Module.getPreloadedPackage = function(remoteName) {
+                return String(remoteName).indexOf('MX_app.data') !== -1 ? buffers[1] : null;
+            };
+            status.textContent = 'Downloads complete';
+            progress.value = progress.max;
+            beginCompilationPhase();
+            loadApplicationScript();
+        }).catch(function(error) {
+            console.warn('Application prefetch failed; using the Emscripten loader:', error);
+            status.textContent = 'Retrying application download...';
+            detail.textContent = error.message || String(error);
+            progress.removeAttribute('value');
+            Module.monitorRunDependencies = function(left) {
+                if (left === 0) beginCompilationPhase();
+            };
+            loadApplicationScript();
+        });
     })();
     </script>
     <script>
