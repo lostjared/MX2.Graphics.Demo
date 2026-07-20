@@ -479,4 +479,4 @@ under GPL v3. See the source headers and repository license for details.
 
 - Jared Bruni / LostSideDead Software
 - [libmx2](https://github.com/lostjared/libmx2)
-- Interactive graphics community/researchers and creative shader authors
+- Special Thank you to the Interactive graphics community/researchers and creative shader authors
