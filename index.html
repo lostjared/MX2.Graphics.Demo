@@ -1,4 +1,4 @@
-<!-- Most of this HTML/JavaScript was generated with Claude Cpus 4.5 -->
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -740,28 +740,107 @@
             color: #ff6b6b;
         }
 
-        #shader-code-textarea {
+        #shader-code-editor {
             width: 100%;
             height: 350px;
             min-height: 260px;
             flex: 0 0 auto;
             background: #0d0d0d;
-            color: #00ff00;
             border: 1px solid #444;
             border-radius: 4px;
-            padding: 10px;
+            display: flex;
+            overflow: hidden;
+            resize: vertical;
+            box-sizing: border-box;
+            position: relative;
+        }
+
+        #shader-line-numbers {
+            flex: 0 0 auto;
+            min-width: 3.5em;
+            margin: 0;
+            padding: 10px 10px 10px 6px;
+            overflow: hidden;
+            background: #181818;
+            color: #777;
+            border-right: 1px solid #333;
             font-family: 'Courier New', monospace;
             font-size: 13px;
-            resize: vertical;
+            line-height: 1.4;
+            text-align: right;
+            user-select: none;
+            box-sizing: border-box;
+        }
+
+        #shader-code-scroll {
+            min-width: 0;
+            height: 100%;
+            flex: 1 1 auto;
+            position: relative;
+            overflow: hidden;
+            background: #0d0d0d;
+        }
+
+        #shader-code-highlight,
+        #shader-code-textarea {
+            margin: 0;
+            border: 0;
+            border-radius: 0;
+            padding: 10px 12px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
             line-height: 1.4;
             box-sizing: border-box;
-            z-index: 10000;  
-            position: relative;
+            white-space: pre;
+            tab-size: 4;
+        }
+
+        #shader-code-highlight {
+            position: absolute;
+            top: 0;
+            left: 0;
+            min-width: 100%;
+            min-height: 100%;
+            color: #d4d4d4;
+            pointer-events: none;
+            transform-origin: top left;
+        }
+
+        #shader-code-textarea {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            background: transparent;
+            color: transparent;
+            caret-color: #f8f8f2;
+            -webkit-text-fill-color: transparent;
+            resize: none;
+            overflow: auto;
+        }
+
+        #shader-code-textarea::selection {
+            background: rgba(38, 79, 120, 0.78);
+        }
+
+        .glsl-comment { color: #6a9955; font-style: italic; }
+        .glsl-preprocessor { color: #c586c0; }
+        .glsl-keyword { color: #c586c0; }
+        .glsl-type { color: #4ec9b0; }
+        .glsl-builtin { color: #dcdcaa; }
+        .glsl-number { color: #b5cea8; }
+        .glsl-string { color: #ce9178; }
+        .glsl-constant { color: #569cd6; }
+        .glsl-gl-variable { color: #9cdcfe; }
+        }
+
+        #shader-code-editor:focus-within {
+            border-color: #9C27B0;
+            box-shadow: 0 0 0 1px #9C27B0;
         }
 
         #shader-code-textarea:focus {
             outline: none;
-            border-color: #9C27B0;
         }
 
         #shader-log-label {
@@ -849,6 +928,12 @@
             background: #777;
         }
 
+        #shader-editor-hint {
+            margin: 8px 0 0;
+            color: #777;
+            font-size: 11px;
+        }
+
         @media (max-width: 600px) {
             #cached-shader-picker {
                 grid-template-columns: 1fr;
@@ -886,24 +971,6 @@
             align-items: center;
         }
 
-        #shader-code-textarea {
-            width: 100%;
-            height: 350px;
-            background: #0d0d0d;
-            color: #00ff00;
-            border: 1px solid #444;
-            border-radius: 4px;
-            padding: 10px;
-            font-family: 'Courier New', monospace;
-            font-size: 13px;
-            resize: vertical;
-            line-height: 1.4;
-            box-sizing: border-box;
-            z-index: 10000;  
-            position: relative;
-        }
-
-        
         #uniforms-modal {
             display: none;
             position: fixed;
@@ -2073,9 +2140,14 @@ body.mobile-mode #shader-editor-container {
     max-height: 90vh;
 }
 
-body.mobile-mode #shader-code-textarea {
+body.mobile-mode #shader-code-editor {
     height: 200px;
     min-height: 180px;
+}
+
+body.mobile-mode #shader-code-textarea,
+body.mobile-mode #shader-code-highlight,
+body.mobile-mode #shader-line-numbers {
     font-size: 12px;
 }
 
@@ -2556,8 +2628,15 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
                         <button id="template-ripple">Ripple Effect</button>
                         <button id="template-color">Color Shift</button>
                     </div>
+                    <p id="shader-editor-hint">Tab / Shift+Tab indents or outdents selected lines.</p>
                 </div>
-                <textarea id="shader-code-textarea" spellcheck="false"></textarea>
+                <div id="shader-code-editor">
+                    <pre id="shader-line-numbers" aria-hidden="true">1</pre>
+                    <div id="shader-code-scroll">
+                        <pre id="shader-code-highlight" aria-hidden="true"></pre>
+                        <textarea id="shader-code-textarea" wrap="off" spellcheck="false" autocapitalize="off" autocomplete="off" aria-label="Fragment shader source code"></textarea>
+                    </div>
+                </div>
                 <div>
                     <label id="shader-log-label">Compilation Log:</label>
                     <textarea id="shader-log-textarea" readonly></textarea>
@@ -3525,6 +3604,8 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
         const shaderEditorModal = document.getElementById('shader-editor-modal');
         const closeEditorBtn = document.getElementById('close-editor-btn');
         const shaderCodeTextarea = document.getElementById('shader-code-textarea');
+        const shaderLineNumbers = document.getElementById('shader-line-numbers');
+        const shaderCodeHighlight = document.getElementById('shader-code-highlight');
         const shaderLogTextarea = document.getElementById('shader-log-textarea');
         const cachedShaderSelect = document.getElementById('cached-shader-select');
         const cachedShaderStatus = document.getElementById('cached-shader-status');
@@ -3763,8 +3844,202 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
             console.log('Textarea blurred - keyboard capture restored');
         });
 
+        let shaderEditorLineCount = 0;
+        let shaderHighlightFrame = null;
+
+        const glslKeywords = new Set([
+            'attribute', 'break', 'buffer', 'case', 'centroid', 'coherent',
+            'const', 'continue', 'default', 'discard', 'do', 'else', 'flat',
+            'for', 'highp', 'if', 'in', 'inout', 'invariant', 'layout', 'lowp',
+            'mediump', 'noperspective', 'out', 'patch', 'precision', 'precise',
+            'readonly', 'restrict', 'return', 'sample', 'shared', 'smooth',
+            'struct', 'subroutine', 'switch', 'uniform', 'varying', 'volatile',
+            'while', 'writeonly'
+        ]);
+        const glslTypes = new Set([
+            'atomic_uint', 'bool', 'bvec2', 'bvec3', 'bvec4', 'double', 'dmat2',
+            'dmat3', 'dmat4', 'dvec2', 'dvec3', 'dvec4', 'float', 'image2D',
+            'int', 'isampler2D', 'ivec2', 'ivec3', 'ivec4', 'mat2', 'mat2x2',
+            'mat2x3', 'mat2x4', 'mat3', 'mat3x2', 'mat3x3', 'mat3x4', 'mat4',
+            'mat4x2', 'mat4x3', 'mat4x4', 'sampler2D', 'sampler2DArray',
+            'sampler2DShadow', 'sampler3D', 'samplerCube', 'uint', 'uimage2D',
+            'usampler2D', 'uvec2', 'uvec3', 'uvec4', 'vec2', 'vec3', 'vec4', 'void'
+        ]);
+        const glslBuiltins = new Set([
+            'abs', 'acos', 'all', 'any', 'asin', 'atan', 'ceil', 'clamp', 'cos',
+            'cross', 'degrees', 'dFdx', 'dFdy', 'distance', 'dot', 'exp', 'exp2',
+            'faceforward', 'floor', 'fract', 'fwidth', 'inversesqrt', 'length',
+            'log', 'log2', 'matrixCompMult', 'max', 'min', 'mix', 'mod',
+            'normalize', 'not', 'outerProduct', 'pow', 'radians', 'reflect',
+            'refract', 'round', 'sign', 'sin', 'smoothstep', 'sqrt', 'step',
+            'tan', 'texelFetch', 'texture', 'textureGrad', 'textureLod',
+            'textureOffset', 'transpose', 'trunc'
+        ]);
+        const glslTokenPattern = /(?:\/\*[\s\S]*?(?:\*\/|$)|\/\/[^\n]*|^[\t ]*#[^\n]*|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|(?:\d+\.\d*|\.\d+|\d+)(?:[eE][+-]?\d+)?[uUfFlL]*|[A-Za-z_]\w*)/gm;
+
+        function escapeShaderHtml(text) {
+            return text.replace(/[&<>]/g, (character) => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;'
+            })[character]);
+        }
+
+        function highlightGLSL(source) {
+            let output = '';
+            let lastIndex = 0;
+            source.replace(glslTokenPattern, (token, offset) => {
+                output += escapeShaderHtml(source.slice(lastIndex, offset));
+                let tokenClass = '';
+                if (token.startsWith('//') || token.startsWith('/*')) {
+                    tokenClass = 'glsl-comment';
+                } else if (token.trimStart().startsWith('#')) {
+                    tokenClass = 'glsl-preprocessor';
+                } else if (token[0] === '"' || token[0] === "'") {
+                    tokenClass = 'glsl-string';
+                } else if (/^(?:\d|\.\d)/.test(token)) {
+                    tokenClass = 'glsl-number';
+                } else if (token === 'true' || token === 'false') {
+                    tokenClass = 'glsl-constant';
+                } else if (token.startsWith('gl_')) {
+                    tokenClass = 'glsl-gl-variable';
+                } else if (glslKeywords.has(token)) {
+                    tokenClass = 'glsl-keyword';
+                } else if (glslTypes.has(token)) {
+                    tokenClass = 'glsl-type';
+                } else if (glslBuiltins.has(token)) {
+                    tokenClass = 'glsl-builtin';
+                }
+                const escapedToken = escapeShaderHtml(token);
+                output += tokenClass
+                    ? `<span class="${tokenClass}">${escapedToken}</span>`
+                    : escapedToken;
+                lastIndex = offset + token.length;
+                return token;
+            });
+            return output + escapeShaderHtml(source.slice(lastIndex));
+        }
+
+        function updateShaderHighlighting() {
+            shaderCodeHighlight.innerHTML = highlightGLSL(shaderCodeTextarea.value)
+                + (shaderCodeTextarea.value.endsWith('\n') ? ' ' : '');
+            shaderCodeHighlight.style.transform =
+                `translate(${-shaderCodeTextarea.scrollLeft}px, ${-shaderCodeTextarea.scrollTop}px)`;
+        }
+
+        function scheduleShaderHighlighting() {
+            if (shaderHighlightFrame !== null) return;
+            shaderHighlightFrame = requestAnimationFrame(() => {
+                shaderHighlightFrame = null;
+                updateShaderHighlighting();
+            });
+        }
+
+        function updateShaderLineNumbers() {
+            const lineCount = shaderCodeTextarea.value.split('\n').length;
+            if (lineCount !== shaderEditorLineCount) {
+                shaderEditorLineCount = lineCount;
+                shaderLineNumbers.textContent = Array.from(
+                    { length: lineCount },
+                    (_, index) => index + 1
+                ).join('\n');
+            }
+            shaderLineNumbers.scrollTop = shaderCodeTextarea.scrollTop;
+            shaderCodeHighlight.style.transform =
+                `translate(${-shaderCodeTextarea.scrollLeft}px, ${-shaderCodeTextarea.scrollTop}px)`;
+        }
+
+        function setShaderEditorValue(value) {
+            shaderCodeTextarea.value = value;
+            updateShaderLineNumbers();
+            updateShaderHighlighting();
+        }
+
+        function editShaderIndent(outdent) {
+            const value = shaderCodeTextarea.value;
+            const selectionStart = shaderCodeTextarea.selectionStart;
+            const selectionEnd = shaderCodeTextarea.selectionEnd;
+            const lineStart = value.lastIndexOf('\n', selectionStart - 1) + 1;
+
+            if (selectionStart === selectionEnd) {
+                if (!outdent) {
+                    shaderCodeTextarea.setRangeText('\t', selectionStart, selectionEnd, 'end');
+                } else {
+                    const linePrefix = value.slice(lineStart, selectionStart);
+                    const removable = linePrefix.match(/^(?:\t| {1,4})/);
+                    if (removable) {
+                        shaderCodeTextarea.setRangeText('', lineStart,
+                            lineStart + removable[0].length, 'preserve');
+                    }
+                }
+                updateShaderLineNumbers();
+                scheduleShaderHighlighting();
+                return;
+            }
+
+            let blockEnd = selectionEnd;
+            if (blockEnd > lineStart && value[blockEnd - 1] === '\n') blockEnd--;
+            const lines = value.slice(lineStart, blockEnd).split('\n');
+            let firstChange = 0;
+            let totalChange = 0;
+            const replacement = lines.map((line, index) => {
+                if (!outdent) {
+                    if (index === 0) firstChange = 1;
+                    totalChange++;
+                    return '\t' + line;
+                }
+                const prefix = line.match(/^(?:\t| {1,4})/);
+                const removed = prefix ? prefix[0].length : 0;
+                if (index === 0) firstChange = removed;
+                totalChange += removed;
+                return line.slice(removed);
+            }).join('\n');
+
+            shaderCodeTextarea.setRangeText(replacement, lineStart, blockEnd, 'start');
+            shaderCodeTextarea.setSelectionRange(
+                Math.max(lineStart, selectionStart + (outdent ? -firstChange : firstChange)),
+                Math.max(lineStart, selectionEnd + (outdent ? -totalChange : totalChange))
+            );
+            updateShaderLineNumbers();
+            scheduleShaderHighlighting();
+        }
+
+        shaderCodeTextarea.addEventListener('input', () => {
+            updateShaderLineNumbers();
+            scheduleShaderHighlighting();
+        });
+        shaderCodeTextarea.addEventListener('scroll', updateShaderLineNumbers);
+
         shaderCodeTextarea.addEventListener('keydown', (e) => {
             e.stopPropagation();
+
+            if (e.key === 'Tab') {
+                e.preventDefault();
+                editShaderIndent(e.shiftKey);
+                return;
+            }
+
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                const value = shaderCodeTextarea.value;
+                const start = shaderCodeTextarea.selectionStart;
+                const end = shaderCodeTextarea.selectionEnd;
+                const lineStart = value.lastIndexOf('\n', start - 1) + 1;
+                const indentation = (value.slice(lineStart, start).match(/^[\t ]*/) || [''])[0];
+                const before = value.slice(lineStart, start).trimEnd();
+                const after = value.slice(end).trimStart();
+
+                if (before.endsWith('{') && after.startsWith('}')) {
+                    const insertion = `\n${indentation}\t\n${indentation}`;
+                    shaderCodeTextarea.setRangeText(insertion, start, end, 'end');
+                    const cursor = start + indentation.length + 2;
+                    shaderCodeTextarea.setSelectionRange(cursor, cursor);
+                } else {
+                    const extraIndent = before.endsWith('{') ? '\t' : '';
+                    shaderCodeTextarea.setRangeText(
+                        `\n${indentation}${extraIndent}`, start, end, 'end');
+                }
+                updateShaderLineNumbers();
+                scheduleShaderHighlighting();
+            }
         });
 
         shaderCodeTextarea.addEventListener('keyup', (e) => {
@@ -4875,7 +5150,7 @@ void main(void) {
     color = vec4(r, g, b, 1.0);
 }`;
 
-        shaderCodeTextarea.value = basicTemplate;
+        setShaderEditorValue(basicTemplate);
 
         const cachedShaderRoot = 'data/shaders/webgl_cache/';
         let cachedShaderListPromise = null;
@@ -4917,7 +5192,7 @@ void main(void) {
             setShaderFileStatus(`Loading ${file.name}...`);
             try {
                 const shaderSource = (await readShaderFile(file)).replace(/^\uFEFF/, '');
-                shaderCodeTextarea.value = shaderSource;
+                setShaderEditorValue(shaderSource);
                 currentShaderFilename = shaderDownloadFilename(file.name);
                 cachedShaderSelect.value = '';
                 setCachedShaderStatus('Local file');
@@ -5040,7 +5315,7 @@ void main(void) {
             try {
                 const shaderSource = await readCachedShaderText(cachedShaderRoot + shaderName);
                 if (loadSequence !== cachedShaderLoadSequence) return;
-                shaderCodeTextarea.value = shaderSource;
+                setShaderEditorValue(shaderSource);
                 currentShaderFilename = shaderDownloadFilename(shaderName);
                 shaderLogTextarea.value = `Loaded ${shaderName}. Edit the source, then click Compile & Apply.`;
                 shaderLogTextarea.classList.remove('success');
@@ -6937,7 +7212,7 @@ void main(void) {
         downloadShaderBtn.addEventListener('click', downloadCurrentShader);
 
         document.getElementById('template-basic').addEventListener('click', () => {
-            shaderCodeTextarea.value = basicTemplate;
+            setShaderEditorValue(basicTemplate);
             currentShaderFilename = 'acmx2-basic.glsl';
             cachedShaderSelect.value = '';
             setCachedShaderStatus('Basic template');
@@ -6945,7 +7220,7 @@ void main(void) {
         });
 
         document.getElementById('template-ripple').addEventListener('click', () => {
-            shaderCodeTextarea.value = rippleTemplate;
+            setShaderEditorValue(rippleTemplate);
             currentShaderFilename = 'acmx2-ripple.glsl';
             cachedShaderSelect.value = '';
             setCachedShaderStatus('Ripple template');
@@ -6953,7 +7228,7 @@ void main(void) {
         });
 
         document.getElementById('template-color').addEventListener('click', () => {
-            shaderCodeTextarea.value = colorShiftTemplate;
+            setShaderEditorValue(colorShiftTemplate);
             currentShaderFilename = 'acmx2-color-shift.glsl';
             cachedShaderSelect.value = '';
             setCachedShaderStatus('Color template');
