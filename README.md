@@ -54,6 +54,8 @@ collection.
 - Start with basic, ripple, and color-shift templates.
 - Browse every cached shader from a combobox, load it into the editor, modify it,
   and apply it as a custom shader.
+- Load GLSL source from a local text file and download the editor's current
+  source for later use on desktop or mobile devices.
 
 ### Image, Camera, and Video Input
 
