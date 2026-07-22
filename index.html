@@ -2493,7 +2493,7 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
         <option value="fruit_of_life.mxmod.z">fruit_of_life.mxmod.z</option>
         </select>
         <div style="display: flex; align-items: center; gap: 5px; padding: 4px 8px; background: #2a2a2a; border-radius: 4px;">
-            <input type="checkbox" id="shader-3d-mode" style="width: 16px; height: 16px; cursor: pointer; margin: 0;">
+            <input type="checkbox" id="shader-3d-mode" autocomplete="off" style="width: 16px; height: 16px; cursor: pointer; margin: 0;">
             <label for="shader-3d-mode" style="color: #ccc; font-size: 12px; cursor: pointer; margin: 0; white-space: nowrap;">3D Mode</label>
         </div>
         </div>
@@ -2506,7 +2506,7 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
                 <option value="0">Loading...</option>
             </select>
             <label style="display: flex; align-items: center; gap: 4px; background: rgba(40,40,40,0.9); padding: 6px 8px; border-radius: 6px; cursor: pointer;">
-                <input type="checkbox" id="mobile-3d-mode" style="width: 16px; height: 16px; cursor: pointer; margin: 0;">
+                <input type="checkbox" id="mobile-3d-mode" autocomplete="off" style="width: 16px; height: 16px; cursor: pointer; margin: 0;">
                 <span style="color: #ccc; font-size: 11px; white-space: nowrap;">3D</span>
             </label>
             <select id="mobile-model-selector" class="mobile-select">
@@ -8137,24 +8137,30 @@ void main(void) {
             localStorage.setItem('shader3DMode', is3DMode);
         });
 
-        // 3D mode always starts unchecked - don't restore from localStorage
-        (function() {
+        // Keep the controls in sync with the renderer, which always starts in 2D.
+        // Reset again on pageshow because browsers may restore form controls after
+        // this script runs (particularly when returning from the back/forward cache).
+        function reset3DModeControls() {
             const shader3DInit = document.getElementById('shader-3d-mode');
             if (shader3DInit) {
-                shader3DInit.checked = false; // force desktop checkbox unchecked on load
+                shader3DInit.checked = false;
+                shader3DInit.defaultChecked = false;
             }
 
-            // Also ensure mobile 3D checkbox is unchecked by default
             const mobile3DInit = document.getElementById('mobile-3d-mode');
             if (mobile3DInit) {
-                mobile3DInit.checked = false; // force mobile checkbox unchecked on load
+                mobile3DInit.checked = false;
+                mobile3DInit.defaultChecked = false;
             }
 
             const modelSelectorInit = document.getElementById('model-selector');
             if (modelSelectorInit) {
                 modelSelectorInit.selectedIndex = 0; // select first model option
             }
-        })();
+        }
+
+        reset3DModeControls();
+        window.addEventListener('pageshow', reset3DModeControls);
 
         const shaderSelect = document.getElementById('shader');
         shaderSelect.addEventListener('change', (e) => {
