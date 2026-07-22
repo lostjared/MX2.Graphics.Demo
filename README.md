@@ -13,6 +13,29 @@ The project uses [libmx2](https://github.com/lostjared/libmx2). The shader
 collection contains original work and shaders adapted from multiple creative and
 experimental sources.
 
+# System Requirements
+Because the engine compiles over a thousand GLSL ES 3.0 fragment shaders into a WebAssembly environment upon loading, the absolute baseline is dictated by WebGL 2.0 support and sufficient system memory.
+
+## Universal Browser Requirements
+Web Browser: Recent versions of Chrome, Firefox, Edge, or Safari.
+Graphics API: WebGL 2.0 is strictly required.
+Execution Environment: WebAssembly (WASM) support enabled.
+Desktop Minimums
+OS: Windows 10, macOS 11, or modern Linux distributions.
+Processor: 64-bit multi-core CPU (e.g., Intel Core i3 8th Gen or AMD Ryzen 3).
+Memory: 4GB System RAM.
+Graphics: Integrated GPUs supporting OpenGL ES 3.0 equivalents (e.g., Intel UHD Graphics 620 or AMD Radeon Vega).
+Note: While integrated graphics like those found in a Beelink SER5 Mini PC will handle baseline rendering, running complex multipass chains at 60fps requires dedicated hardware.
+
+## Mobile Minimums
+OS: Android 10 or iOS 15.
+Memory: 4GB RAM minimum to handle browser overhead, video decoding, and the pre-compiled shader cache.
+Processor: Mid-range mobile chipsets from 2020 or newer (e.g., Snapdragon 700 series or Apple A13 Bionic).
+Recommended Specifications for 60fps Multipass Rendering
+Desktop Graphics: Dedicated GPU (NVIDIA RTX 2070 or equivalent) for zero-latency shader modulation and rendering.
+Mobile Hardware: High-end modern devices (Google Pixel 9 Pro or equivalent) with 8GB or more of RAM for stable real-time video manipulation.
+
+
 ## What's New in v2.0.0 Beta
 
 - More shaders, loaded from alphabetized shader indexes.
