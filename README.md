@@ -287,6 +287,21 @@ The build generates:
 - `MX_app.wasm`
 - `MX_app.data`
 
+You can also build with CMake after sourcing `~/emsdk/emsdk_env.sh`:
+
+```bash
+emcmake cmake -S . -B build/web -DCMAKE_BUILD_TYPE=Release
+cmake --build build/web -j
+cd build/web
+python3 server.py
+```
+
+Open `http://localhost:8080/index.html`. CMake copies the UI and local server
+into the build directory and generates the shader cache before packaging `data`.
+The default libmx2 prefix is `~/emscripten-libs/mx2`; override it with
+`-DMX2_ROOT=/path/to/emscripten/mx2`. If GLM is installed elsewhere, pass
+`-DGLM_INCLUDE_DIR=/path/to/include` (the directory containing `glm/`).
+
 The application UI is served from `index.html`, which preloads the generated
 WASM and data files with a shared cache-busting token, displays download
 progress, and then starts the generated JavaScript runtime.
