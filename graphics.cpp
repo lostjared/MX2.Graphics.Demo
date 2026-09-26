@@ -16,6 +16,7 @@
 #include <GLES3/gl3.h>
 #include <emscripten/bind.h>
 #include <emscripten/emscripten.h>
+#include <emscripten/html5.h>
 #endif
 #include "gl.hpp"
 #include "loadpng.hpp"
@@ -23,6 +24,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdint>
+#include <deque>
 #include <fstream>
 #include <iostream>
 #include <regex>
@@ -34,11 +36,11 @@
 #include "mirror_shaders.hpp"
 #include "model.hpp"
 /** @brief Reports the current OpenGL error together with its source location. */
-#define CHECK_GL_ERROR()                                                    \
-    {                                                                       \
-        GLenum err = glGetError();                                          \
-        if (err != GL_NO_ERROR)                                             \
-            printf("OpenGL Error: %d at %s:%d\n", err, __FILE__, __LINE__); \
+#define CHECK_GL_ERROR()                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               \
+    {                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  \
+        GLenum err = glGetError();                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     \
+        if (err != GL_NO_ERROR)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        \
+            printf("OpenGL Error: %d at %s:%d\n", err, __FILE__, __LINE__);                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            \
     }
 
 #ifndef M_PI
@@ -90,8 +92,7 @@ namespace {
         // Some mobile GLSL ES compilers do not apply the default precision to
         // array variables. Give numeric arrays an explicit qualifier while
         // preserving declarations that already specify one.
-        static const std::regex arrayPattern(
-            R"(\b(?:float|int|uint|vec[234]|ivec[234]|uvec[234]|mat[234](?:x[234])?)\s+[A-Za-z_][A-Za-z0-9_]*\s*\[[^\]\r\n]*\])");
+        static const std::regex arrayPattern(R"(\b(?:float|int|uint|vec[234]|ivec[234]|uvec[234]|mat[234](?:x[234])?)\s+[A-Za-z_][A-Za-z0-9_]*\s*\[[^\]\r\n]*\])");
         std::vector<size_t> insertions;
         for (std::sregex_iterator it(source.begin(), source.end(), arrayPattern), end; it != end; ++it) {
             const size_t start = static_cast<size_t>((*it).position());
@@ -99,8 +100,7 @@ namespace {
             while (cursor > 0 && std::isspace(static_cast<unsigned char>(source[cursor - 1])))
                 --cursor;
             const size_t wordEnd = cursor;
-            while (cursor > 0 && (std::isalnum(static_cast<unsigned char>(source[cursor - 1])) ||
-                                  source[cursor - 1] == '_'))
+            while (cursor > 0 && (std::isalnum(static_cast<unsigned char>(source[cursor - 1])) || source[cursor - 1] == '_'))
                 --cursor;
             const std::string previousWord = source.substr(cursor, wordEnd - cursor);
             if (previousWord != "lowp" && previousWord != "mediump" && previousWord != "highp")
@@ -118,9 +118,7 @@ namespace {
      * conversions accepted by desktop drivers.
      */
     void normalizeFloatLiteralOperands(std::string &source) {
-        const auto isIdentifierCharacter = [](char c) {
-            return std::isalnum(static_cast<unsigned char>(c)) || c == '_';
-        };
+        const auto isIdentifierCharacter = [](char c) { return std::isalnum(static_cast<unsigned char>(c)) || c == '_'; };
         const auto skipSpaces = [&source](size_t &position) {
             while (position < source.size() && std::isspace(static_cast<unsigned char>(source[position]))) {
                 ++position;
@@ -130,8 +128,7 @@ namespace {
             size_t position = 0;
             while ((position = source.find(name, position)) != std::string::npos) {
                 const size_t nameEnd = position + name.size();
-                if ((position > 0 && isIdentifierCharacter(source[position - 1])) ||
-                    (nameEnd < source.size() && isIdentifierCharacter(source[nameEnd]))) {
+                if ((position > 0 && isIdentifierCharacter(source[position - 1])) || (nameEnd < source.size() && isIdentifierCharacter(source[nameEnd]))) {
                     position = nameEnd;
                     continue;
                 }
@@ -171,8 +168,7 @@ namespace {
             size_t position = 0;
             while ((position = source.find(name, position)) != std::string::npos) {
                 const size_t nameEnd = position + name.size();
-                if ((position > 0 && isIdentifierCharacter(source[position - 1])) ||
-                    (nameEnd < source.size() && isIdentifierCharacter(source[nameEnd]))) {
+                if ((position > 0 && isIdentifierCharacter(source[position - 1])) || (nameEnd < source.size() && isIdentifierCharacter(source[nameEnd]))) {
                     position = nameEnd;
                     continue;
                 }
@@ -191,16 +187,14 @@ namespace {
                 const size_t numberEnd = cursor;
                 while (cursor > 0 && std::isdigit(static_cast<unsigned char>(source[cursor - 1])))
                     --cursor;
-                if (cursor < numberEnd &&
-                    (cursor == 0 || (source[cursor - 1] != '.' && !isIdentifierCharacter(source[cursor - 1]))))
+                if (cursor < numberEnd && (cursor == 0 || (source[cursor - 1] != '.' && !isIdentifierCharacter(source[cursor - 1]))))
                     return true;
                 position = nameEnd;
             }
             return false;
         };
 
-        static const std::regex floatHelperPattern(
-            R"(\b(mod|pingPong)\s*\(([^,\r\n]+),\s*(-?[0-9]+)\s*\))");
+        static const std::regex floatHelperPattern(R"(\b(mod|pingPong)\s*\(([^,\r\n]+),\s*(-?[0-9]+)\s*\))");
         bool needsConversion = std::regex_search(source, floatHelperPattern);
         for (const char *name : {"tc", "time_f", "iTime", "iResolution", "iMouse", "color"}) {
             needsConversion = needsConversion || hasBareIntegerAfter(name) || hasBareIntegerBefore(name);
@@ -209,10 +203,8 @@ namespace {
             return;
         }
 
-        std::set<std::string> floatNames = {
-            "tc", "TexCoord", "time_f", "iTime", "iResolution", "iMouse", "mxOutputColor"};
-        static const std::regex declarationPattern(
-            R"(\b(?:float|vec[234])\s+([A-Za-z_][A-Za-z0-9_]*)\b(?!\s*\())");
+        std::set<std::string> floatNames = {"tc", "TexCoord", "time_f", "iTime", "iResolution", "iMouse", "mxOutputColor"};
+        static const std::regex declarationPattern(R"(\b(?:float|vec[234])\s+([A-Za-z_][A-Za-z0-9_]*)\b(?!\s*\())");
         for (std::sregex_iterator it(source.begin(), source.end(), declarationPattern), end; it != end; ++it) {
             floatNames.insert((*it)[1].str());
         }
@@ -223,27 +215,20 @@ namespace {
             std::string value;
         };
         std::vector<LiteralReplacement> replacements;
-        static const std::regex floatOnLeftPattern(
-            R"(\b([A-Za-z_][A-Za-z0-9_]*)(?:\s*(?:\.[A-Za-z]+|\[[^\]\r\n]+\]))?\s*(?:\*=|/=|\+=|-=|[+*/<>]=?|==|!=|-)\s*(-?[0-9]+)(?![.A-Za-z0-9_]))");
+        static const std::regex floatOnLeftPattern(R"(\b([A-Za-z_][A-Za-z0-9_]*)(?:\s*(?:\.[A-Za-z]+|\[[^\]\r\n]+\]))?\s*(?:\*=|/=|\+=|-=|[+*/<>]=?|==|!=|-)\s*(-?[0-9]+)(?![.A-Za-z0-9_]))");
         for (std::sregex_iterator it(source.begin(), source.end(), floatOnLeftPattern), end; it != end; ++it) {
             if (floatNames.contains((*it)[1].str())) {
-                replacements.push_back({static_cast<size_t>((*it).position(2)),
-                                        static_cast<size_t>((*it).length(2)), (*it)[2].str() + ".0"});
+                replacements.push_back({static_cast<size_t>((*it).position(2)), static_cast<size_t>((*it).length(2)), (*it)[2].str() + ".0"});
             }
         }
 
-        static const std::regex floatOnRightPattern(
-            R"((^|[^A-Za-z0-9_.])(-?[0-9]+)\s*(?:[+*/<>]=?|==|!=|-)\s*([A-Za-z_][A-Za-z0-9_]*)(?:\s*(?:\.[A-Za-z]+|\[[^\]\r\n]+\]))?)");
+        static const std::regex floatOnRightPattern(R"((^|[^A-Za-z0-9_.])(-?[0-9]+)\s*(?:[+*/<>]=?|==|!=|-)\s*([A-Za-z_][A-Za-z0-9_]*)(?:\s*(?:\.[A-Za-z]+|\[[^\]\r\n]+\]))?)");
         for (std::sregex_iterator it(source.begin(), source.end(), floatOnRightPattern), end; it != end; ++it) {
             if (floatNames.contains((*it)[3].str())) {
-                replacements.push_back({static_cast<size_t>((*it).position(2)),
-                                        static_cast<size_t>((*it).length(2)), (*it)[2].str() + ".0"});
+                replacements.push_back({static_cast<size_t>((*it).position(2)), static_cast<size_t>((*it).length(2)), (*it)[2].str() + ".0"});
             }
         }
-        std::sort(replacements.begin(), replacements.end(),
-                  [](const LiteralReplacement &left, const LiteralReplacement &right) {
-                      return left.position > right.position;
-                  });
+        std::sort(replacements.begin(), replacements.end(), [](const LiteralReplacement &left, const LiteralReplacement &right) { return left.position > right.position; });
         size_t lastPosition = std::string::npos;
         for (const auto &replacement : replacements) {
             if (replacement.position != lastPosition) {
@@ -253,13 +238,9 @@ namespace {
         }
 
         // These helpers take floats, but many desktop shaders pass bare integer literals.
-        source = std::regex_replace(
-            source, floatHelperPattern, "$1($2, $3.0)");
-        static const std::regex constructorArithmeticPattern(
-            R"(((?:float|vec[234])\s*\([^;\r\n]+\))\s*([+*/-])\s*(-?[0-9]+)(?![.A-Za-z0-9_]))");
-        source = std::regex_replace(
-            source, constructorArithmeticPattern,
-            "$1 $2 $3.0");
+        source = std::regex_replace(source, floatHelperPattern, "$1($2, $3.0)");
+        static const std::regex constructorArithmeticPattern(R"(((?:float|vec[234])\s*\([^;\r\n]+\))\s*([+*/-])\s*(-?[0-9]+)(?![.A-Za-z0-9_]))");
+        source = std::regex_replace(source, constructorArithmeticPattern, "$1 $2 $3.0");
     }
 
     /**
@@ -284,8 +265,7 @@ namespace {
                 ++cursor;
                 while (cursor < source.size() && std::isspace(static_cast<unsigned char>(source[cursor])))
                     ++cursor;
-                if (cursor < source.size() && (std::isalpha(static_cast<unsigned char>(source[cursor])) ||
-                                               source[cursor] == '_')) {
+                if (cursor < source.size() && (std::isalpha(static_cast<unsigned char>(source[cursor])) || source[cursor] == '_')) {
                     hasDynamicOutputIndex = true;
                     break;
                 }
@@ -295,14 +275,11 @@ namespace {
         if (!hasDynamicOutputIndex) {
             return;
         }
-        source.replace(static_cast<size_t>(outputMatch.position()), static_cast<size_t>(outputMatch.length()),
-                       "out vec4 mxWebGLFragColor;\nvec4 mxOutputColor;");
+        source.replace(static_cast<size_t>(outputMatch.position()), static_cast<size_t>(outputMatch.length()), "out vec4 mxWebGLFragColor;\nvec4 mxOutputColor;");
         source = std::regex_replace(source, std::regex("\\b" + outputName + "\\b"), "mxOutputColor");
         // The replacement above cannot match outputName inside the generated names
         // because both adjacent characters are identifier characters.
-        source = std::regex_replace(source,
-                                    std::regex(R"(\bvoid\s+main\s*\(\s*(?:void)?\s*\))"),
-                                    "void mxShaderMain()");
+        source = std::regex_replace(source, std::regex(R"(\bvoid\s+main\s*\(\s*(?:void)?\s*\))"), "void mxShaderMain()");
         source += "\nvoid main() {\n    mxShaderMain();\n    mxWebGLFragColor = mxOutputColor;\n}\n";
     }
 
@@ -312,8 +289,7 @@ namespace {
      * @return WebGL-compatible shader source.
      */
     std::string convertFragmentShaderToWebGL(std::string source) {
-        if (source.size() >= 3 && static_cast<unsigned char>(source[0]) == 0xef &&
-            static_cast<unsigned char>(source[1]) == 0xbb && static_cast<unsigned char>(source[2]) == 0xbf) {
+        if (source.size() >= 3 && static_cast<unsigned char>(source[0]) == 0xef && static_cast<unsigned char>(source[1]) == 0xbb && static_cast<unsigned char>(source[2]) == 0xbf) {
             source.erase(0, 3);
         }
 
@@ -325,28 +301,21 @@ namespace {
                 source.erase(0, versionStart);
             }
             const size_t versionEnd = source.find_first_of("\r\n");
-            source.replace(0,
-                           versionEnd == std::string::npos ? source.size() : versionEnd,
-                           "#version 300 es");
+            source.replace(0, versionEnd == std::string::npos ? source.size() : versionEnd, "#version 300 es");
         }
 
         const size_t headerEnd = source.find('\n', source.find("#version"));
         if (source.find("precision ") == std::string::npos) {
-            source.insert(headerEnd == std::string::npos ? source.size() : headerEnd + 1,
-                          "precision highp float;\nprecision highp int;\n");
+            source.insert(headerEnd == std::string::npos ? source.size() : headerEnd + 1, "precision highp float;\nprecision highp int;\n");
         }
 
-        source = std::regex_replace(source, std::regex(R"(\bin\s+vec2\s+tc\s*;)"),
-                                    "in vec2 TexCoord;\n#define tc TexCoord");
+        source = std::regex_replace(source, std::regex(R"(\bin\s+vec2\s+tc\s*;)"), "in vec2 TexCoord;\n#define tc TexCoord");
         replaceAll(source, "texture2D(", "texture(");
         replaceAll(source, "texture1D(", "texture(");
 
         // Uniform initializers are illegal in GLSL ES. These values were being
         // used as constants by the desktop shaders and are not app-controlled.
-        source = std::regex_replace(
-            source,
-            std::regex(R"(\buniform\s+(float|vec[234])\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*([^;]+);)"),
-            "const $1 $2 = $3;");
+        source = std::regex_replace(source, std::regex(R"(\buniform\s+(float|vec[234])\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*([^;]+);)"), "const $1 $2 = $3;");
 
         if (source.find("gl_FragColor") != std::string::npos) {
             source.insert(source.find('\n', source.find("#version")) + 1, "out vec4 mxFragColor;\n");
@@ -365,17 +334,12 @@ namespace {
      * @return `true` when the browser demo cannot provide the required inputs.
      */
     bool usesUnsupportedRuntimeInputs(const std::string &filename, const std::string &source) {
-        if (filename.find("cache") != std::string::npos || filename.find("audio") != std::string::npos ||
-            source.find("sampler1D") != std::string::npos || source.find("spectrum") != std::string::npos ||
-            source.find("audioData") != std::string::npos || source.find("audio_data") != std::string::npos ||
-            source.find("fft") != std::string::npos || source.find("FFT") != std::string::npos) {
+        if (filename.find("cache") != std::string::npos || filename.find("audio") != std::string::npos || source.find("sampler1D") != std::string::npos || source.find("spectrum") != std::string::npos || source.find("audioData") != std::string::npos || source.find("audio_data") != std::string::npos || source.find("fft") != std::string::npos || source.find("FFT") != std::string::npos) {
             return true;
         }
 
-        static const std::regex audioUniformPattern(
-            R"(\buniform\s+float\s+[^;]*\b(?:amp|amp_peak|amp_rms|amp_smooth|amp_low|amp_mid|amp_high|iamp)\b[^;]*;)");
-        static const std::regex cachedTexturePattern(
-            R"(\buniform\s+sampler2D\s+[^;]*(?:\bsamp[1-9][0-9]*\b|\btextures\s*\[)[^;]*;)");
+        static const std::regex audioUniformPattern(R"(\buniform\s+float\s+[^;]*\b(?:amp|amp_peak|amp_rms|amp_smooth|amp_low|amp_mid|amp_high|iamp)\b[^;]*;)");
+        static const std::regex cachedTexturePattern(R"(\buniform\s+sampler2D\s+[^;]*(?:\bsamp[1-9][0-9]*\b|\btextures\s*\[)[^;]*;)");
         return std::regex_search(source, audioUniformPattern) || std::regex_search(source, cachedTexturePattern);
     }
 
@@ -400,139 +364,138 @@ void main() {
 })";
 
 /** @brief Ordered catalog of built-in shaders exposed by the application. */
-static std::vector<ShaderInfo> shaderSources = {
-    {"Bubble", srcShader1},
-    {"Abilify", srcShaderAbilify},
-    {"Pastel", srcShaderPinkClouds},
-    {"KaleidoCloud", srcShaderKaleidoCloud},
-    {"KaleidoFromTex", srcShaderKaleidoFromTex},
-    {"Kaleidoscope", srcShader2},
-    {"KaleidoscopeAlt", srcShader3},
-    {"Scramble", srcShader4},
-    {"Swirl", srcShader5},
-    {"Mirror", szShader},
-    {"VHS", szShader2},
-    {"Twist", szTwist},
-    {"Time", szTime},
-    {"Bend", szBend},
-    {"Pong", szPong},
-    {"PsychWave", psychWave},
-    {"CrystalBall", crystalBall},
-    {"ZoomMouse", szZoomMouse},
-    {"Drain", szDrain},
-    {"Ufo", szUfo},
-    {"Wave", szWave},
-    {"UfoWarp", szUfoWarp},
-    {"ByMouse", szByMouse},
-    {"Deform", szDeform},
-    {"Geo", szGeo},
-    {"Smooth", szSmooth},
-    {"Hue", szHue},
-    {"kMouse", szkMouse},
-    {"Drum", szDrum},
-    {"ColorSwirl", szColorSwirl},
-    {"MouseZoom", szMouseZoom},
-    {"Rev2", szRev2},
-    {"Fish", szFish},
-    {"RipplePrism", szRipplePrism},
-    {"MirrorMouse", szMirrorMouse},
-    {"FracMouse", szFracMouse},
-    {"Cats", szCats},
-    {"ColorMouse", szColorMouse},
-    {"TwistFull", szTwistFull},
-    {"BowlByTime", szBowlByTime},
-    {"Pebble", szPebble},
-    {"MirrorPutty", szMirrorPutty},
-    {"frac_shader02_dmdi6i_zoom_xor", src_frac_shader02_dmdi6i_zoom_xor},
-    {"frac_shader02_dmdi6i_zoom_xor_amp", src_frac_shader02_dmdi6i_zoom_xor_amp},
-    {"frac_shader02_dmdXi", src_frac_shader02_dmdXi},
-    {"frac_shader02_dmdXi_amp", src_frac_shader02_dmdXi_amp},
-    {"frac_shader02_dmdXi2", src_frac_shader02_dmdXi2},
-    {"frac_shader02_dmdXi3", src_frac_shader02_dmdXi3},
-    {"frac_shader02_dmdXi3_drain", src_frac_shader02_dmdXi3_drain},
-    {"frac_shader02_dmdXi3_warp", src_frac_shader02_dmdXi3_warp},
-    {"frac_shader02_dmdXi4", src_frac_shader02_dmdXi4},
-    {"frac_shader02_dmdXi5", src_frac_shader02_dmdXi5},
-    {"frac_shader02_prisim", src_frac_shader02_prisim},
-    {"frac_shader03_size", src_frac_shader03_size},
-    {"frac_shader03_wormhole", src_frac_shader03_wormhole},
-    {"frac_shader03_wormhole_amp", src_frac_shader03_wormhole_amp},
-    {"frac_shader03_wormhole2", src_frac_shader03_wormhole2},
-    {"frac_shader03_wormhole3", src_frac_shader03_wormhole3},
-    {"frac_shader03_wormhole4", src_frac_shader03_wormhole4},
-    {"frac_shader04_echo", src_frac_shader04_echo},
-    {"frac_shader04_echo2", src_frac_shader04_echo2},
-    {"frac_shader04_echo3_spin", src_frac_shader04_echo3_spin},
-    {"frac_shader04_grid", src_frac_shader04_grid},
-    {"frac_shader04_julia", src_frac_shader04_julia},
-    {"frac_shader05", src_frac_shader05},
-    {"frac_star1", src_frac_star1},
-    {"frac_zoom1", src_frac_zoom1},
-    {"frac_zoom2", src_frac_zoom2},
-    {"frac_zoom3", src_frac_zoom3},
-    {"frac_zoom4", src_frac_zoom4},
-    {"frac_zoom5", src_frac_zoom5},
-    {"frac_zoom6", src_frac_zoom6},
-    {"frac_zoom7", src_frac_zoom7},
-    {"frac_shader01", src_frac_shader01},
-    {"frac_shader01_dark", src_frac_shader01_dark},
-    {"frac_shader01_smooth", src_frac_shader01_smooth},
-    {"frac_shader01_smooth_neon", src_frac_shader01_smooth_neon},
-    {"frac_shader02_dmd", src_frac_shader02_dmd},
-    {"frac_shader02_dmd_mandella", src_frac_shader02_dmd_mandella},
-    {"frac_shader02_dmd2", src_frac_shader02_dmd2},
-    {"frac_shader02_dmd2_amp", src_frac_shader02_dmd2_amp},
-    {"frac_shader02_dmd3", src_frac_shader02_dmd3},
-    {"frac_shader02_dmd4", src_frac_shader02_dmd4},
-    {"frac_shader02_dmd5", src_frac_shader02_dmd5},
-    {"frac_shader02_dmd6i", src_frac_shader02_dmd6i},
-    {"frac_shader02_dmd6i_air", src_frac_shader02_dmd6i_air},
-    {"frac_shader02_dmd6i_air_twist", src_frac_shader02_dmd6i_air_twist},
-    {"frac_shader02_dmd6i_amp", src_frac_shader02_dmd6i_amp},
-    {"frac_shader02_dmd6i_bowl", src_frac_shader02_dmd6i_bowl},
-    {"frac_shader02_dmd6i_bubble", src_frac_shader02_dmd6i_bubble},
-    {"frac_shader02_dmd6i_neon", src_frac_shader02_dmd6i_neon},
-    {"frac_shader02_dmd6i1", src_frac_shader02_dmd6i1},
-    {"frac_shader02_dmd7i", src_frac_shader02_dmd7i},
-    {"frac_shader02_dmd8i", src_frac_shader02_dmd8i},
-    {"frac_shader02_dmd9i", src_frac_shader02_dmd9i},
-    {"frac_shader02_dmdi_radial", src_frac_shader02_dmdi_radial},
-    {"frac_shader02_dmdi6i_zoom", src_frac_shader02_dmdi6i_zoom},
-    {"color_shader02", color_shader02},
-    {"mirror_ufo_wrap", mirror_ufo_wrap},
-    {"mirror_wrap_dmd6i", mirror_wrap_dmd6i},
-    {"mirror_zoom", mirror_zoom},
-    {"mirror_bubble", mirror_bubble},
-    {"mirror_geometric", mirror_geometric},
-    {"mirror_prism", mirror_prism},
-    {"mirror_airshader1", mirror_airshader1},
-    {"mirror_putty", mirror_putty},
-    {"mirror_pebble", mirror_pebble},
-    {"mirror_bowl_by_time", mirror_bowl_by_time},
-    {"mirror_comb_mouse", mirror_comb_mouse},
-    {"mirror_grad", mirror_grad},
-    {"mirror_mandella", mirror_mandella},
-    {"mirror_air_bowl", mirror_air_bowl},
-    {"mirror_sin_osc", mirror_sin_osc},
-    {"mirror_bubble_zoom_mouse", mirror_bubble_zoom_mouse},
-    {"mirror_goofy", mirror_goofy},
-    {"mirror_twist_gpt", mirror_twist_gpt},
-    {"mirror_psyce_wave_all", mirror_psyce_wave_all},
-    {"mirror_color_swirl", mirror_color_swirl},
-    {"mirror_color_o1", mirror_color_o1},
-    {"mirror_color_mouse", mirror_color_mouse},
-    {"mirror_swirly", mirror_swirly},
-    {"mirror_pong2", mirror_pong2},
-    {"mirror_pong", mirror_pong},
-    {"mirror_spiral_aura", mirror_spiral_aura},
-    {"mirror_center", mirror_center},
-    {"mirror_twisted", mirror_twisted},
-    {"mirror_gpt", mirror_gpt},
-    {"mirror_bowl", mirror_bowl},
-    {"mirror_atan", mirror_atan},
-    {"gpt_halluc", gpt_halluc},
-    {"psych_block", szBlock},
-    {"psychedelic_energy", psychedelic_energy}};
+static std::vector<ShaderInfo> shaderSources = {{"Bubble", srcShader1},
+                                                {"Abilify", srcShaderAbilify},
+                                                {"Pastel", srcShaderPinkClouds},
+                                                {"KaleidoCloud", srcShaderKaleidoCloud},
+                                                {"KaleidoFromTex", srcShaderKaleidoFromTex},
+                                                {"Kaleidoscope", srcShader2},
+                                                {"KaleidoscopeAlt", srcShader3},
+                                                {"Scramble", srcShader4},
+                                                {"Swirl", srcShader5},
+                                                {"Mirror", szShader},
+                                                {"VHS", szShader2},
+                                                {"Twist", szTwist},
+                                                {"Time", szTime},
+                                                {"Bend", szBend},
+                                                {"Pong", szPong},
+                                                {"PsychWave", psychWave},
+                                                {"CrystalBall", crystalBall},
+                                                {"ZoomMouse", szZoomMouse},
+                                                {"Drain", szDrain},
+                                                {"Ufo", szUfo},
+                                                {"Wave", szWave},
+                                                {"UfoWarp", szUfoWarp},
+                                                {"ByMouse", szByMouse},
+                                                {"Deform", szDeform},
+                                                {"Geo", szGeo},
+                                                {"Smooth", szSmooth},
+                                                {"Hue", szHue},
+                                                {"kMouse", szkMouse},
+                                                {"Drum", szDrum},
+                                                {"ColorSwirl", szColorSwirl},
+                                                {"MouseZoom", szMouseZoom},
+                                                {"Rev2", szRev2},
+                                                {"Fish", szFish},
+                                                {"RipplePrism", szRipplePrism},
+                                                {"MirrorMouse", szMirrorMouse},
+                                                {"FracMouse", szFracMouse},
+                                                {"Cats", szCats},
+                                                {"ColorMouse", szColorMouse},
+                                                {"TwistFull", szTwistFull},
+                                                {"BowlByTime", szBowlByTime},
+                                                {"Pebble", szPebble},
+                                                {"MirrorPutty", szMirrorPutty},
+                                                {"frac_shader02_dmdi6i_zoom_xor", src_frac_shader02_dmdi6i_zoom_xor},
+                                                {"frac_shader02_dmdi6i_zoom_xor_amp", src_frac_shader02_dmdi6i_zoom_xor_amp},
+                                                {"frac_shader02_dmdXi", src_frac_shader02_dmdXi},
+                                                {"frac_shader02_dmdXi_amp", src_frac_shader02_dmdXi_amp},
+                                                {"frac_shader02_dmdXi2", src_frac_shader02_dmdXi2},
+                                                {"frac_shader02_dmdXi3", src_frac_shader02_dmdXi3},
+                                                {"frac_shader02_dmdXi3_drain", src_frac_shader02_dmdXi3_drain},
+                                                {"frac_shader02_dmdXi3_warp", src_frac_shader02_dmdXi3_warp},
+                                                {"frac_shader02_dmdXi4", src_frac_shader02_dmdXi4},
+                                                {"frac_shader02_dmdXi5", src_frac_shader02_dmdXi5},
+                                                {"frac_shader02_prisim", src_frac_shader02_prisim},
+                                                {"frac_shader03_size", src_frac_shader03_size},
+                                                {"frac_shader03_wormhole", src_frac_shader03_wormhole},
+                                                {"frac_shader03_wormhole_amp", src_frac_shader03_wormhole_amp},
+                                                {"frac_shader03_wormhole2", src_frac_shader03_wormhole2},
+                                                {"frac_shader03_wormhole3", src_frac_shader03_wormhole3},
+                                                {"frac_shader03_wormhole4", src_frac_shader03_wormhole4},
+                                                {"frac_shader04_echo", src_frac_shader04_echo},
+                                                {"frac_shader04_echo2", src_frac_shader04_echo2},
+                                                {"frac_shader04_echo3_spin", src_frac_shader04_echo3_spin},
+                                                {"frac_shader04_grid", src_frac_shader04_grid},
+                                                {"frac_shader04_julia", src_frac_shader04_julia},
+                                                {"frac_shader05", src_frac_shader05},
+                                                {"frac_star1", src_frac_star1},
+                                                {"frac_zoom1", src_frac_zoom1},
+                                                {"frac_zoom2", src_frac_zoom2},
+                                                {"frac_zoom3", src_frac_zoom3},
+                                                {"frac_zoom4", src_frac_zoom4},
+                                                {"frac_zoom5", src_frac_zoom5},
+                                                {"frac_zoom6", src_frac_zoom6},
+                                                {"frac_zoom7", src_frac_zoom7},
+                                                {"frac_shader01", src_frac_shader01},
+                                                {"frac_shader01_dark", src_frac_shader01_dark},
+                                                {"frac_shader01_smooth", src_frac_shader01_smooth},
+                                                {"frac_shader01_smooth_neon", src_frac_shader01_smooth_neon},
+                                                {"frac_shader02_dmd", src_frac_shader02_dmd},
+                                                {"frac_shader02_dmd_mandella", src_frac_shader02_dmd_mandella},
+                                                {"frac_shader02_dmd2", src_frac_shader02_dmd2},
+                                                {"frac_shader02_dmd2_amp", src_frac_shader02_dmd2_amp},
+                                                {"frac_shader02_dmd3", src_frac_shader02_dmd3},
+                                                {"frac_shader02_dmd4", src_frac_shader02_dmd4},
+                                                {"frac_shader02_dmd5", src_frac_shader02_dmd5},
+                                                {"frac_shader02_dmd6i", src_frac_shader02_dmd6i},
+                                                {"frac_shader02_dmd6i_air", src_frac_shader02_dmd6i_air},
+                                                {"frac_shader02_dmd6i_air_twist", src_frac_shader02_dmd6i_air_twist},
+                                                {"frac_shader02_dmd6i_amp", src_frac_shader02_dmd6i_amp},
+                                                {"frac_shader02_dmd6i_bowl", src_frac_shader02_dmd6i_bowl},
+                                                {"frac_shader02_dmd6i_bubble", src_frac_shader02_dmd6i_bubble},
+                                                {"frac_shader02_dmd6i_neon", src_frac_shader02_dmd6i_neon},
+                                                {"frac_shader02_dmd6i1", src_frac_shader02_dmd6i1},
+                                                {"frac_shader02_dmd7i", src_frac_shader02_dmd7i},
+                                                {"frac_shader02_dmd8i", src_frac_shader02_dmd8i},
+                                                {"frac_shader02_dmd9i", src_frac_shader02_dmd9i},
+                                                {"frac_shader02_dmdi_radial", src_frac_shader02_dmdi_radial},
+                                                {"frac_shader02_dmdi6i_zoom", src_frac_shader02_dmdi6i_zoom},
+                                                {"color_shader02", color_shader02},
+                                                {"mirror_ufo_wrap", mirror_ufo_wrap},
+                                                {"mirror_wrap_dmd6i", mirror_wrap_dmd6i},
+                                                {"mirror_zoom", mirror_zoom},
+                                                {"mirror_bubble", mirror_bubble},
+                                                {"mirror_geometric", mirror_geometric},
+                                                {"mirror_prism", mirror_prism},
+                                                {"mirror_airshader1", mirror_airshader1},
+                                                {"mirror_putty", mirror_putty},
+                                                {"mirror_pebble", mirror_pebble},
+                                                {"mirror_bowl_by_time", mirror_bowl_by_time},
+                                                {"mirror_comb_mouse", mirror_comb_mouse},
+                                                {"mirror_grad", mirror_grad},
+                                                {"mirror_mandella", mirror_mandella},
+                                                {"mirror_air_bowl", mirror_air_bowl},
+                                                {"mirror_sin_osc", mirror_sin_osc},
+                                                {"mirror_bubble_zoom_mouse", mirror_bubble_zoom_mouse},
+                                                {"mirror_goofy", mirror_goofy},
+                                                {"mirror_twist_gpt", mirror_twist_gpt},
+                                                {"mirror_psyce_wave_all", mirror_psyce_wave_all},
+                                                {"mirror_color_swirl", mirror_color_swirl},
+                                                {"mirror_color_o1", mirror_color_o1},
+                                                {"mirror_color_mouse", mirror_color_mouse},
+                                                {"mirror_swirly", mirror_swirly},
+                                                {"mirror_pong2", mirror_pong2},
+                                                {"mirror_pong", mirror_pong},
+                                                {"mirror_spiral_aura", mirror_spiral_aura},
+                                                {"mirror_center", mirror_center},
+                                                {"mirror_twisted", mirror_twisted},
+                                                {"mirror_gpt", mirror_gpt},
+                                                {"mirror_bowl", mirror_bowl},
+                                                {"mirror_atan", mirror_atan},
+                                                {"gpt_halluc", gpt_halluc},
+                                                {"psych_block", szBlock},
+                                                {"psychedelic_energy", psychedelic_energy}};
 
 /**
  * @brief Loads and stores external fragment shaders listed in an index file.
@@ -595,17 +558,11 @@ class ShaderLibrary {
         }
     }
     /** @return `true` when no external shaders have been loaded. */
-    bool empty() const {
-        return (shaders.empty());
-    }
+    bool empty() const { return (shaders.empty()); }
     /** @brief Returns the name at @p i. @throws std::out_of_range for an invalid index. */
-    std::string getNameAt(int i) const {
-        return shaders.at(i).first;
-    }
+    std::string getNameAt(int i) const { return shaders.at(i).first; }
     /** @brief Returns the source at @p i. @throws std::out_of_range for an invalid index. */
-    std::string getShaderAt(int i) const {
-        return shaders.at(i).second;
-    }
+    std::string getShaderAt(int i) const { return shaders.at(i).second; }
     /** @return Number of loaded external shaders. */
     size_t getSize() const { return shaders.size(); }
 
@@ -664,6 +621,27 @@ class About : public gl::GLObject {
     int captureScale = 1;
     int loadingShaderIndex = 0;
     bool loadingComplete = false;
+    enum class ShaderLoadState { Source, Queued, Compiling, Linking, Ready, Failed };
+    struct PendingProgram {
+        GLuint program = 0, vertex = 0, fragment = 0;
+    };
+    struct PendingShader {
+        size_t index = 0;
+        bool custom = false;
+        std::string name, source;
+        PendingProgram model, sprite;
+    };
+    static constexpr GLenum COMPLETION_STATUS_KHR = 0x91B1;
+    static constexpr size_t MAX_PENDING_SHADER_PAIRS = 2;
+    std::vector<ShaderLoadState> shaderStates;
+    std::deque<size_t> shaderQueue;
+    std::vector<PendingShader> pendingShaders;
+    bool parallelShaderCompile = false;
+    bool libraryLoadingComplete = false;
+    bool activeShaderNeedsRefresh = false;
+    int pendingShaderSelection = -1;
+    int customShaderIndex = -1;
+    std::string customShaderSource;
     gl::GLWindow *loadingWin = nullptr;
     std::unique_ptr<mx::Model> model;
     bool is3d = false;
@@ -680,6 +658,10 @@ class About : public gl::GLObject {
     About() = default;
     /** @brief Releases the image texture and multipass framebuffer resources. */
     virtual ~About() override {
+        for (auto &pending : pendingShaders) {
+            discardProgram(pending.model);
+            discardProgram(pending.sprite);
+        }
         if (texture != 0) {
             glDeleteTextures(1, &texture);
         }
@@ -694,9 +676,7 @@ class About : public gl::GLObject {
     }
 
     /** @brief Selects textured-model rendering instead of the 2D sprite path. */
-    void set3DMode(bool is3d_m) {
-        is3d = is3d_m;
-    }
+    void set3DMode(bool is3d_m) { is3d = is3d_m; }
 
     /**
      * @brief Creates or resizes the ping-pong framebuffer pair.
@@ -749,9 +729,7 @@ class About : public gl::GLObject {
     }
 
     /** @return Whether multipass rendering is enabled. */
-    bool isMultipassEnabled() const {
-        return multipassEnabled;
-    }
+    bool isMultipassEnabled() const { return multipassEnabled; }
 
     /** @brief Removes all shaders from the multipass chain. */
     void clearShaderPasses() {
@@ -761,23 +739,23 @@ class About : public gl::GLObject {
 
     /** @brief Appends a valid 2D shader index to the multipass chain. */
     void addShaderPass(int shaderIndex) {
-        if (shaderIndex >= 0 && shaderIndex < static_cast<int>(shaders2.size())) {
+        if (shaderIndex >= 0 && shaderIndex < static_cast<int>(shaders.size())) {
+            requestShader(static_cast<size_t>(shaderIndex));
             shaderPassList.push_back(shaderIndex);
-            printf("Added shader pass: %d (%s)\n", shaderIndex,
-                   shaderIndex < static_cast<int>(shader_names.size()) ? shader_names[shaderIndex].c_str() : "unknown");
+            printf("Added shader pass: %d (%s)\n", shaderIndex, shaderIndex < static_cast<int>(shader_names.size()) ? shader_names[shaderIndex].c_str() : "unknown");
         }
     }
 
     /** @brief Replaces the multipass chain with @p passes. */
     void setShaderPasses(const std::vector<int> &passes) {
-        shaderPassList = passes;
-        printf("Set %zu shader passes\n", passes.size());
+        shaderPassList.clear();
+        for (int index : passes)
+            addShaderPass(index);
+        printf("Set %zu shader passes\n", shaderPassList.size());
     }
 
     /** @return A copy of the configured shader-index chain. */
-    std::vector<int> getShaderPasses() const {
-        return shaderPassList;
-    }
+    std::vector<int> getShaderPasses() const { return shaderPassList; }
 
     /**
      * @brief Uploads the current application state to a shader program.
@@ -846,11 +824,11 @@ class About : public gl::GLObject {
     int getShaderIndex() const { return currentShaderIndex; }
     /** @brief Selects @p index when it refers to a compiled shader. */
     void setShaderIndex(int index) {
-        if (index >= 0 && index < static_cast<int>(shaders.size())) {
-            currentShaderIndex = static_cast<size_t>(index);
+        if (index >= 0) {
+            switchShader(static_cast<size_t>(index), loadingWin);
         }
     }
-    /** @return Number of successfully compiled shader pairs. */
+    /** @return Number of shader catalog entries, including shaders awaiting compilation. */
     int getShaderCount() { return static_cast<int>(shaders.size()); }
     /** @return Display name for @p index, or an empty string when invalid. */
     std::string getShaderNameAt(int index) {
@@ -917,8 +895,7 @@ class About : public gl::GLObject {
         canvasWidth = maxWidth;
         canvasHeight = maxHeight;
 
-        printf("loadNewTexture: tex=%dx%d, canvas=%dx%d, max=%dx%d\n",
-               texWidth, texHeight, canvasWidth, canvasHeight, maxWidth, maxHeight);
+        printf("loadNewTexture: tex=%dx%d, canvas=%dx%d, max=%dx%d\n", texWidth, texHeight, canvasWidth, canvasHeight, maxWidth, maxHeight);
 
         float imgAspect = static_cast<float>(texWidth) / static_cast<float>(texHeight);
         float canvasAspect = static_cast<float>(canvasWidth) / static_cast<float>(canvasHeight);
@@ -946,118 +923,259 @@ class About : public gl::GLObject {
         glViewport(0, 0, canvasWidth, canvasHeight);
 
         sprite.initSize(canvasWidth, canvasHeight);
-        switchShader(currentShaderIndex, win);
+        refreshActiveShader(win);
     }
 
-    /** @brief Emscripten-compatible callback that compiles the next shader. */
-    void loadShaderAsync(void *arg) {
-        About *self = static_cast<About *>(arg);
-        self->loadNextShader();
+    void discardProgram(PendingProgram &program) {
+        if (program.program)
+            glDeleteProgram(program.program);
+        if (program.vertex)
+            glDeleteShader(program.vertex);
+        if (program.fragment)
+            glDeleteShader(program.fragment);
+        program = {};
     }
 
-    /** @brief Compiles one built-in shader for both 2D and 3D rendering. */
-    void loadNextShader() {
-        if (loadingShaderIndex < static_cast<int>(shaderSources.size())) {
-            const auto &info = shaderSources[loadingShaderIndex];
+    PendingProgram submitProgram(const std::string &vertexSource, const std::string &fragmentSource) {
+        PendingProgram result;
+        result.vertex = glCreateShader(GL_VERTEX_SHADER);
+        result.fragment = glCreateShader(GL_FRAGMENT_SHADER);
+        result.program = glCreateProgram();
+        if (!result.vertex || !result.fragment || !result.program) {
+            discardProgram(result);
+            return result;
+        }
+        const char *vertex = vertexSource.c_str();
+        const char *fragment = fragmentSource.c_str();
+        glShaderSource(result.vertex, 1, &vertex, nullptr);
+        glShaderSource(result.fragment, 1, &fragment, nullptr);
+        glCompileShader(result.vertex);
+        glCompileShader(result.fragment);
+        glAttachShader(result.program, result.vertex);
+        glAttachShader(result.program, result.fragment);
+        glLinkProgram(result.program);
+        return result;
+    }
 
-            if (info.name == "block") {
-                std::cout << info.source << "\n";
+    bool programCompleted(const PendingProgram &program) {
+        if (!program.program || !parallelShaderCompile)
+            return true;
+        GLint completed = GL_FALSE;
+        glGetProgramiv(program.program, COMPLETION_STATUS_KHR, &completed);
+        return completed == GL_TRUE;
+    }
+
+    std::string programDiagnostics(const PendingProgram &program, const char *mode) {
+        std::string result = std::string(mode) + ":\n";
+        for (GLuint shaderId : {program.vertex, program.fragment}) {
+            GLint length = 0;
+            if (!shaderId)
+                continue;
+            glGetShaderiv(shaderId, GL_INFO_LOG_LENGTH, &length);
+            if (length > 1) {
+                std::string log(length, '\0');
+                GLsizei written = 0;
+                glGetShaderInfoLog(shaderId, length, &written, log.data());
+                log.resize(written);
+                result += log + "\n";
             }
-
-#ifdef __EMSCRIPTEN__
-            EM_ASM({
-                if (typeof window.beginShaderCompilation === 'function') {
-                    window.beginShaderCompilation(UTF8ToString($0));
-                }
-                if (typeof window.addLoadingMessage === 'function') {
-                    var name = UTF8ToString($0);
-                    var idx = $1;
-                    var total = $2;
-                    window.addLoadingMessage('[' + idx + '/' + total + '] Compiling: ' + name, 'normal');
-                } }, info.name.c_str(), loadingShaderIndex + 1, (int)shaderSources.size());
-#endif
-
-            auto shader = std::make_unique<gl::ShaderProgram>();
-            bool success = shader->loadProgramFromText(sz3DVertex, info.source);
-
-            if (success) {
-                std::cout << "Compiled: " << info.name << " [OK]\n";
+        }
+        if (program.program) {
+            GLint length = 0;
+            glGetProgramiv(program.program, GL_INFO_LOG_LENGTH, &length);
+            if (length > 1) {
+                std::string log(length, '\0');
+                GLsizei written = 0;
+                glGetProgramInfoLog(program.program, length, &written, log.data());
+                log.resize(written);
+                result += log + "\n";
             }
-
-            auto shader2 = std::make_unique<gl::ShaderProgram>();
-            bool success2 = shader2->loadProgramFromText(gl::vSource, info.source);
-            if (success2) {
-                std::cout << "Compiled: " << info.name << " [OK]\n";
-            }
-
-#ifdef __EMSCRIPTEN__
-            EM_ASM({
-                if (typeof window.finishShaderCompilation === 'function') {
-                    window.finishShaderCompilation(UTF8ToString($0), UTF8ToString($3), $1 !== 0, $2 !== 0);
-                }
-                if (typeof window.addLoadingMessage === 'function') {
-                    var name = UTF8ToString($0);
-                    var ok = $1;
-                    var ok2 = $2;
-                    if (ok && ok2) {
-                        window.addLoadingMessage('     ' + name + ' - OK', 'success');
-                    } else if (ok || ok2) {
-                        window.addLoadingMessage('     ' + name + ' - Partial', 'info');
-                    } else {
-                        window.addLoadingMessage('     ' + name + ' - FAILED', 'error');
-                    }
-                } }, info.name.c_str(), success ? 1 : 0, success2 ? 1 : 0, info.source.c_str());
-#endif
-
-            if (success && success2) {
-                if (success) {
-                    shader->setSilent(true);
-                    shaders.push_back(std::move(shader));
-                }
-                if (success2) {
-                    shader2->setSilent(true);
-                    shaders2.push_back(std::move(shader2));
-                }
-                shader_names.push_back(info.name);
-            } else {
-                std::cout << "Failed: " << info.name << "\n";
-            }
-            loadingShaderIndex++;
-
-#ifdef __EMSCRIPTEN__
-            emscripten_async_call([](void *arg) {
-                About *self = static_cast<About *>(arg);
-                self->loadNextShader();
-            },
-                                  this, 10);
-#endif
         } else {
-            finishLoading();
+            result += "Could not allocate shader/program objects.\n";
+        }
+        return result;
+    }
+
+    std::unique_ptr<gl::ShaderProgram> adoptProgram(PendingProgram &program) {
+        glDetachShader(program.program, program.vertex);
+        glDetachShader(program.program, program.fragment);
+        glDeleteShader(program.vertex);
+        glDeleteShader(program.fragment);
+        auto result = std::make_unique<gl::ShaderProgram>(program.program);
+        result->setSilent(true);
+        program = {};
+        return result;
+    }
+
+    void finishShaderPreparation(PendingShader &pending) {
+        GLint linked3D = GL_FALSE, linked2D = GL_FALSE;
+        if (pending.model.program)
+            glGetProgramiv(pending.model.program, GL_LINK_STATUS, &linked3D);
+        if (pending.sprite.program)
+            glGetProgramiv(pending.sprite.program, GL_LINK_STATUS, &linked2D);
+        const bool success = linked3D == GL_TRUE && linked2D == GL_TRUE;
+        std::string diagnostics;
+        if (!success) {
+            diagnostics = programDiagnostics(pending.model, "3D") + programDiagnostics(pending.sprite, "2D");
+        }
+        if (success) {
+            shaders[pending.index] = adoptProgram(pending.model);
+            shaders2[pending.index] = adoptProgram(pending.sprite);
+            shaderStates[pending.index] = ShaderLoadState::Ready;
+            if (pending.index == currentShaderIndex)
+                activeShaderNeedsRefresh = true;
+        } else {
+            discardProgram(pending.model);
+            discardProgram(pending.sprite);
+            shaderStates[pending.index] = shaders[pending.index] ? ShaderLoadState::Ready : ShaderLoadState::Failed;
+            if (pendingShaderSelection == static_cast<int>(pending.index))
+                pendingShaderSelection = -1;
+            mx::system_err << "Failed: " << pending.name << "\n" << diagnostics;
+        }
+#ifdef __EMSCRIPTEN__
+        // clang-format off
+        EM_ASM({
+            if (typeof window.onShaderPrepared === 'function')
+                window.onShaderPrepared($0, UTF8ToString($1), UTF8ToString($2), !!$3, !!$4, UTF8ToString($5), !!$6);
+        }, static_cast<int>(pending.index), pending.name.c_str(), pending.source.c_str(),
+           linked3D == GL_TRUE, linked2D == GL_TRUE, diagnostics.c_str(), pending.custom);
+        // clang-format on
+#endif
+    }
+
+    void publishShaderProgress() {
+        size_t ready = 0, failed = 0;
+        for (size_t index = 0; index < shaderSources.size(); ++index) {
+            ready += shaderStates[index] == ShaderLoadState::Ready;
+            failed += shaderStates[index] == ShaderLoadState::Failed;
+        }
+        const bool complete = ready + failed == shaderSources.size();
+#ifdef __EMSCRIPTEN__
+        // clang-format off
+        EM_ASM({
+            if (typeof window.onShaderQueueProgress === 'function')
+                window.onShaderQueueProgress($0, $1, $2, $3, $4, !!$5, $6);
+        }, static_cast<int>(ready), static_cast<int>(failed), static_cast<int>(shaderSources.size()),
+           static_cast<int>(pendingShaders.size() * 2), static_cast<int>(shaderQueue.size()),
+           parallelShaderCompile, pendingShaderSelection);
+        // clang-format on
+#endif
+        if (complete && !libraryLoadingComplete) {
+            libraryLoadingComplete = true;
+#ifdef __EMSCRIPTEN__
+            // clang-format off
+            EM_ASM({
+                if (typeof window.onAllShadersCompiled === 'function') window.onAllShadersCompiled($0);
+            }, static_cast<int>(ready));
+            // clang-format on
+#endif
         }
     }
+
+    void requestShader(size_t index, bool priority = true) {
+        if (index >= shaderStates.size() || shaderStates[index] == ShaderLoadState::Ready || shaderStates[index] == ShaderLoadState::Failed || shaderStates[index] == ShaderLoadState::Linking)
+            return;
+        auto queued = std::find(shaderQueue.begin(), shaderQueue.end(), index);
+        if (queued != shaderQueue.end()) {
+            if (!priority)
+                return;
+            shaderQueue.erase(queued);
+        }
+        shaderStates[index] = ShaderLoadState::Queued;
+        if (priority)
+            shaderQueue.push_front(index);
+        else
+            shaderQueue.push_back(index);
+        publishShaderProgress();
+    }
+
+    bool ensureShaderLoaded(size_t index) {
+        if (index >= shaders.size())
+            return false;
+        if (shaders[index] && shaders2[index])
+            return true;
+        requestShader(index, false);
+        return false;
+    }
+
+    PendingShader submitShader(size_t index) {
+        PendingShader pending;
+        pending.index = index;
+        pending.custom = static_cast<int>(index) == customShaderIndex;
+        pending.name = shader_names[index];
+        pending.source = pending.custom ? customShaderSource : shaderSources[index].source;
+        shaderStates[index] = ShaderLoadState::Compiling;
+        pending.model = submitProgram(sz3DVertex, pending.source);
+        pending.sprite = submitProgram(gl::vSource, pending.source);
+        shaderStates[index] = ShaderLoadState::Linking;
+        return pending;
+    }
+
+    void loadNextShader() {
+        for (size_t i = 0; i < pendingShaders.size();) {
+            auto &pending = pendingShaders[i];
+            if (!programCompleted(pending.model) || !programCompleted(pending.sprite)) {
+                ++i;
+                continue;
+            }
+            finishShaderPreparation(pending);
+            pendingShaders.erase(pendingShaders.begin() + i);
+        }
+        bool idle = false;
+#ifdef __EMSCRIPTEN__
+        // clang-format off
+        idle = parallelShaderCompile && EM_ASM_INT({
+            return typeof window.consumeShaderIdleTime === 'function' && window.consumeShaderIdleTime() ? 1 : 0;
+        });
+        // clang-format on
+#endif
+        if (shaderQueue.empty() && pendingShaders.empty() && idle) {
+            while (loadingShaderIndex < static_cast<int>(shaderSources.size()) && shaderStates[loadingShaderIndex] != ShaderLoadState::Source)
+                ++loadingShaderIndex;
+            if (loadingShaderIndex < static_cast<int>(shaderSources.size()))
+                requestShader(static_cast<size_t>(loadingShaderIndex++), false);
+        }
+        if (!shaderQueue.empty() && pendingShaders.size() < (parallelShaderCompile ? MAX_PENDING_SHADER_PAIRS : 1)) {
+            auto selected = std::find(shaderQueue.begin(), shaderQueue.end(), static_cast<size_t>(pendingShaderSelection));
+            auto next = selected != shaderQueue.end() ? selected : shaderQueue.begin();
+            size_t index = *next;
+            shaderQueue.erase(next);
+            pendingShaders.push_back(submitShader(index));
+        }
+        publishShaderProgress();
+#ifdef __EMSCRIPTEN__
+        emscripten_async_call([](void *arg) { static_cast<About *>(arg)->loadNextShader(); }, this, shaderQueue.empty() && pendingShaders.empty() ? 100 : 16);
+#endif
+    }
+
+    /** @return Shader preparation state; invalid indices return an empty string. */
+    std::string getShaderLoadState(int index) const {
+        if (index < 0 || index >= static_cast<int>(shaderStates.size()))
+            return "";
+        switch (shaderStates[index]) {
+        case ShaderLoadState::Source:
+            return "SOURCE";
+        case ShaderLoadState::Queued:
+            return "QUEUED";
+        case ShaderLoadState::Compiling:
+            return "COMPILING";
+        case ShaderLoadState::Linking:
+            return "LINKING";
+        case ShaderLoadState::Ready:
+            return "READY";
+        case ShaderLoadState::Failed:
+            return "FAILED";
+        }
+        return "";
+    }
+
+    /** @return Requested shader index, or -1 when no switch is pending. */
+    int getPendingShaderIndex() const { return pendingShaderSelection; }
 
     /** @brief Finalizes shader loading and activates the first available shader. */
     void finishLoading() {
-        if (shaders.empty()) {
-            mx::system_err << "No shaders loaded successfully\n";
+        if (loadingComplete || !shaders[currentShaderIndex])
             return;
-        }
-
-#ifdef __EMSCRIPTEN__
-        EM_ASM({
-            if (typeof window.addLoadingMessage === 'function') {
-                window.addLoadingMessage(' ', 'normal');
-                window.addLoadingMessage('Compiled ' + $0 + ' shaders successfully!', 'success');
-                window.addLoadingMessage(' ', 'normal');
-                window.addLoadingMessage('Loading texture...', 'info');
-            }
-            if (typeof window.onAllShadersCompiled === 'function') {
-                window.onAllShadersCompiled($0);
-            }
-            if (typeof window.finalizeShaderFailureLog === 'function') {
-                window.finalizeShaderFailureLog();
-            } }, (int)shaders.size());
-#endif
 
         std::string logoPath = loadingWin->util.getFilePath("data/logo.png");
         SDL_Surface *surface = IMG_Load(logoPath.c_str());
@@ -1075,12 +1193,18 @@ class About : public gl::GLObject {
         }
 
 #ifdef __EMSCRIPTEN__
-        EM_ASM({
-            if (typeof window.addLoadingMessage === 'function') {
-                window.addLoadingMessage('Texture loaded: ' + $0 + 'x' + $1, 'success');
-                window.addLoadingMessage(' ', 'normal');
-                window.addLoadingMessage('Initialization complete!', 'success');
-            } }, converted->w, converted->h);
+        // clang-format off
+        EM_ASM(
+            {
+                if (typeof window.addLoadingMessage === 'function') {
+                    window.addLoadingMessage('Texture loaded: ' + $0 + 'x' + $1, 'success');
+                    window.addLoadingMessage(' ', 'normal');
+                    window.addLoadingMessage('Initialization complete!', 'success');
+                }
+            },
+            converted->w,
+            converted->h);
+        // clang-format on
 #endif
 
         lastUpdateTime = SDL_GetTicks();
@@ -1091,12 +1215,19 @@ class About : public gl::GLObject {
         loadingComplete = true;
 
 #ifdef __EMSCRIPTEN__
+        // clang-format off
         EM_ASM({
-            setTimeout(function() {
-                if (typeof window.hideLoadingScreen === 'function') {
-                    window.hideLoadingScreen();
-                } }, 1000);
+            setTimeout(
+                function() {
+                    if (typeof window.onShaderLibraryReady === 'function')
+                        window.onShaderLibraryReady();
+                    if (typeof window.hideLoadingScreen === 'function') {
+                        window.hideLoadingScreen();
+                    }
+                },
+                0);
         });
+        // clang-format on
 #endif
     }
 
@@ -1114,14 +1245,21 @@ class About : public gl::GLObject {
         glViewport(0, 0, canvasWidth, canvasHeight);
 
 #ifdef __EMSCRIPTEN__
-        EM_ASM({
-            if (typeof window.addLoadingMessage === 'function') {
-                window.addLoadingMessage('MX2 Graphics Demo', 'info');
-                window.addLoadingMessage('OpenGL initialized: ' + $0 + 'x' + $1, 'success');
-                window.addLoadingMessage(' ', 'normal');
-                window.addLoadingMessage('Compiling ' + $2 + ' shaders...', 'info');
-                window.addLoadingMessage(' ', 'normal');
-            } }, canvasWidth, canvasHeight, (int)shaderSources.size());
+        // clang-format off
+        EM_ASM(
+            {
+                if (typeof window.addLoadingMessage === 'function') {
+                    window.addLoadingMessage('MX2 Graphics Demo', 'info');
+                    window.addLoadingMessage('OpenGL initialized: ' + $0 + 'x' + $1, 'success');
+                    window.addLoadingMessage(' ', 'normal');
+                    window.addLoadingMessage('Compiling initial shaders...', 'info');
+                    window.addLoadingMessage(' ', 'normal');
+                }
+            },
+            canvasWidth,
+            canvasHeight,
+            (int)shaderSources.size());
+        // clang-format on
 #endif
         loadingShaderIndex = 0;
         loadingComplete = false;
@@ -1132,29 +1270,53 @@ class About : public gl::GLObject {
         for (size_t i = 0; i < library.getSize(); ++i) {
             shaderSources.push_back({library.getNameAt(i), library.getShaderAt(i)});
         }
-        emscripten_async_call([](void *arg) {
-            About *self = static_cast<About *>(arg);
-            self->loadNextShader();
-        },
-                              this, 50);
-
+#endif
+        const size_t defaultShaderIndex = shaderSources.size();
+        shaderSources.push_back({"Pass-through", R"(#version 300 es
+precision highp float;
+in vec2 TexCoord;
+uniform sampler2D textTexture;
+out vec4 FragColor;
+void main() { FragColor = texture(textTexture, TexCoord); }
+)"});
+        shaders.resize(shaderSources.size());
+        shaders2.resize(shaderSources.size());
+        shaderStates.assign(shaderSources.size(), ShaderLoadState::Source);
+        shader_names.clear();
+        for (const auto &info : shaderSources)
+            shader_names.push_back(info.name);
+#ifdef __EMSCRIPTEN__
+        parallelShaderCompile = emscripten_webgl_enable_extension(emscripten_webgl_get_current_context(), "KHR_parallel_shader_compile");
+#endif
+        currentShaderIndex = defaultShaderIndex;
+        auto startup = submitShader(defaultShaderIndex);
+        // Only the minimal startup pass-through is allowed to wait synchronously.
+        finishShaderPreparation(startup);
+        publishShaderProgress();
+        finishLoading();
+        pendingShaderSelection = 0;
+        requestShader(0);
+        requestShader(1, false);
+        requestShader(2, false);
+#ifdef __EMSCRIPTEN__
+        emscripten_async_call([](void *arg) { static_cast<About *>(arg)->loadNextShader(); }, this, 0);
 #endif
     }
-    float cameraYaw = 270.0f;                  ///< Camera yaw in degrees.
-    float cameraPitch = 0.0f;                 ///< Camera pitch in degrees.
-    float cameraRoll = 0.0f;                  ///< Camera roll in degrees.
-    const float cameraRotationSpeed = 5.0f;   ///< Keyboard rotation step in degrees.
-    bool viewRotationActive = false;           ///< Whether automatic view rotation is active.
-    bool oscillateScale = false;               ///< Whether model scale oscillation is active.
-    float cameraDistance = 0.0f;               ///< Distance from the camera to the model center.
-    float movementSpeed = 0.01f;               ///< Per-frame model movement step.
-    float modelSize = 1.0f;                    ///< Largest dimension of the model bounds.
-    float modelScale = 1.0f;                   ///< Scale that normalizes the loaded model.
-    glm::vec3 modelCenter{0.0f};                ///< Center of the loaded model bounds.
+    float cameraYaw = 270.0f;                        ///< Camera yaw in degrees.
+    float cameraPitch = 0.0f;                        ///< Camera pitch in degrees.
+    float cameraRoll = 0.0f;                         ///< Camera roll in degrees.
+    const float cameraRotationSpeed = 5.0f;          ///< Keyboard rotation step in degrees.
+    bool viewRotationActive = false;                 ///< Whether automatic view rotation is active.
+    bool oscillateScale = false;                     ///< Whether model scale oscillation is active.
+    float cameraDistance = 0.0f;                     ///< Distance from the camera to the model center.
+    float movementSpeed = 0.01f;                     ///< Per-frame model movement step.
+    float modelSize = 1.0f;                          ///< Largest dimension of the model bounds.
+    float modelScale = 1.0f;                         ///< Scale that normalizes the loaded model.
+    glm::vec3 modelCenter{0.0f};                     ///< Center of the loaded model bounds.
     static constexpr float TARGET_MODEL_SIZE = 1.0f; ///< Desired normalized model size.
-    float cameraOffsetX = 0.0f;                ///< Horizontal camera translation.
-    float cameraOffsetY = 0.0f;                ///< Vertical camera translation.
-    float cameraOffsetZ = 0.0f;                ///< Depth camera translation.
+    float cameraOffsetX = 0.0f;                      ///< Horizontal camera translation.
+    float cameraOffsetY = 0.0f;                      ///< Vertical camera translation.
+    float cameraOffsetZ = 0.0f;                      ///< Depth camera translation.
     /** @brief Rotates the model camera horizontally by @p delta degrees. */
     void adjustCameraYaw(float delta) {
         cameraYaw += delta;
@@ -1171,9 +1333,7 @@ class About : public gl::GLObject {
     }
 
     /** @brief Changes the model-camera distance by a model-relative amount. */
-    void adjustCameraDistance(float delta) {
-        cameraDistance += delta * modelSize * 0.1f;
-    }
+    void adjustCameraDistance(float delta) { cameraDistance += delta * modelSize * 0.1f; }
 
     /** @name Normalized model-camera translation */
     ///@{
@@ -1232,7 +1392,7 @@ class About : public gl::GLObject {
                 }
                 sprite.initSize(canvasWidth, canvasHeight);
                 if (loadingComplete && loadingWin) {
-                    switchShader(currentShaderIndex, loadingWin);
+                    refreshActiveShader(loadingWin);
                 }
             }
             return;
@@ -1273,8 +1433,7 @@ class About : public gl::GLObject {
             modelCenter = glm::vec3((minX + maxX) * 0.5f, (minY + maxY) * 0.5f, (minZ + maxZ) * 0.5f);
             modelScale = TARGET_MODEL_SIZE / rawSize;
             modelSize = TARGET_MODEL_SIZE;
-            printf("Model bounding diagonal: %f, scale: %f, center: (%f, %f, %f)\n",
-                   rawSize, modelScale, modelCenter.x, modelCenter.y, modelCenter.z);
+            printf("Model bounding diagonal: %f, scale: %f, center: (%f, %f, %f)\n", rawSize, modelScale, modelCenter.x, modelCenter.y, modelCenter.z);
         }
     }
 
@@ -1399,11 +1558,7 @@ class About : public gl::GLObject {
             cameraUp = glm::vec3(rollMatrix * glm::vec4(cameraUp, 0.0f));
         }
         glm::mat4 viewMatrix = glm::lookAt(cameraPos, cameraTarget, cameraUp);
-        glm::mat4 projectionMatrix = glm::perspective(
-            glm::radians(120.0f),
-            static_cast<float>(win->w) / static_cast<float>(win->h),
-            0.01f,
-            1000.0f);
+        glm::mat4 projectionMatrix = glm::perspective(glm::radians(120.0f), static_cast<float>(win->w) / static_cast<float>(win->h), 0.01f, 1000.0f);
         glm::mat4 mvMatrix = viewMatrix * modelMatrix;
         gl::ShaderProgram *activeShader;
         activeShader = shaders[currentShaderIndex].get();
@@ -1435,12 +1590,28 @@ class About : public gl::GLObject {
     }
 
     /**
-     * @brief Activates a compiled shader and reconnects it to render objects.
-     * @param index Shader index to activate.
+     * @brief Reconnects the current program without canceling a pending selection.
      * @param win Window whose render state is refreshed.
      */
+    void refreshActiveShader(gl::GLWindow *win) {
+        const int requested = pendingShaderSelection;
+        switchShader(currentShaderIndex, win);
+        pendingShaderSelection = requested;
+    }
+
+    /** @brief Activates a ready shader or requests preparation while retaining the active effect. */
     void switchShader(size_t index, gl::GLWindow *win) {
-        if (index < shaders.size()) {
+        if (index >= shaders.size())
+            return;
+        if (!ensureShaderLoaded(index)) {
+            requestShader(index);
+            pendingShaderSelection = shaderStates[index] == ShaderLoadState::Failed ? -1 : static_cast<int>(index);
+            publishShaderProgress();
+            return;
+        }
+        pendingShaderSelection = -1;
+        activeShaderNeedsRefresh = false;
+        if (win) {
             currentShaderIndex = index;
             if (is3d) {
                 shaders[currentShaderIndex]->useProgram();
@@ -1525,18 +1696,28 @@ class About : public gl::GLObject {
             }
         }
     }
-    /** @brief Advances to the next shader, wrapping at the end. */
+    /** @brief Requests the next nonfailed shader, wrapping at the end. */
     void nextShader(gl::GLWindow *win) {
-        currentShaderIndex = (currentShaderIndex + 1) % shaders.size();
-        switchShader(currentShaderIndex, win);
-        mx::system_out << "Switched to shader: " << getShaderNameAt(static_cast<int>(currentShaderIndex)) << "\n";
+        size_t base = pendingShaderSelection >= 0 ? static_cast<size_t>(pendingShaderSelection) : currentShaderIndex;
+        for (size_t offset = 1; offset <= shaders.size(); ++offset) {
+            size_t index = (base + offset) % shaders.size();
+            if (shaderStates[index] != ShaderLoadState::Failed) {
+                switchShader(index, win);
+                break;
+            }
+        }
     }
 
-    /** @brief Selects the previous shader, wrapping at the beginning. */
+    /** @brief Requests the previous nonfailed shader, wrapping at the beginning. */
     void prevShader(gl::GLWindow *win) {
-        currentShaderIndex = (currentShaderIndex == 0) ? shaders.size() - 1 : currentShaderIndex - 1;
-        switchShader(currentShaderIndex, win);
-        mx::system_out << "Switched to shader: " << getShaderNameAt(static_cast<int>(currentShaderIndex)) << "\n";
+        size_t base = pendingShaderSelection >= 0 ? static_cast<size_t>(pendingShaderSelection) : currentShaderIndex;
+        for (size_t offset = 1; offset <= shaders.size(); ++offset) {
+            size_t index = (base + shaders.size() - offset) % shaders.size();
+            if (shaderStates[index] != ShaderLoadState::Failed) {
+                switchShader(index, win);
+                break;
+            }
+        }
     }
 
     /**
@@ -1546,6 +1727,19 @@ class About : public gl::GLObject {
     void draw(gl::GLWindow *win) override {
         if (!loadingComplete) {
             return;
+        }
+#ifndef __EMSCRIPTEN__
+        loadNextShader();
+#endif
+        if (pendingShaderSelection >= 0 && shaderStates[pendingShaderSelection] == ShaderLoadState::Ready) {
+            switchShader(static_cast<size_t>(pendingShaderSelection), win);
+#ifdef __EMSCRIPTEN__
+            // clang-format off
+            EM_ASM({ if (typeof window.onShaderSelectionActivated === 'function') window.onShaderSelectionActivated($0); }, static_cast<int>(currentShaderIndex));
+            // clang-format on
+#endif
+        } else if (activeShaderNeedsRefresh) {
+            refreshActiveShader(win);
         }
         if (texture != 0) {
             glActiveTexture(GL_TEXTURE0);
@@ -1668,7 +1862,7 @@ class About : public gl::GLObject {
             glDisable(GL_DEPTH_TEST);
             for (size_t i = 0; i < shaderPassList.size(); ++i) {
                 int shaderIdx = shaderPassList[i];
-                if (shaderIdx >= 0 && shaderIdx < static_cast<int>(shaders2.size())) {
+                if (shaderIdx >= 0 && ensureShaderLoaded(static_cast<size_t>(shaderIdx))) {
                     gl::ShaderProgram *passShader = shaders2[shaderIdx].get();
                     if (passShader) {
                         glBindFramebuffer(GL_FRAMEBUFFER, passFBO[pingpong]);
@@ -1730,8 +1924,8 @@ class About : public gl::GLObject {
         }
     }
 
-    bool mouseDown = false;                 ///< Whether the primary pointer is pressed.
-    glm::vec4 mouse = glm::vec4(0.0f);      ///< Shader-style pointer position and click state.
+    bool mouseDown = false;            ///< Whether the primary pointer is pressed.
+    glm::vec4 mouse = glm::vec4(0.0f); ///< Shader-style pointer position and click state.
 
     /**
      * @brief Updates pointer coordinates and button state used by shader uniforms.
@@ -1748,9 +1942,7 @@ class About : public gl::GLObject {
     }
 
     /** @brief Resets shader animation time to zero. */
-    void reset() {
-        animation = 0.0f;
-    }
+    void reset() { animation = 0.0f; }
 
     /** @name Shader controls */
     ///@{
@@ -1859,11 +2051,10 @@ class About : public gl::GLObject {
                 displayY = 0;
             }
 
-            printf("resize: canvas=%dx%d, display=(%d,%d) %dx%d\n",
-                   canvasWidth, canvasHeight, displayX, displayY, displayW, displayH);
+            printf("resize: canvas=%dx%d, display=(%d,%d) %dx%d\n", canvasWidth, canvasHeight, displayX, displayY, displayW, displayH);
 
             sprite.initSize(canvasWidth, canvasHeight);
-            switchShader(currentShaderIndex, win);
+            refreshActiveShader(win);
             forceTextureRebind();
         }
     }
@@ -1875,8 +2066,7 @@ class About : public gl::GLObject {
             Uint32 currentTime = SDL_GetTicks();
             if (firstTapRegistered) {
                 Uint32 timeSinceFirstTap = currentTime - firstTapTime;
-                if (timeSinceFirstTap >= DOUBLE_TAP_MIN_TIME &&
-                    timeSinceFirstTap <= DOUBLE_TAP_MAX_TIME) {
+                if (timeSinceFirstTap >= DOUBLE_TAP_MIN_TIME && timeSinceFirstTap <= DOUBLE_TAP_MAX_TIME) {
                     nextShader(win);
                     firstTapRegistered = false;
                     firstTapTime = 0;
@@ -1949,54 +2139,38 @@ class About : public gl::GLObject {
     }
 
     /**
-     * @brief Compiles and activates a user-provided fragment shader.
+     * @brief Queues a user-provided fragment shader and activates it once ready.
      * @param fragmentSource GLSL ES fragment-shader source.
      * @param win Window whose render objects receive the new program.
-     * @return Empty text on success, otherwise a human-readable error message.
+     * @return A QUEUED status, or an immediate validation error; completion is reported to JavaScript.
      */
     std::string compileCustomShader(const std::string &fragmentSource, gl::GLWindow *win) {
-        if (usesUnsupportedRuntimeInputs("custom", fragmentSource)) {
+        if (usesUnsupportedRuntimeInputs("custom", fragmentSource))
             return "ERROR: Shader uses unsupported audio, FFT, spectrum, or texture-cache inputs.";
+        if (customShaderIndex < 0) {
+            customShaderIndex = static_cast<int>(shaders.size());
+            shaders.push_back(nullptr);
+            shaders2.push_back(nullptr);
+            shader_names.push_back("Custom Shader");
+            shaderStates.push_back(ShaderLoadState::Source);
         }
-        const std::string convertedSource = convertFragmentShaderToWebGL(fragmentSource);
-        auto customShader1 = std::make_unique<gl::ShaderProgram>();
-        auto customShader2 = std::make_unique<gl::ShaderProgram>();
-        if (!customShader1->loadProgramFromText(sz3DVertex, convertedSource.c_str())) {
-            return "ERROR: Failed to create shader program.";
+        shaderQueue.erase(std::remove(shaderQueue.begin(), shaderQueue.end(), static_cast<size_t>(customShaderIndex)), shaderQueue.end());
+        for (size_t i = 0; i < pendingShaders.size();) {
+            if (pendingShaders[i].custom) {
+                discardProgram(pendingShaders[i].model);
+                discardProgram(pendingShaders[i].sprite);
+                pendingShaders.erase(pendingShaders.begin() + i);
+            } else
+                ++i;
         }
-        if (!customShader2->loadProgramFromText(gl::vSource, convertedSource.c_str())) {
-            return "ERROR: Failed to create shader program.";
-        }
-
-        customShader1->setSilent(true);
-        customShader2->setSilent(true);
-        static bool hasCustomShader = false;
-        static const std::string customShaderName = "Custom Shader";
-        if (hasCustomShader && !shaders.empty() && !shaders2.empty()) {
-            shaders.back() = std::move(customShader1);
-            shaders2.back() = std::move(customShader2);
-            if (!shader_names.empty()) {
-                shader_names.back() = customShaderName;
-            } else {
-                shader_names.push_back(customShaderName);
-            }
-        } else {
-            shaders.push_back(std::move(customShader1));
-            shaders2.push_back(std::move(customShader2));
-            shader_names.push_back(customShaderName);
-            hasCustomShader = true;
-        }
-        currentShaderIndex = shaders.size() - 1;
-        switchShader(currentShaderIndex, win);
-        return "SUCCESS: Shader compiled and applied successfully!";
+        customShaderSource = convertFragmentShaderToWebGL(fragmentSource);
+        shaderStates[customShaderIndex] = ShaderLoadState::Source;
+        pendingShaderSelection = customShaderIndex;
+        requestShader(static_cast<size_t>(customShaderIndex));
+        return "QUEUED: Preparing shader; the current effect will continue until it is ready.";
     }
     /** @brief Restores the first built-in shader. */
-    void resetToDefaultShader(gl::GLWindow *win) {
-        if (!shaders.empty()) {
-            currentShaderIndex = 0;
-            switchShader(0, win);
-        }
-    }
+    void resetToDefaultShader(gl::GLWindow *win) { switchShader(0, win); }
 
     /** @brief Schedules a frame capture at integer output @p scale. */
     void saveImage(int scale) {
@@ -2009,8 +2183,7 @@ class About : public gl::GLObject {
         int readW = canvasWidth;
         int readH = canvasHeight;
 
-        printf("Capturing: canvas=%dx%d, display=(%d,%d) %dx%d, tex=%dx%d, scale=%d, is3d=%d\n",
-               readW, readH, displayX, displayY, displayW, displayH, texWidth, texHeight, captureScale, is3d ? 1 : 0);
+        printf("Capturing: canvas=%dx%d, display=(%d,%d) %dx%d, tex=%dx%d, scale=%d, is3d=%d\n", readW, readH, displayX, displayY, displayW, displayH, texWidth, texHeight, captureScale, is3d ? 1 : 0);
 
         if (readW <= 0 || readH <= 0 || displayW <= 0 || displayH <= 0) {
             printf("Invalid dimensions\n");
@@ -2073,64 +2246,67 @@ class About : public gl::GLObject {
         printf("Output: %dx%d (scale %d)\n", finalW, finalH, captureScale);
 
 #ifdef __EMSCRIPTEN__
-        EM_ASM({
-            var cropW = $0;
-            var cropH = $1;
-            var dataPtr = $2;
-            var finalW = $3;
-            var finalH = $4;
-            
-            try {
-                var srcCanvas = document.createElement('canvas');
-                srcCanvas.width = cropW;
-                srcCanvas.height = cropH;
-                var srcCtx = srcCanvas.getContext('2d');
-                
-                var pixelArray = new Uint8ClampedArray(cropW * cropH * 4);
-                for (var i = 0; i < cropW * cropH * 4; i++) {
-                    pixelArray[i] = Module.HEAPU8[dataPtr + i];
-                }
-                
-                var imageData = new ImageData(pixelArray, cropW, cropH);
-                srcCtx.putImageData(imageData, 0, 0);
-                
-                var outCanvas = document.createElement('canvas');
-                outCanvas.width = finalW;
-                outCanvas.height = finalH;
-                var outCtx = outCanvas.getContext('2d');
-                
-                outCtx.imageSmoothingEnabled = true;
-                outCtx.imageSmoothingQuality = 'high';
-                
-                outCtx.drawImage(srcCanvas, 0, 0, finalW, finalH);
-                
-                var now = new Date();
-                var timestamp = now.getFullYear() + '-' + 
-                    String(now.getMonth() + 1).padStart(2, '0') + '-' + 
-                    String(now.getDate()).padStart(2, '0') + 'T' +
-                    String(now.getHours()).padStart(2, '0') + '-' + 
-                    String(now.getMinutes()).padStart(2, '0') + '-' + 
-                    String(now.getSeconds()).padStart(2, '0');
+        // clang-format off
+        EM_ASM(
+            {
+                var cropW = $0;
+                var cropH = $1;
+                var dataPtr = $2;
+                var finalW = $3;
+                var finalH = $4;
 
-                var dataUrl = outCanvas.toDataURL('image/png');
-                var filename = 'acmx2.visualizer.' + finalW + 'x' + finalH + '.' + timestamp + '.png';
+                try {
+                    var srcCanvas = document.createElement('canvas');
+                    srcCanvas.width = cropW;
+                    srcCanvas.height = cropH;
+                    var srcCtx = srcCanvas.getContext('2d');
 
-                if (typeof window.AndroidInterface !== 'undefined' &&
-                    typeof window.AndroidInterface.saveImage === 'function') {
-                    window.AndroidInterface.saveImage(dataUrl);
-                } else {
-                    var link = document.createElement('a');
-                    link.download = filename;
-                    link.href = dataUrl;
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
+                    var pixelArray = new Uint8ClampedArray(cropW * cropH * 4);
+                    for (var i = 0; i < cropW * cropH * 4; i++) {
+                        pixelArray[i] = Module.HEAPU8[dataPtr + i];
+                    }
+
+                    var imageData = new ImageData(pixelArray, cropW, cropH);
+                    srcCtx.putImageData(imageData, 0, 0);
+
+                    var outCanvas = document.createElement('canvas');
+                    outCanvas.width = finalW;
+                    outCanvas.height = finalH;
+                    var outCtx = outCanvas.getContext('2d');
+
+                    outCtx.imageSmoothingEnabled = true;
+                    outCtx.imageSmoothingQuality = 'high';
+
+                    outCtx.drawImage(srcCanvas, 0, 0, finalW, finalH);
+
+                    var now = new Date();
+                    var timestamp = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0') + 'T' + String(now.getHours()).padStart(2, '0') + '-' + String(now.getMinutes()).padStart(2, '0') + '-' + String(now.getSeconds()).padStart(2, '0');
+
+                    var dataUrl = outCanvas.toDataURL('image/png');
+                    var filename = 'acmx2.visualizer.' + finalW + 'x' + finalH + '.' + timestamp + '.png';
+
+                    if (typeof window.AndroidInterface !== 'undefined' &&typeof window.AndroidInterface.saveImage === 'function') {
+                        window.AndroidInterface.saveImage(dataUrl);
+                    } else {
+                        var link = document.createElement('a');
+                        link.download = filename;
+                        link.href = dataUrl;
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                    }
+
+                    console.log('Image saved:', finalW, 'x', finalH);
+                } catch (e) {
+                    console.error('Save error:', e);
                 }
-                
-                console.log('Image saved:', finalW, 'x', finalH);
-            } catch (e) {
-                console.error('Save error:', e);
-            } }, cropW, cropH, croppedPixels.data(), finalW, finalH);
+            },
+            cropW,
+            cropH,
+            croppedPixels.data(),
+            finalW,
+            finalH);
+        // clang-format on
 #endif
         printf("Frame captured and saved\n");
     }
@@ -2150,9 +2326,7 @@ class MainWindow : public gl::GLWindow {
     ~MainWindow() override {}
 
     /** @brief Forwards an SDL event to the active render object. */
-    virtual void event(SDL_Event &e) override {
-        object->event(this, e);
-    }
+    virtual void event(SDL_Event &e) override { object->event(this, e); }
 
     /** @brief Clears, renders, presents, and paces one frame. */
     virtual void draw() override {
@@ -2307,12 +2481,7 @@ void loadImageRGBA(const std::vector<uint8_t> &rgbaData, int width, int height) 
         return;
     }
 
-    SDL_Surface *surface = SDL_CreateRGBSurfaceWithFormatFrom(
-        const_cast<uint8_t *>(rgbaData.data()),
-        width, height,
-        32,
-        width * 4,
-        SDL_PIXELFORMAT_RGBA32);
+    SDL_Surface *surface = SDL_CreateRGBSurfaceWithFormatFrom(const_cast<uint8_t *>(rgbaData.data()), width, height, 32, width * 4, SDL_PIXELFORMAT_RGBA32);
 
     if (!surface) {
         mx::system_err << "Failed to create surface from RGBA data: " << SDL_GetError() << "\n";
@@ -2348,12 +2517,7 @@ void loadImageRGBA(const std::vector<uint8_t> &rgbaData, int width, int height) 
  */
 void loadImageRGBAPtr(uintptr_t dataPtr, int width, int height) {
     uint8_t *rgbaData = reinterpret_cast<uint8_t *>(dataPtr);
-    SDL_Surface *surface = SDL_CreateRGBSurfaceWithFormatFrom(
-        rgbaData,
-        width, height,
-        32,
-        width * 4,
-        SDL_PIXELFORMAT_RGBA32);
+    SDL_Surface *surface = SDL_CreateRGBSurfaceWithFormatFrom(rgbaData, width, height, 32, width * 4, SDL_PIXELFORMAT_RGBA32);
 
     if (!surface) {
         mx::system_err << "Failed to create surface from RGBA data: " << SDL_GetError() << "\n";
@@ -2386,13 +2550,18 @@ std::string getShaderNameAt(int i) {
     return "";
 }
 
-/** @return Number of compiled built-in shaders. */
+/** @return Number of shader catalog entries, including pending shaders. */
 int getShaderCount() {
     if (about_ptr) {
         return about_ptr->getShaderCount();
     }
     return 0;
 }
+
+/** @return Preparation state for a catalog entry. */
+std::string getShaderLoadStateWeb(int index) { return about_ptr ? about_ptr->getShaderLoadState(index) : ""; }
+/** @return Requested shader index, or -1 when no switch is pending. */
+int getPendingShaderIndexWeb() { return about_ptr ? about_ptr->getPendingShaderIndex() : -1; }
 
 /** @brief Restores the first built-in shader. */
 void resetToDefaultShaderWeb() {
@@ -2794,6 +2963,8 @@ EMSCRIPTEN_BINDINGS(image_loader) {
     emscripten::function("setMouseInput", &setMouseInput);
     emscripten::function("setShaderIndex", &setShaderIndex);
     emscripten::function("getShaderCount", &getShaderCount);
+    emscripten::function("getShaderLoadState", &getShaderLoadStateWeb);
+    emscripten::function("getPendingShaderIndex", &getPendingShaderIndexWeb);
     emscripten::function("getShaderNameAt", &getShaderNameAt);
     emscripten::function("enableMultipass", &enableMultipassWeb);
     emscripten::function("isMultipassEnabled", &isMultipassEnabledWeb);
@@ -2809,9 +2980,7 @@ EMSCRIPTEN_BINDINGS(image_loader) {
 #endif
 
 /** @brief Runs one iteration of the Emscripten application loop. */
-void eventProc() {
-    main_w->proc();
-}
+void eventProc() { main_w->proc(); }
 
 /**
  * @brief Application entry point.

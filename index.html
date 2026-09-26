@@ -77,6 +77,15 @@
             display: none;
         }
 
+        .shader-loading-status {
+            flex-basis: 100%;
+            width: 100%;
+            text-align: center;
+            color: #ddd;
+            font-size: 12px;
+            padding: 3px 0;
+        }
+
         #controls button {
             padding: 6px 12px;
             font-size: 13px;
@@ -2417,6 +2426,7 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
         <button id="shader-editor-btn">✏️ Custom Shader</button>
         <button id="uniforms-btn" title="Uniform Controls">⚙️</button>
         <button id="multipass-btn" title="Multipass Shader Chain" style="background: linear-gradient(135deg, #FF9800 0%, #F57C00 100%) !important; border: 1px solid #E65100 !important;">🔗 Multipass</button>
+        <span id="shader-loading-status" class="shader-loading-status" role="status">Loading… 0 / — shaders</span>
         <span id="shader-info">Double-tap to cycle: <a href="https://lostsidedead.biz" target="_blank">LostSideDead</a></span>        
         <select id="model-selector" style="padding: 8px; font-size: 12px; background: #333; color: #fff; border: 1px solid #555; border-radius: 4px; cursor: pointer; flex-shrink: 0; min-width: 120px; max-width: 200px;">
         <option value="3dplus.mxmod.z">3dplus.mxmod.z</option>
@@ -2567,6 +2577,7 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
             <button class="mobile-btn" id="mobile-multipass-btn" style="background: linear-gradient(135deg, #FF9800 0%, #F57C00 100%);">🔗</button>
             <button class="mobile-btn" id="mobile-help-btn">❓</button>
         </div>
+        <div id="mobile-shader-loading-status" class="shader-loading-status" role="status">Loading… 0 / — shaders</div>
         <div id="mobile-shader-info">Swipe to rotate • Pinch to zoom • Double-tap to change shader</div>
     </div>
 
@@ -3020,33 +3031,99 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
             }
         };
 
+        window.shaderLibraryProgress = { ready: 0, completed: 0, total: 0, failed: 0, pending: 0, queued: 0, parallel: false, requested: -1, done: false };
+        window.updateShaderLoadingStatus = function() {
+            const progress = window.shaderLibraryProgress;
+            const active = progress.pending || progress.queued || progress.requested >= 0;
+            let text = (active ? 'Loading… ' : 'Loaded ') + progress.ready + ' / ' + (progress.total || '—') + ' shaders';
+            if (progress.failed) text += ' (' + progress.failed + ' failed)';
+            if (progress.requested >= 0 && typeof Module !== 'undefined' && Module.getShaderNameAt) {
+                text += ' · preparing ' + Module.getShaderNameAt(progress.requested);
+            } else if (active) {
+                text += ' · ' + progress.pending + ' programs in flight';
+            } else if (!progress.done) {
+                text += progress.parallel ? ' · waiting for idle time' : ' · on demand';
+            }
+            ['shader-loading-status', 'mobile-shader-loading-status'].forEach(function(id) {
+                const status = document.getElementById(id);
+                if (status && status.textContent !== text) status.textContent = text;
+            });
+        };
+        window.onShaderQueueProgress = function(ready, failed, total, pending, queued, parallel, requested) {
+            const progress = window.shaderLibraryProgress;
+            Object.assign(progress, { ready, failed, total, pending, queued, parallel, requested,
+                completed: ready + failed, done: ready + failed === total });
+            window.updateShaderLoadingStatus();
+        };
+
         window.shaderFailureEntries = [];
         window.shaderCompilerOutput = [];
         window.currentCompilingShader = null;
-        window.currentCompilerOutputStart = 0;
-
-        window.beginShaderCompilation = function(shaderName) {
-            window.currentCompilingShader = shaderName;
-            window.currentCompilerOutputStart = window.shaderCompilerOutput.length;
-        };
-
-        window.finishShaderCompilation = function(shaderName, convertedSource, compiled3D, compiled2D) {
-            const output = window.shaderCompilerOutput.slice(window.currentCompilerOutputStart);
-            if (!compiled3D || !compiled2D) {
-                window.shaderFailureEntries.push({
-                    name: shaderName,
-                    compiled3D: !!compiled3D,
-                    compiled2D: !!compiled2D,
-                    output: output,
-                    source: convertedSource
-                });
+        window.onShaderPrepared = function(index, name, source, compiled3D, compiled2D, diagnostics, custom) {
+            const success = compiled3D && compiled2D;
+            if (!success) {
+                window.shaderFailureEntries.push({ name, compiled3D, compiled2D,
+                    output: diagnostics ? diagnostics.split('\n') : [], source });
             }
-            window.currentCompilingShader = null;
+            window.addLoadingMessage(name + (success ? ' - ready' : ' - FAILED'), success ? 'success' : 'error');
+            if (!success && typeof window.finalizeShaderFailureLog === 'function') window.finalizeShaderFailureLog();
+            if (custom) {
+                const log = document.getElementById('shader-log-textarea');
+                if (log) {
+                    log.value = success ? 'SUCCESS: Shader compiled and ready.' : 'ERROR: Shader compilation failed.\n' + diagnostics;
+                    log.classList.toggle('success', success);
+                }
+                window.customShaderIndex = index;
+                window.refreshShaderDropdownList();
+                if (typeof populateShaderPassSelector === 'function') populateShaderPassSelector();
+            }
         };
+
+        window.onShaderSelectionActivated = function(index) {
+            window.shaderLibraryProgress.requested = -1;
+            window.updateShaderLoadingStatus();
+            ['shader', 'mobile-shader'].forEach(function(id) {
+                const selector = document.getElementById(id);
+                if (selector) selector.value = String(index);
+            });
+            if (typeof updateShaderInfo === 'function') updateShaderInfo();
+        };
+
+        window.lastShaderInteraction = performance.now();
+        window.shaderIdlePermitUntil = 0;
+        window.shaderFrameGap = 0;
+        window.lastShaderFrame = performance.now();
+        ['pointerdown', 'pointermove', 'keydown', 'wheel', 'touchstart'].forEach(function(type) {
+            document.addEventListener(type, function() {
+                window.lastShaderInteraction = performance.now();
+                window.shaderIdlePermitUntil = 0;
+            }, { passive: true });
+        });
+        (function trackShaderFrame(now) {
+            window.shaderFrameGap = now - window.lastShaderFrame;
+            window.lastShaderFrame = now;
+            requestAnimationFrame(trackShaderFrame);
+        })(performance.now());
+        window.consumeShaderIdleTime = function() {
+            const now = performance.now();
+            const idle = now < window.shaderIdlePermitUntil && !document.hidden &&
+                now - window.lastShaderInteraction > 2000 && window.shaderFrameGap < 25 &&
+                now - window.lastShaderFrame < 100 && !window.shouldPauseBackgroundShaderCompilation();
+            window.shaderIdlePermitUntil = 0;
+            return idle;
+        };
+        setInterval(function() {
+            if (!window.shaderLibraryProgress.parallel || window.shaderLibraryProgress.done ||
+                !window.requestIdleCallback || window.shouldPauseBackgroundShaderCompilation()) return;
+            window.requestIdleCallback(function(deadline) {
+                if (deadline.timeRemaining() >= 8) window.shaderIdlePermitUntil = performance.now() + 200;
+            });
+        }, 500);
 
         window.buildShaderFailureLog = function() {
             if (!window.shaderFailureEntries.length) {
-                return 'All shaders compiled successfully.\n';
+                return window.shaderLibraryProgress.done ? 'All shaders compiled successfully.\n' :
+                    'No compilation failures recorded. ' + window.shaderLibraryProgress.completed + ' / ' + window.shaderLibraryProgress.total + ' shaders prepared.\n';
             }
             const sections = [
                 'MX2 Graphics Demo - Shader Compilation Failures',
@@ -3207,38 +3284,55 @@ body.mobile-mode .uniform-control input[type="range"]::-webkit-slider-thumb {
                 return;
             }
 
-            const shaderSelect = document.getElementById('shader');
-            if (!shaderSelect) return;
+            const entries = window.getOrderedShaderEntries();
+            if (!entries.length) return;
 
             let currentIndex = 0;
             if (typeof Module.getIndex === 'function') {
                 try {
-                    currentIndex = window.getEffectiveShaderIndex(Module.getIndex());
+                    currentIndex = window.getEffectiveShaderIndex(Module.getPendingShaderIndex && Module.getPendingShaderIndex() >= 0 ? Module.getPendingShaderIndex() : Module.getIndex());
                 } catch (e) {
                     currentIndex = 0;
                 }
             }
 
-            shaderSelect.innerHTML = '';
-            const entries = window.getOrderedShaderEntries();
-            for (let i = 0; i < entries.length; i++) {
-                const entry = entries[i];
-                const option = document.createElement('option');
-                option.value = entry.index.toString();
-                option.textContent = `[${i}] ${entry.name}`;
-                shaderSelect.appendChild(option);
-            }
+            ['shader', 'mobile-shader'].forEach(function(id) {
+                const shaderSelect = document.getElementById(id);
+                if (!shaderSelect) return;
+                const options = document.createDocumentFragment();
+                entries.forEach(function(entry, position) {
+                    const option = document.createElement('option');
+                    option.value = entry.index.toString();
+                    option.textContent = `[${position}] ${entry.name}`;
+                    options.appendChild(option);
+                });
+                shaderSelect.replaceChildren(options);
+                shaderSelect.value = currentIndex.toString();
+                if (shaderSelect.value !== currentIndex.toString()) shaderSelect.selectedIndex = 0;
+            });
+            console.log('Refreshed shader selects with ' + entries.length + ' shaders');
+        };
 
-            shaderSelect.value = currentIndex.toString();
-            if (shaderSelect.value !== currentIndex.toString() && shaderSelect.options.length > 0) {
-                shaderSelect.selectedIndex = 0;
+        window.shouldPauseBackgroundShaderCompilation = function() {
+            const recordingIndicator = document.getElementById('recording-indicator');
+            if (recordingIndicator && recordingIndicator.classList.contains('visible')) {
+                return true;
             }
-            console.log('Refreshed shader select with ' + entries.length + ' shaders');
+            return Array.from(document.querySelectorAll('video')).some(function(video) {
+                return !video.paused && !video.ended;
+            });
+        };
+
+        window.onShaderLibraryReady = function() {
+            window.updateShaderLoadingStatus();
+            window.refreshShaderDropdownList();
         };
 
         window.onAllShadersCompiled = function(count) {
-            window.addLoadingMessage('All ' + count + ' shaders compiled!', 'success');
-            window.customShaderIndex = null;
+            window.shaderLibraryProgress.done = true;
+            window.updateShaderLoadingStatus();
+            window.addLoadingMessage('Library preparation finished: ' + count + ' shaders compiled.', 'success');
+            window.finalizeShaderFailureLog();
             window.refreshShaderDropdownList();
         };
     </script>
@@ -7260,12 +7354,17 @@ void main(void) {
 
                 const compileErrors = (window.shaderCompileErrorLines || []).join('\n');
                 const isSuccess = typeof result === 'string' && result.startsWith("SUCCESS");
-                if (!isSuccess && compileErrors) {
+                const isQueued = typeof result === 'string' && result.startsWith("QUEUED");
+                if (!isSuccess && !isQueued && compileErrors) {
                     shaderLogTextarea.value = `${result}\n\nCompiler Errors:\n${compileErrors}`;
                 } else {
                     shaderLogTextarea.value = result;
                 }
                 
+                if (isQueued) {
+                    window.customShaderIndex = Module.getShaderCount() - 1;
+                    window.refreshShaderDropdownList();
+                }
                 if (isSuccess) {
                     shaderLogTextarea.classList.add('success');
                     if (typeof Module.getShaderCount === 'function') {
@@ -7384,7 +7483,7 @@ void main(void) {
     function syncShaderSelect() {
         if (typeof Module !== 'undefined' && typeof Module.getIndex === 'function') {
             try {
-                const currentIndex = window.getEffectiveShaderIndex(Module.getIndex());
+                const currentIndex = window.getEffectiveShaderIndex(Module.getPendingShaderIndex && Module.getPendingShaderIndex() >= 0 ? Module.getPendingShaderIndex() : Module.getIndex());
                 const shaderSelect = document.getElementById('shader');
                 if (shaderSelect) {
                     shaderSelect.value = currentIndex.toString();
@@ -8455,7 +8554,7 @@ void main(void) {
             function syncMobileShaderSelect() {
                 if (typeof Module !== 'undefined' && typeof Module.getIndex === 'function') {
                     try {
-                        const currentIndex = window.getEffectiveShaderIndex(Module.getIndex());
+                        const currentIndex = window.getEffectiveShaderIndex(Module.getPendingShaderIndex && Module.getPendingShaderIndex() >= 0 ? Module.getPendingShaderIndex() : Module.getIndex());
                         mobileShaderSelect.value = currentIndex.toString();
                         desktopShaderSelect.value = currentIndex.toString();
                         if (mobileShaderSelect.value !== currentIndex.toString() && mobileShaderSelect.options.length > 0) {

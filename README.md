@@ -14,7 +14,7 @@ collection contains original work and shaders adapted from multiple creative and
 experimental sources.
 
 # System Requirements
-Because the engine compiles over a thousand GLSL ES 3.0 fragment shaders into a WebAssembly environment upon loading, the absolute baseline is dictated by WebGL 2.0 support and sufficient system memory.
+Because the engine gradually compiles over a thousand GLSL ES 3.0 fragment shaders in a WebAssembly environment, the absolute baseline is dictated by WebGL 2.0 support and sufficient system memory.
 
 ## Universal Browser Requirements
 Web Browser: Recent versions of Chrome, Firefox, Edge, or Safari.
@@ -163,8 +163,39 @@ Startup is split into two visible phases:
 
 1. `index.html` downloads `MX_app.wasm` and `MX_app.data` in parallel. The
    loading screen displays the combined byte count, total size, and percentage.
-2. After both files are available, the screen switches to the shader-compilation
-   console and reports shader progress, successes, and failures.
+2. After both files are available, the renderer prepares a minimal pass-through
+   shader and becomes usable. The initial effect and two essential built-ins
+   are queued without waiting for the whole catalog.
+
+WebGL 2 uses `KHR_parallel_shader_compile` when available. At most two shader
+pairs (four programs, covering 2D and 3D) are in flight. Compile/link commands
+are submitted without immediately querying compile status, link status, or
+uniform locations. The loader polls `COMPLETION_STATUS_KHR` first and only
+checks link status and adopts programs after both programs have completed.
+
+Shader entries move through `SOURCE`, `QUEUED`, `COMPILING`, `LINKING`, and
+`READY` (or `FAILED`). Selecting an unprepared effect queues it with priority;
+the active effect keeps rendering and the requested effect takes over at a
+frame boundary when ready. Rapid selections keep the latest request active.
+Multipass entries are queued on configuration and skipped until ready. Prepared
+programs remain cached, so recently used effects do not compile again. Custom
+shader edits use the same queue, retain the previous effect until successful,
+and report compiler diagnostics on failure.
+
+The rest of the catalog is optional. With the parallel extension, one additional
+shader pair may be submitted during a genuine `requestIdleCallback` opportunity,
+after two seconds without interaction and while frame timing has headroom.
+Video/camera playback and recording suppress this idle prefetch; requested
+effects and multipass entries can still prepare. If the extension or idle
+callback is unavailable, the remaining catalog stays on demand. Without the
+extension, a requested shader can still briefly stall while the driver compiles;
+the loader does not try to fill the library automatically.
+
+Desktop and mobile controls show `Loading… X / Total shaders` while work is
+queued, the effect being prepared or the number of programs in flight, and
+`Loaded X / Total shaders` when the queue is idle. Partial counts are expected:
+a session need not prepare every installed shader. Library indices stay fixed;
+the pass-through entry is appended to preserve existing selections and chains.
 
 The downloaded buffers are passed directly to Emscripten, avoiding a second
 WASM or data-file request. If streaming prefetch is unavailable or fails, the
@@ -172,6 +203,26 @@ page falls back to Emscripten's standard loader. Servers that provide
 `Content-Length` and support `HEAD` requests allow the progress bar to show an
 exact total immediately; otherwise it remains indeterminate until the size is
 known.
+
+### Shader Loading Verification
+
+The browser integration test checks the four-program limit, completion polling
+before status/reflection queries, deferred and superseded selections, multipass
+preparation, custom edit failures/replacement, idle suppression during playback,
+and the demand-only fallback. It requires Node.js 22+ and a browser opened on the
+demo with remote debugging enabled:
+
+```bash
+SHADER_TEST_PORT=9223 node tests/shader-loading.cjs
+SHADER_TEST_PORT=9223 node tests/shader-loading.cjs --fallback
+```
+
+The first command requires a browser/backend exposing the real
+`KHR_parallel_shader_compile` extension. The test deliberately delays completion
+poll results for several ticks to verify that rendering retains its current
+program until the requested pair is ready. The second command forces extension
+support off. Both tests reload the page and exercise the controls through the
+WebAssembly exports.
 
 ## Requirements
 
@@ -397,7 +448,11 @@ omitted from the generated cache automatically.
 
 ### Shader Failure Logs
 
-Startup records the compiler output and converted source for shaders that fail.
+Startup, idle preparation, and on-demand compilation record explicit compiler
+output and converted source for shaders that fail. Diagnostics are associated
+with each pending shader, so concurrent compilation cannot mix error logs.
+Failures update the report immediately; the report includes only shaders that
+have actually been prepared.
 The browser console receives the complete report. It is also written to the
 Emscripten filesystem as `/shader-failures.log`.
 
@@ -491,7 +546,7 @@ make -f Makefile.em CXX=/path/to/emscripten/em++
 - External shader conversion is cached before startup.
 - WASM and packaged application data download concurrently and are reused by
   Emscripten without duplicate network transfers.
-- Shader program compilation remains the main startup cost.
+- Startup waits only for the minimal pass-through; optional effects prepare through the bounded shader queue.
 - Recording performance depends on shader complexity, output size, browser
   encoder support, and device hardware.
 
