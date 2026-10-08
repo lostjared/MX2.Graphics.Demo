@@ -54,6 +54,8 @@ target_link_options(MX_app PRIVATE
     "-sEXPORTED_RUNTIME_METHODS=[\"HEAPU8\",\"FS\"]"
     "-sEXPORTED_FUNCTIONS=[\"_malloc\",\"_free\",\"_main\"]"
     "-sOFFSCREEN_FRAMEBUFFER=1"
+    "-sGL_PREINITIALIZED_CONTEXT=1"
+    "-sINCOMING_MODULE_JS_API=[\"ENVIRONMENT\",\"arguments\",\"canvas\",\"dynamicLibraries\",\"elementPointerLock\",\"instantiateWasm\",\"locateFile\",\"monitorRunDependencies\",\"noExitRuntime\",\"noInitialRun\",\"onAbort\",\"onExit\",\"onRuntimeInitialized\",\"postRun\",\"preInit\",\"preRun\",\"print\",\"printErr\",\"setStatus\",\"statusMessage\",\"stderr\",\"stdin\",\"stdout\",\"thisProgram\",\"wasm\",\"websocket\",\"wasmBinary\"]"
     "-sASYNCIFY=1"
     "-sASYNCIFY_STACK_SIZE=65536"
 )

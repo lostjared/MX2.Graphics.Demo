@@ -9,6 +9,7 @@ PNG_LIB = -s USE_LIBPNG=1
 LIBMX_LIB = $(LIBS_PATH)/mx2/lib/libmx.a 
 PRELOAD = --preload-file data
 ASYNC_FLAGS= -sASYNCIFY -sASYNCIFY_STACK_SIZE=65536
+MODULE_API_FLAGS = -sGL_PREINITIALIZED_CONTEXT=1 -sINCOMING_MODULE_JS_API='["ENVIRONMENT","arguments","canvas","dynamicLibraries","elementPointerLock","instantiateWasm","locateFile","monitorRunDependencies","noExitRuntime","noInitialRun","onAbort","onExit","onRuntimeInitialized","postRun","preInit","preRun","print","printErr","setStatus","statusMessage","stderr","stdin","stdout","thisProgram","wasm","websocket","wasmBinary"]'
 SOURCES = graphics.cpp
 OBJECTS = $(SOURCES:.cpp=.o)
 OUTPUT = MX_app.html
@@ -28,7 +29,7 @@ $(SHADER_CACHE_INDEX): $(SHADER_CACHE_SCRIPT) $(SHADER_INDEX) $(SHADER_SOURCES)
 	$(CXX) $(CXXFLAGS) $(MX_INCLUDE) $(ZLIB_INCLUDE) $(PNG_INCLUDE) -c $< -o $@
 
 $(OUTPUT): $(OBJECTS) $(SHADER_CACHE_INDEX)
-	$(CXX) $(CXXFLAGS) $(OBJECTS) -o $(OUTPUT) $(PRELOAD)  -s USE_SDL=2 -s USE_LIBJPEG=1 -s USE_SDL_IMAGE=2 -s USE_SDL_MIXER=2 -s SDL2_IMAGE_FORMATS='["png","jpg"]' -s USE_SDL_TTF=2 $(LIBMX_LIB) $(PNG_LIB) $(ZLIB_LIB) -s ALLOW_MEMORY_GROWTH -s ASSERTIONS -s ENVIRONMENT=web -s USE_WEBGL2=1 -s FULL_ES3 -s USE_SDL_MIXER=2 -lembind -s EXPORTED_RUNTIME_METHODS=['HEAPU8','FS'] -s EXPORTED_FUNCTIONS=['_malloc','_free','_main'] -s OFFSCREEN_FRAMEBUFFER=1 $(ASYNC_FLAGS)
+	$(CXX) $(CXXFLAGS) $(OBJECTS) -o $(OUTPUT) $(PRELOAD)  -s USE_SDL=2 -s USE_LIBJPEG=1 -s USE_SDL_IMAGE=2 -s USE_SDL_MIXER=2 -s SDL2_IMAGE_FORMATS='["png","jpg"]' -s USE_SDL_TTF=2 $(LIBMX_LIB) $(PNG_LIB) $(ZLIB_LIB) -s ALLOW_MEMORY_GROWTH -s ASSERTIONS -s ENVIRONMENT=web -s USE_WEBGL2=1 -s FULL_ES3 -s USE_SDL_MIXER=2 -lembind -s EXPORTED_RUNTIME_METHODS=['HEAPU8','FS'] -s EXPORTED_FUNCTIONS=['_malloc','_free','_main'] -s OFFSCREEN_FRAMEBUFFER=1 $(ASYNC_FLAGS) $(MODULE_API_FLAGS)
 
 clean:
 	rm -f *.o $(OUTPUT) *.wasm *.js *.data
